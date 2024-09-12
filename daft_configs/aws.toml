@@ -1,0 +1,11 @@
+name = "ronnie-dev"
+setup_commands = [
+    "curl -LsSf https://astral.sh/uv/install.sh | sh",
+    "uv python install 3.12.5",
+    "uv python pin 3.12.5",
+    "uv venv",
+    "echo 'alias pip=\"uv pip\"' >> $HOME/.bashrc",
+    "echo 'source $HOME/.venv/bin/activate' >> $HOME/.bashrc",
+    "source $HOME/.bashrc",
+    "uv pip install 'ray[default]>=2.35.0' 'getdaft>=0.3.2\"",
+]

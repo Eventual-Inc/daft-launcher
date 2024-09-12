@@ -1,6 +1,6 @@
 import click
 from pathlib import Path
-from daft import aws
+import daft
 
 
 @click.group()
@@ -9,8 +9,7 @@ def cli():
 
 
 def main():
-    breakpoint()
-    cli.add_command(aws.aws)
+    cli.add_command(daft.up)
     cli()
 
 

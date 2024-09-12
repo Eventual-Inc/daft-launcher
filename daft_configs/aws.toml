@@ -1,4 +1,4 @@
-name = "daft-aws-test"
+name = "ronnie-dev"
 provider = "aws"
 setup_commands = [
     "curl -LsSf https://astral.sh/uv/install.sh | sh",

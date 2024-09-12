@@ -9,7 +9,6 @@ def cli():
 
 
 def main():
-    breakpoint()
     cli.add_command(up)
     cli()
 

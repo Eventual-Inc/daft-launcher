@@ -1,26 +1,24 @@
 import ray
 from ray.autoscaler.sdk import create_or_update_cluster, teardown_cluster, get_head_node_ip
 import click
+from pathlib import Path
 
 
-cluster_config_path = "daft/ray_cfg/graviton.yaml"
-
-
-@click.command('down', help='Tear down the cluster')
-def down():
-    teardown_cluster(cluster_config_path)
+cluster_config_path = Path(__file__).parent / 'ray_cfg' / 'graviton.yaml'
 
 
 @click.command('up', help='Spin up the cluster')
 def up():
-    # Path to your cluster configuration file
-
-    # Create or update the cluster
-    create_or_update_cluster(cluster_config_path, no_restart=False, restart_only=False, no_config_cache=True)
-
-    # Get the head node's IP address (useful for connecting to the cluster programmatically)
-    head_node_ip = get_head_node_ip(cluster_config_path)
+    create_or_update_cluster(str(cluster_config_path), no_restart=False, restart_only=False, no_config_cache=True)
+    head_node_ip = get_head_node_ip(str(cluster_config_path))
+    print('Cluster spun up successfully')
     print(f"Ray cluster head node IP: {head_node_ip}")
+
+
+@click.command('down', help='Spin down the cluster')
+def down():
+    teardown_cluster(str(cluster_config_path))
+    print('Cluster spun down successfully')
 
 
 @click.group()

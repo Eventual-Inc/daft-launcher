@@ -1,6 +1,6 @@
 import click
 from pathlib import Path
-import daft
+from . import up
 
 
 @click.group()
@@ -9,7 +9,8 @@ def cli():
 
 
 def main():
-    cli.add_command(daft.up)
+    breakpoint()
+    cli.add_command(up)
     cli()
 
 

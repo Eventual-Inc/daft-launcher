@@ -6,7 +6,7 @@ import click
 import yaml
 
 
-DEFAULT_AWS = str(Path(__file__).parent / "ray_default_configs" / "aws_default.yaml")
+DEFAULT_AWS = str(Path(__file__).parent / "ray_default_configs" / "aws.yaml")
 
 
 def merge(custom: dict, default: dict) -> dict:

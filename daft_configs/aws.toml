@@ -9,13 +9,4 @@ image_id = "ami-01c3c55948a949a52"
 iam_instance_profile = "arn:aws:iam::941892620273:instance-profile/ray-autoscaler-v1"
 
 [run]
-setup_commands = [
-    "curl -LsSf https://astral.sh/uv/install.sh | sh",
-    "uv python install 3.12.5",
-    "uv python pin 3.12.5",
-    "uv venv",
-    "echo 'alias pip=\"uv pip\"' >> $HOME/.bashrc",
-    "echo 'source $HOME/.venv/bin/activate' >> $HOME/.bashrc",
-    "source $HOME/.bashrc",
-    "uv pip install 'ray[default]>=2.35.0' 'getdaft>=0.3.2\"",
-]
+setup_commands = ["echo 'Hello, world!'"]

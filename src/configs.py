@@ -12,6 +12,39 @@ DEFAULT_AWS = str(Path(__file__).parent / "ray_default_configs" / "aws.yaml")
 def merge(custom: dict, default: dict) -> dict:
     if "name" in custom:
         default["cluster_name"] = custom["name"]
+    if "region" in custom:
+        default["provider"]["region"] = custom["region"]
+    if "ssh_user" in custom:
+        default["auth"]["ssh_user"] = custom["ssh_user"]
+
+    if "workers" in custom:
+        workers = custom["workers"]
+        default["max_workers"] = workers
+        default["available_node_types"]["ray.worker.default"]["min_workers"] = workers
+        default["available_node_types"]["ray.worker.default"]["max_workers"] = workers
+
+    if "instance_type" in custom:
+        instance_type = custom["instance_type"]
+        default["available_node_types"]["ray.head.default"]["node_config"][
+            "InstanceType"
+        ] = instance_type
+        default["available_node_types"]["ray.worker.default"]["node_config"][
+            "InstanceType"
+        ] = instance_type
+
+    if "image_id" in custom:
+        image_id = custom["image_id"]
+        default["available_node_types"]["ray.head.default"]["node_config"][
+            "ImageId"
+        ] = image_id
+        default["available_node_types"]["ray.worker.default"]["node_config"][
+            "ImageId"
+        ] = image_id
+
+    if "iam_instance_profile" in custom:
+        default["available_node_types"]["ray.worker.default"]["node_config"][
+            "IamInstanceProfiel"
+        ]["Arn"] = custom["iam_instance_profile"]
 
     return default
 

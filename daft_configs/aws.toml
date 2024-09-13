@@ -1,5 +1,14 @@
+[setup]
 name = "ronnie-dev"
 provider = "aws"
+region = "us-west-2"
+ssh_user = "ec2-user"
+workers = 2
+instance_type = "c7g.4xlarge"
+image_id = "ami-01c3c55948a949a52"
+iam_instance_profile = "arn:aws:iam::941892620273:instance-profile/ray-autoscaler-v1"
+
+[run]
 setup_commands = [
     "curl -LsSf https://astral.sh/uv/install.sh | sh",
     "uv python install 3.12.5",

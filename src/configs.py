@@ -10,41 +10,42 @@ DEFAULT_AWS = str(Path(__file__).parent / "ray_default_configs" / "aws.yaml")
 
 
 def merge(custom: dict, default: dict) -> dict:
-    if "name" in custom:
-        default["cluster_name"] = custom["name"]
-    if "region" in custom:
-        default["provider"]["region"] = custom["region"]
-    if "ssh_user" in custom:
-        default["auth"]["ssh_user"] = custom["ssh_user"]
-
-    if "workers" in custom:
-        workers = custom["workers"]
+    setup = custom["setup"]
+    if "name" in setup:
+        default["cluster_name"] = setup["name"]
+    if "region" in setup:
+        default["provider"]["region"] = setup["region"]
+    if "ssh_user" in setup:
+        default["auth"]["ssh_user"] = setup["ssh_user"]
+    if "workers" in setup:
+        workers = setup["workers"]
         default["max_workers"] = workers
         default["available_node_types"]["ray.worker.default"]["min_workers"] = workers
         default["available_node_types"]["ray.worker.default"]["max_workers"] = workers
-
-    if "instance_type" in custom:
-        instance_type = custom["instance_type"]
+    if "instance_type" in setup:
+        instance_type = setup["instance_type"]
         default["available_node_types"]["ray.head.default"]["node_config"][
             "InstanceType"
         ] = instance_type
         default["available_node_types"]["ray.worker.default"]["node_config"][
             "InstanceType"
         ] = instance_type
-
-    if "image_id" in custom:
-        image_id = custom["image_id"]
+    if "image_id" in setup:
+        image_id = setup["image_id"]
         default["available_node_types"]["ray.head.default"]["node_config"][
             "ImageId"
         ] = image_id
         default["available_node_types"]["ray.worker.default"]["node_config"][
             "ImageId"
         ] = image_id
-
-    if "iam_instance_profile" in custom:
+    if "iam_instance_profile" in setup:
         default["available_node_types"]["ray.worker.default"]["node_config"][
-            "IamInstanceProfiel"
-        ]["Arn"] = custom["iam_instance_profile"]
+            "IamInstanceProfile"
+        ]["Arn"] = setup["iam_instance_profile"]
+    run = custom['run']
+    if "setup_commands" in run:
+        setup_commands: list[str] = default['setup_commands']
+        setup_commands.extend(run['setup_commands'])
 
     return default
 
@@ -54,12 +55,13 @@ def merge_config_with_default(
 ) -> dict | str:
     with open(config, "rb") as stream:
         custom_config = tomllib.load(stream)
-        if "provider" not in custom_config:
-            raise click.UsageError(
-                "Please provide a cloud provider in the config file."
-            )
+        if "setup" not in custom_config:
+            if "provider" not in custom_config['setup']:
+                raise click.UsageError(
+                    "Please provide a cloud provider in the config file."
+                )
 
-        provider = custom_config["provider"]
+        provider = custom_config['setup']["provider"]
 
         if provider == "aws":
             with open(DEFAULT_AWS, "rb") as stream:

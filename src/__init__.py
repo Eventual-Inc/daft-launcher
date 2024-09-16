@@ -98,6 +98,12 @@ def list(provider: Optional[str], config: Optional[Path]):
             print("\t - " + name)
 
 
+@click.command("submit", help="Submit a job.")
+@cliwrapper
+def submit(provider: Optional[str], config: Optional[Path]):
+    pass
+
+
 @click.command("down", help="Spin the cluster down.")
 @cliwrapper
 def down(provider: Optional[str], config: Optional[Path]):

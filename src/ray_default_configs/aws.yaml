@@ -1,4 +1,4 @@
-cluster_name: ronnie-dev-2
+cluster_name: daft-aws-test
 
 provider:
   type: aws
@@ -8,7 +8,7 @@ provider:
 auth:
   ssh_user: ec2-user
 
-max_workers: 8
+max_workers: 2
 available_node_types:
   ray.head.default:
     resources: { "CPU": 0 }
@@ -17,14 +17,14 @@ available_node_types:
       ImageId: ami-01c3c55948a949a52
 
   ray.worker.default:
-    min_workers: 8
-    max_workers: 8
+    min_workers: 2
+    max_workers: 2
     resources: {}
     node_config:
       InstanceType: c7g.4xlarge
+      ImageId: ami-01c3c55948a949a52
       IamInstanceProfile:
         Arn: arn:aws:iam::941892620273:instance-profile/ray-autoscaler-v1
-      ImageId: ami-01c3c55948a949a52
 
 setup_commands:
   - curl -LsSf https://astral.sh/uv/install.sh | sh

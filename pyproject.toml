@@ -1,5 +1,5 @@
 [project]
-name = "daft-cli"
+name = "daftcli"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
@@ -10,11 +10,25 @@ dependencies = [
 ]
 
 [project.scripts]
-daft = "daft.__main__:main"
+daftcli = "src.__main__:main"
+
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptool]
+packages = ["daftcli"]
+include_package_data = true
+
+[tool.setuptools.packages.find]
+exclude = ["daft_configs"]
 
 [tool.setuptools.package-data]
-my_project = ["ray_cfg/*.yaml"]
+daftcli = ["src/configs/*.yaml"]
 
 [tool.pyright]
 venvPath = '.'
 venv = '.venv'
+
+[tool.ruff]
+include = ["src/**/*.py"]

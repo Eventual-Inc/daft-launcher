@@ -42,10 +42,10 @@ def merge(custom: dict, default: dict) -> dict:
         default["available_node_types"]["ray.worker.default"]["node_config"][
             "IamInstanceProfile"
         ]["Arn"] = setup["iam_instance_profile"]
-    run = custom['run']
+    run = custom["run"]
     if "setup_commands" in run:
-        setup_commands: list[str] = default['setup_commands']
-        setup_commands.extend(run['setup_commands'])
+        setup_commands: list[str] = default["setup_commands"]
+        setup_commands.extend(run["setup_commands"])
 
     return default
 
@@ -56,12 +56,12 @@ def merge_config_with_default(
     with open(config, "rb") as stream:
         custom_config = tomllib.load(stream)
         if "setup" not in custom_config:
-            if "provider" not in custom_config['setup']:
+            if "provider" not in custom_config["setup"]:
                 raise click.UsageError(
                     "Please provide a cloud provider in the config file."
                 )
 
-        provider = custom_config['setup']["provider"]
+        provider = custom_config["setup"]["provider"]
 
         if provider == "aws":
             with open(DEFAULT_AWS, "rb") as stream:

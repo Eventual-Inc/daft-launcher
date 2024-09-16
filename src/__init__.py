@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List
 from pathlib import Path
 import click
 import src.ray_default_configs
@@ -8,6 +8,8 @@ from ray.autoscaler.sdk import (
     get_head_node_ip,
     teardown_cluster,
 )
+import subprocess
+import json
 
 
 def cliwrapper(func):
@@ -57,6 +59,43 @@ def up(provider: Optional[str], config: Optional[Path]):
     )
     print(f"Head node IP: {get_head_node_ip(final_config)}")
     print("Successfully spun the cluster up.")
+
+
+@click.command("list", help="List all running clusters.")
+@cliwrapper
+def list(provider: Optional[str], config: Optional[Path]):
+    result = subprocess.run(
+        [
+            "aws",
+            "ec2",
+            "describe-instances",
+            "--region",
+            "us-west-2",
+            "--filters",
+            "Name=tag:ray-node-type,Values=*",
+            "--query",
+            "Reservations[*].Instances[*].{Instance:InstanceId,State:State.Name,Tags:Tags}",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    [instances] = json.loads(result.stdout)
+    state_to_name_map: dict[str, List[str]] = {}
+    for instance in instances:
+        assert "Tags" in instance
+        assert "State" in instance
+        state = instance["State"]
+        for tag in instance["Tags"]:
+            if tag["Key"] == "ray-cluster-name":
+                name = tag["Value"]
+                if state in state_to_name_map:
+                    state_to_name_map[state].append(name)
+                else:
+                    state_to_name_map[state] = [name]
+    for state, names in state_to_name_map.items():
+        print(state.capitalize() + ": ")
+        for name in names:
+            print("\t - " + name)
 
 
 @click.command("down", help="Spin the cluster down.")

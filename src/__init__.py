@@ -2,14 +2,12 @@ from typing import Optional, List
 from pathlib import Path
 import click
 import src.ray_default_configs
-from src.configs import DEFAULT_AWS, merge_config_with_default
-from ray.autoscaler.sdk import (
-    create_or_update_cluster,
-    get_head_node_ip,
-    teardown_cluster,
-)
+from src import configs
+from ray.autoscaler import sdk as ray_sdk
 import subprocess
 import json
+import ray
+from ray import job_submission, dashboard
 
 
 def cliwrapper(func):
@@ -21,49 +19,40 @@ def cliwrapper(func):
         help="The cloud provider to use.",
     )
     @click.option(
+        "-n",
+        "--name",
+        required=False,
+        type=click.STRING,
+        help="The name of the cluster.",
+    )
+    @click.option(
         "-c",
         "--config",
         required=False,
         type=click.Path(exists=True),
         help="TOML configuration file.",
     )
-    def wrapper(provider: Optional[str], config: Optional[Path]):
-        func(provider, config)
+    def wrapper(
+        provider: Optional[str], name: Optional[str], config: Optional[Path], **args
+    ):
+        func(provider, name, config, **args)
 
     return wrapper
 
 
-def get_final_config(
-    provider: Optional[str],
-    config: Optional[Path],
-) -> dict | str:
-    if provider and config:
-        raise click.UsageError("Please provide either a provider or a config file.")
-    elif provider:
-        if provider == "aws":
-            return DEFAULT_AWS
-        else:
-            raise click.UsageError(f"Cloud provider {provider} not found")
-    elif config:
-        return merge_config_with_default(config)
-    else:
-        raise click.UsageError("Please provide either a provider or a config file.")
-
-
 @click.command("up", help="Spin the cluster up.")
 @cliwrapper
-def up(provider: Optional[str], config: Optional[Path]):
-    final_config = get_final_config(provider, config)
-    create_or_update_cluster(
+def up(provider: Optional[str], name: Optional[str], config: Optional[Path]):
+    final_config = configs.get_final_config(provider, name, config)
+    ray_sdk.create_or_update_cluster(
         final_config, no_restart=False, restart_only=False, no_config_cache=True
     )
-    print(f"Head node IP: {get_head_node_ip(final_config)}")
+    print(f"Head node IP: {ray_sdk.get_head_node_ip(final_config)}")
     print("Successfully spun the cluster up.")
 
 
 @click.command("list", help="List all running clusters.")
-@cliwrapper
-def list(provider: Optional[str], config: Optional[Path]):
+def list():
     result = subprocess.run(
         [
             "aws",
@@ -79,28 +68,74 @@ def list(provider: Optional[str], config: Optional[Path]):
         capture_output=True,
         text=True,
     )
-    [instances] = json.loads(result.stdout)
-    state_to_name_map: dict[str, List[str]] = {}
-    for instance in instances:
-        assert "Tags" in instance
-        assert "State" in instance
-        state = instance["State"]
-        for tag in instance["Tags"]:
-            if tag["Key"] == "ray-cluster-name":
-                name = tag["Value"]
-                if state in state_to_name_map:
-                    state_to_name_map[state].append(name)
-                else:
-                    state_to_name_map[state] = [name]
-    for state, names in state_to_name_map.items():
-        print(state.capitalize() + ": ")
-        for name in names:
-            print("\t - " + name)
+    instance_groups = json.loads(result.stdout)
+    state_to_name_map: dict[str, List[tuple]] = {}
+    for instance_group in instance_groups:
+        for instance in instance_group:
+            assert "State" in instance
+            assert "Tags" in instance
+            state = instance["State"]
+            instance_id: str = instance["Instance"]
+            name = None
+            node_type = None
+            for tag in instance["Tags"]:
+                if tag["Key"] == "ray-node-type":
+                    node_type = tag["Value"]
+                if tag["Key"] == "ray-cluster-name":
+                    name = tag["Value"]
+            assert name is not None
+            assert node_type is not None
+            if state in state_to_name_map:
+                state_to_name_map[state].append((name, instance_id, node_type))
+            else:
+                state_to_name_map[state] = [(name, instance_id, node_type)]
+    for state, data in state_to_name_map.items():
+        print(f"{state.capitalize()}:")
+        for name, instance_id, node_type in data:
+            formatted_name = f""
+            print(f"\t - {name}, {node_type}, {instance_id}")
+
+
+@click.command("submit", help="Submit a job.")
+@click.option(
+    "--working-dir",
+    required=False,
+    default='.',
+    type=click.Path(exists=True),
+    help="Submit a python working dir as a job.",
+)
+@click.option(
+    "--cmd",
+    required=False,
+    default='python3 main.py',
+    type=click.STRING,
+    help="Submit a python working dir as a job.",
+)
+@cliwrapper
+def submit(
+    provider: Optional[str],
+    name: Optional[str],
+    config: Optional[Path],
+    working_dir: str,
+    cmd: str,
+):
+    working_dir_path = Path(working_dir).absolute()
+    final_config = configs.get_final_config(provider, name, config)
+    ip = ray_sdk.get_head_node_ip(final_config)
+    client = job_submission.JobSubmissionClient(f"http://localhost:8265")
+    client.submit_job(
+        entrypoint=cmd,
+        runtime_env={
+            "working_dir": working_dir_path.absolute(),
+        }
+        if working_dir
+        else None,
+    )
 
 
 @click.command("down", help="Spin the cluster down.")
 @cliwrapper
-def down(provider: Optional[str], config: Optional[Path]):
-    final_config = get_final_config(provider, config)
-    teardown_cluster(final_config)
+def down(provider: Optional[str], name: Optional[str], config: Optional[Path]):
+    final_config = configs.get_final_config(provider, name, config)
+    ray_sdk.teardown_cluster(final_config)
     print("Successfully spun the cluster down.")

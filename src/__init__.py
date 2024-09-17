@@ -2,15 +2,12 @@ from typing import Optional, List
 from pathlib import Path
 import click
 import src.ray_default_configs
-from src.configs import DEFAULT_AWS, get_final_config, merge_config_with_default, merge_name_with_default
-from ray import job_submission, dashboard
-from ray.autoscaler.sdk import (
-    create_or_update_cluster,
-    get_head_node_ip,
-    teardown_cluster,
-)
+from src import configs
+from ray.autoscaler import sdk as ray_sdk
 import subprocess
 import json
+import ray
+from ray import job_submission, dashboard
 
 
 def cliwrapper(func):
@@ -46,11 +43,11 @@ def cliwrapper(func):
 @click.command("up", help="Spin the cluster up.")
 @cliwrapper
 def up(provider: Optional[str], name: Optional[str], config: Optional[Path]):
-    final_config = get_final_config(provider, name, config)
-    create_or_update_cluster(
+    final_config = configs.get_final_config(provider, name, config)
+    ray_sdk.create_or_update_cluster(
         final_config, no_restart=False, restart_only=False, no_config_cache=True
     )
-    print(f"Head node IP: {get_head_node_ip(final_config)}")
+    print(f"Head node IP: {ray_sdk.get_head_node_ip(final_config)}")
     print("Successfully spun the cluster up.")
 
 
@@ -108,6 +105,6 @@ def submit(provider: Optional[str], config: Optional[Path]):
 @click.command("down", help="Spin the cluster down.")
 @cliwrapper
 def down(provider: Optional[str], name: Optional[str], config: Optional[Path]):
-    final_config = get_final_config(provider, name, config)
-    teardown_cluster(final_config)
+    final_config = configs.get_final_config(provider, name, config)
+    ray_sdk.teardown_cluster(final_config)
     print("Successfully spun the cluster down.")

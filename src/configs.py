@@ -9,6 +9,30 @@ import yaml
 DEFAULT_AWS = str(Path(__file__).parent / "ray_default_configs" / "aws.yaml")
 
 
+def get_final_config(
+    provider: Optional[str],
+    name: Optional[str],
+    config: Optional[Path],
+) -> dict | str:
+    if provider and config:
+        raise click.UsageError("Please provide either a provider or a config file.")
+    elif provider:
+        if name:
+            return merge_name_with_default(provider, name)
+        else:
+            if provider == "aws":
+                return DEFAULT_AWS
+            else:
+                raise click.UsageError(f"Cloud provider {provider} not found")
+    elif config:
+        if name:
+            raise click.UsageError(f"Can't provide both a name and a config file.")
+        else:
+            return merge_config_with_default(config)
+    else:
+        raise click.UsageError("Please provide either a provider or a config file.")
+
+
 def get_default(provider: str) -> dict:
     if provider == "aws":
         with open(DEFAULT_AWS, "rb") as stream:

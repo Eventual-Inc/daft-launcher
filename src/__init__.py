@@ -2,7 +2,7 @@ from typing import Optional, List
 from pathlib import Path
 import click
 import src.ray_default_configs
-from src.configs import DEFAULT_AWS, merge_config_with_default, merge_name_with_default
+from src.configs import DEFAULT_AWS, get_final_config, merge_config_with_default, merge_name_with_default
 from ray import job_submission, dashboard
 from ray.autoscaler.sdk import (
     create_or_update_cluster,
@@ -41,30 +41,6 @@ def cliwrapper(func):
         func(provider, name, config, **args)
 
     return wrapper
-
-
-def get_final_config(
-    provider: Optional[str],
-    name: Optional[str],
-    config: Optional[Path],
-) -> dict | str:
-    if provider and config:
-        raise click.UsageError("Please provide either a provider or a config file.")
-    elif provider:
-        if name:
-            return merge_name_with_default(provider, name)
-        else:
-            if provider == "aws":
-                return DEFAULT_AWS
-            else:
-                raise click.UsageError(f"Cloud provider {provider} not found")
-    elif config:
-        if name:
-            raise click.UsageError(f"Can't provide both a name and a config file.")
-        else:
-            return merge_config_with_default(config)
-    else:
-        raise click.UsageError("Please provide either a provider or a config file.")
 
 
 @click.command("up", help="Spin the cluster up.")

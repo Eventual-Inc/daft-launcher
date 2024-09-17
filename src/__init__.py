@@ -97,9 +97,40 @@ def list():
 
 
 @click.command("submit", help="Submit a job.")
+@click.option(
+    "--working-dir",
+    required=False,
+    default='.',
+    type=click.Path(exists=True),
+    help="Submit a python working dir as a job.",
+)
+@click.option(
+    "--cmd",
+    required=False,
+    default='python3 main.py',
+    type=click.STRING,
+    help="Submit a python working dir as a job.",
+)
 @cliwrapper
-def submit(provider: Optional[str], config: Optional[Path]):
-    pass
+def submit(
+    provider: Optional[str],
+    name: Optional[str],
+    config: Optional[Path],
+    working_dir: str,
+    cmd: str,
+):
+    working_dir_path = Path(working_dir).absolute()
+    final_config = configs.get_final_config(provider, name, config)
+    ip = ray_sdk.get_head_node_ip(final_config)
+    client = job_submission.JobSubmissionClient(f"http://localhost:8265")
+    client.submit_job(
+        entrypoint=cmd,
+        runtime_env={
+            "working_dir": working_dir_path.absolute(),
+        }
+        if working_dir
+        else None,
+    )
 
 
 @click.command("down", help="Spin the cluster down.")

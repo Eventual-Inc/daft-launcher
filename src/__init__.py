@@ -2,7 +2,8 @@ from typing import Optional, List
 from pathlib import Path
 import click
 import src.ray_default_configs
-from src.configs import DEFAULT_AWS, merge_config_with_default
+from src.configs import DEFAULT_AWS, merge_config_with_default, merge_name_with_default
+from ray import job_submission, dashboard
 from ray.autoscaler.sdk import (
     create_or_update_cluster,
     get_head_node_ip,
@@ -21,39 +22,55 @@ def cliwrapper(func):
         help="The cloud provider to use.",
     )
     @click.option(
+        "-n",
+        "--name",
+        required=False,
+        type=click.STRING,
+        help="The name of the cluster.",
+    )
+    @click.option(
         "-c",
         "--config",
         required=False,
         type=click.Path(exists=True),
         help="TOML configuration file.",
     )
-    def wrapper(provider: Optional[str], config: Optional[Path], **args):
-        func(provider, config, **args)
+    def wrapper(
+        provider: Optional[str], name: Optional[str], config: Optional[Path], **args
+    ):
+        func(provider, name, config, **args)
 
     return wrapper
 
 
 def get_final_config(
     provider: Optional[str],
+    name: Optional[str],
     config: Optional[Path],
 ) -> dict | str:
     if provider and config:
         raise click.UsageError("Please provide either a provider or a config file.")
     elif provider:
-        if provider == "aws":
-            return DEFAULT_AWS
+        if name:
+            return merge_name_with_default(provider, name)
         else:
-            raise click.UsageError(f"Cloud provider {provider} not found")
+            if provider == "aws":
+                return DEFAULT_AWS
+            else:
+                raise click.UsageError(f"Cloud provider {provider} not found")
     elif config:
-        return merge_config_with_default(config)
+        if name:
+            raise click.UsageError(f"Can't provide both a name and a config file.")
+        else:
+            return merge_config_with_default(config)
     else:
         raise click.UsageError("Please provide either a provider or a config file.")
 
 
 @click.command("up", help="Spin the cluster up.")
 @cliwrapper
-def up(provider: Optional[str], config: Optional[Path]):
-    final_config = get_final_config(provider, config)
+def up(provider: Optional[str], name: Optional[str], config: Optional[Path]):
+    final_config = get_final_config(provider, name, config)
     create_or_update_cluster(
         final_config, no_restart=False, restart_only=False, no_config_cache=True
     )
@@ -82,17 +99,17 @@ def list():
     state_to_name_map: dict[str, List[tuple]] = {}
     for instance_group in instance_groups:
         for instance in instance_group:
-            assert 'State' in instance
+            assert "State" in instance
             assert "Tags" in instance
-            state = instance['State']
-            instance_id: str = instance['Instance']
+            state = instance["State"]
+            instance_id: str = instance["Instance"]
             name = None
             node_type = None
-            for tag in instance['Tags']:
-                if tag['Key'] == 'ray-node-type':
-                    node_type = tag['Value']
-                if tag['Key'] == 'ray-cluster-name':
-                    name = tag['Value']
+            for tag in instance["Tags"]:
+                if tag["Key"] == "ray-node-type":
+                    node_type = tag["Value"]
+                if tag["Key"] == "ray-cluster-name":
+                    name = tag["Value"]
             assert name is not None
             assert node_type is not None
             if state in state_to_name_map:
@@ -100,10 +117,10 @@ def list():
             else:
                 state_to_name_map[state] = [(name, instance_id, node_type)]
     for state, data in state_to_name_map.items():
-        print(f'{state.capitalize()}:')
+        print(f"{state.capitalize()}:")
         for name, instance_id, node_type in data:
-            formatted_name = f''
-            print(f'\t - {name}, {node_type}, {instance_id}')
+            formatted_name = f""
+            print(f"\t - {name}, {node_type}, {instance_id}")
 
 
 @click.command("submit", help="Submit a job.")
@@ -114,7 +131,7 @@ def submit(provider: Optional[str], config: Optional[Path]):
 
 @click.command("down", help="Spin the cluster down.")
 @cliwrapper
-def down(provider: Optional[str], config: Optional[Path]):
-    final_config = get_final_config(provider, config)
+def down(provider: Optional[str], name: Optional[str], config: Optional[Path]):
+    final_config = get_final_config(provider, name, config)
     teardown_cluster(final_config)
     print("Successfully spun the cluster down.")

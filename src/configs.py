@@ -9,6 +9,14 @@ import yaml
 DEFAULT_AWS = str(Path(__file__).parent / "ray_default_configs" / "aws.yaml")
 
 
+def get_default(provider: str) -> dict:
+    if provider == "aws":
+        with open(DEFAULT_AWS, "rb") as stream:
+            return yaml.safe_load(stream)
+    else:
+        raise click.UsageError(f"Cloud provider {provider} not found")
+
+
 def merge(custom: dict, default: dict) -> dict:
     setup = custom["setup"]
     if "name" in setup:
@@ -60,12 +68,15 @@ def merge_config_with_default(
                 raise click.UsageError(
                     "Please provide a cloud provider in the config file."
                 )
-
         provider = custom_config["setup"]["provider"]
+        default_config = get_default(provider)
+        return merge(custom_config, default_config)
 
-        if provider == "aws":
-            with open(DEFAULT_AWS, "rb") as stream:
-                default_aws_config = yaml.safe_load(stream)
-                return merge(custom_config, default_aws_config)
-        else:
-            raise click.UsageError(f"Cloud provider {provider} not found")
+
+def merge_name_with_default(
+    provider: str,
+    name: str,
+) -> dict:
+    default_config = get_default(provider)
+    default_config["cluster_name"] = name
+    return default_config

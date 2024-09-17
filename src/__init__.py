@@ -28,7 +28,7 @@ def cliwrapper(func):
         help="TOML configuration file.",
     )
     def wrapper(provider: Optional[str], config: Optional[Path], **args):
-        func(provider, config, args)
+        func(provider, config, **args)
 
     return wrapper
 

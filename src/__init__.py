@@ -27,8 +27,8 @@ def cliwrapper(func):
         type=click.Path(exists=True),
         help="TOML configuration file.",
     )
-    def wrapper(provider: Optional[str], config: Optional[Path]):
-        func(provider, config)
+    def wrapper(provider: Optional[str], config: Optional[Path], **args):
+        func(provider, config, args)
 
     return wrapper
 

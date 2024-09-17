@@ -62,8 +62,7 @@ def up(provider: Optional[str], config: Optional[Path]):
 
 
 @click.command("list", help="List all running clusters.")
-@cliwrapper
-def list(provider: Optional[str], config: Optional[Path]):
+def list():
     result = subprocess.run(
         [
             "aws",
@@ -79,23 +78,32 @@ def list(provider: Optional[str], config: Optional[Path]):
         capture_output=True,
         text=True,
     )
-    [instances] = json.loads(result.stdout)
-    state_to_name_map: dict[str, List[str]] = {}
-    for instance in instances:
-        assert "Tags" in instance
-        assert "State" in instance
-        state = instance["State"]
-        for tag in instance["Tags"]:
-            if tag["Key"] == "ray-cluster-name":
-                name = tag["Value"]
-                if state in state_to_name_map:
-                    state_to_name_map[state].append(name)
-                else:
-                    state_to_name_map[state] = [name]
-    for state, names in state_to_name_map.items():
-        print(state.capitalize() + ": ")
-        for name in names:
-            print("\t - " + name)
+    instance_groups = json.loads(result.stdout)
+    state_to_name_map: dict[str, List[tuple]] = {}
+    for instance_group in instance_groups:
+        for instance in instance_group:
+            assert 'State' in instance
+            assert "Tags" in instance
+            state = instance['State']
+            instance_id: str = instance['Instance']
+            name = None
+            node_type = None
+            for tag in instance['Tags']:
+                if tag['Key'] == 'ray-node-type':
+                    node_type = tag['Value']
+                if tag['Key'] == 'ray-cluster-name':
+                    name = tag['Value']
+            assert name is not None
+            assert node_type is not None
+            if state in state_to_name_map:
+                state_to_name_map[state].append((name, instance_id, node_type))
+            else:
+                state_to_name_map[state] = [(name, instance_id, node_type)]
+    for state, data in state_to_name_map.items():
+        print(f'{state.capitalize()}:')
+        for name, instance_id, node_type in data:
+            formatted_name = f''
+            print(f'\t - {name}, {node_type}, {instance_id}')
 
 
 @click.command("submit", help="Submit a job.")

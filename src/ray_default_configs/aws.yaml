@@ -2,7 +2,7 @@ cluster_name: daft-aws
 
 provider:
   type: aws
-  region: us-west-2
+  region: <region>
   cache_stopped_nodes: False
 
 auth:
@@ -11,20 +11,20 @@ auth:
 max_workers: 2
 available_node_types:
   ray.head.default:
-    resources: { "CPU": 0 }
+    resources: { CPU: 0 }
     node_config:
-      InstanceType: c7g.4xlarge
-      ImageId: ami-01c3c55948a949a52
+      InstanceType: <instance_type>
+      ImageId: <image_id>
 
   ray.worker.default:
     min_workers: 2
     max_workers: 2
     resources: {}
     node_config:
-      InstanceType: c7g.4xlarge
-      ImageId: ami-01c3c55948a949a52
+      InstanceType: <instance_type>
+      ImageId: <image_id>
       IamInstanceProfile:
-        Arn: arn:aws:iam::941892620273:instance-profile/ray-autoscaler-v1
+        Arn: <arn>
 
 setup_commands:
   - curl -LsSf https://astral.sh/uv/install.sh | sh

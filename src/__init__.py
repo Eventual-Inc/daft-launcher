@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Optional, List, Any
 from pathlib import Path
 import click
 import src.ray_default_configs
@@ -7,16 +7,73 @@ from ray.autoscaler import sdk as ray_sdk
 import subprocess
 import json
 import ray
-from ray import job_submission, dashboard
+from ray import job_submission
+import time
+import requests
+
+def ssh_command(ip: str) -> list[str]:
+        return [
+            "ssh",
+            "-N",
+            "-L",
+            "8265:localhost:8265",
+            "-i",
+            "/Users/rabh/.ssh/ray-autoscaler_5_us-west-2.pem",
+            f"ec2-user@{ip}",
+        ]
+
+
+def get_ip(config: Path):
+    final_config = configs.get_merged_config(config)
+    name = final_config["cluster_name"]
+    result = subprocess.run(
+        [
+            "aws",
+            "ec2",
+            "describe-instances",
+            "--region",
+            "us-west-2",
+            "--filters",
+            "Name=tag:ray-node-type,Values=*",
+            "--query",
+            "Reservations[*].Instances[*].{State:State.Name,Tags:Tags,Ip:PublicIpAddress}",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    instance_groups = json.loads(result.stdout)
+    ip, state = find_ip(instance_groups, name)
+    if state != 'running':
+        raise click.UsageError(f"The cluster {name} is not running; cannot connect to it.")
+    if not ip:
+        raise click.UsageError(f"The cluster {name} does not have a public IP address available.")
+    return ip
+
+
+
+
+def find_ip(instance_groups: List[List[Any]], name: str) -> tuple[Optional[str], str]:
+    ip = None
+    for instance_group in instance_groups:
+        for instance in instance_group:
+            is_head = False
+            cluster_name = None
+            state = instance['State']
+            for tag in instance["Tags"]:
+                if tag["Key"] == "ray-cluster-name":
+                    cluster_name = tag["Value"]
+                elif tag["Key"] == "ray-node-type":
+                    is_head = tag["Value"] == "head"
+            if is_head and cluster_name == name:
+                return instance["Ip"], state
+    raise click.UsageError(f"The IP of the cluster with the name '{name}' not found.")
 
 
 def cliwrapper(func):
-    @click.option(
-        "-c",
-        "--config",
+    @click.argument(
+        "config",
         required=False,
         type=click.Path(exists=True),
-        help="TOML configuration file.",
     )
     def wrapper(
         config: Optional[str],
@@ -37,7 +94,6 @@ def cliwrapper(func):
         if not config_path.is_file():
             raise click.UsageError(f"The path '{config_path}' is not a file.")
         func(config_path, **args)
-
     return wrapper
 
 
@@ -76,10 +132,6 @@ def list():
     state_to_name_map: dict[str, List[tuple]] = {}
     for instance_group in instance_groups:
         for instance in instance_group:
-            assert "Instance" in instance
-            assert "State" in instance
-            assert "Tags" in instance
-            assert "Ip" in instance
             state = instance["State"]
             instance_id: str = instance["Instance"]
             ip: str = instance["Ip"]
@@ -106,25 +158,19 @@ def list():
 
 
 @click.command(
-    "connect",
+    "dashboard",
     help="Enable port-forwarding between an existing cluster and your local machine; required before the submission of jobs.",
 )
-def connect():
-    # subprocess.run(
-    #     [
-    #         "ssh",
-    #         "-N",
-    #         "-L",
-    #         "8265:localhost:8265",
-    #         "-i",
-    #         "/Users/rabh/.ssh/ray-autoscaler_5_us-west-2.pem",
-    #         "ec2-user@35.86.59.3",
-    #     ],
-    #     close_fds=True,
-    #     capture_output=False,
-    #     text=False,
-    # )
-    ...
+@cliwrapper
+def dashboard(
+    config: Path,
+):
+    subprocess.run(
+        ssh_command(get_ip(config)),
+        close_fds=True,
+        capture_output=False,
+        text=False,
+    )
 
 
 @click.command("submit", help="Submit a job.")
@@ -148,16 +194,36 @@ def submit(
     working_dir: str,
     cmd: str,
 ):
-    working_dir_path = Path(working_dir).absolute()
-    client = job_submission.JobSubmissionClient("http://localhost:8265")
-    client.submit_job(
-        entrypoint=cmd,
-        runtime_env={
-            "working_dir": working_dir_path.absolute(),
-        }
-        if working_dir
-        else None,
+    process = subprocess.Popen(
+        ssh_command(get_ip(config)),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
     )
+    try:
+        working_dir_path = Path(working_dir).absolute()
+        client = None
+        tries = 0
+        max_tries = 3
+        while tries <= max_tries:
+            try:
+                client = job_submission.JobSubmissionClient("http://localhost:8265")
+                break
+            except Exception as e:
+                tries += 1
+                if tries >= max_tries:
+                    raise e
+                time.sleep(1)
+        assert client
+        client.submit_job(
+            entrypoint=cmd,
+            runtime_env={
+                "working_dir": working_dir_path.absolute(),
+            }
+            if working_dir
+            else None,
+        )
+    finally:
+        process.terminate()
 
 
 @click.command("down", help="Spin the cluster down.")

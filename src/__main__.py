@@ -1,6 +1,6 @@
 import click
 from pathlib import Path
-from . import up, list, submit, connect, down
+from . import up, list, submit, dashboard, down
 
 
 @click.group()
@@ -12,7 +12,7 @@ def main():
     cli.add_command(up)
     cli.add_command(list)
     cli.add_command(submit)
-    cli.add_command(connect)
+    cli.add_command(dashboard)
     cli.add_command(down)
     cli()
 

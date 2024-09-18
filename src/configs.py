@@ -1,106 +1,118 @@
 from pathlib import Path
 import tomllib
 from typing import Optional
-
 import click
 import yaml
 
 
-DEFAULT_AWS = str(Path(__file__).parent / "ray_default_configs" / "aws.yaml")
+RAY_DEFAULT_CONFIGS_PATH = Path(__file__).parent / "ray_default_configs"
 
 
-def get_final_config(
-    provider: Optional[str],
-    name: Optional[str],
-    config: Optional[Path],
-) -> dict | str:
-    if provider and config:
-        raise click.UsageError("Please provide either a provider or a config file.")
-    elif provider:
-        if name:
-            return merge_name_with_default(provider, name)
-        else:
-            if provider == "aws":
-                return DEFAULT_AWS
-            else:
-                raise click.UsageError(f"Cloud provider {provider} not found")
-    elif config:
-        if name:
-            raise click.UsageError(f"Can't provide both a name and a config file.")
-        else:
-            return merge_config_with_default(config)
-    else:
-        raise click.UsageError("Please provide either a provider or a config file.")
-
-
-def get_default(provider: str) -> dict:
+def get_ray_config(provider: str) -> dict:
     if provider == "aws":
-        with open(DEFAULT_AWS, "rb") as stream:
-            return yaml.safe_load(stream)
+        ray_config_path = RAY_DEFAULT_CONFIGS_PATH / "aws.yaml"
     else:
         raise click.UsageError(f"Cloud provider {provider} not found")
+    with open(ray_config_path, "rb") as stream:
+        return yaml.safe_load(stream)
 
 
-def merge(custom: dict, default: dict) -> dict:
-    setup = custom["setup"]
-    if "name" in setup:
-        default["cluster_name"] = setup["name"]
-    if "region" in setup:
-        default["provider"]["region"] = setup["region"]
-    if "ssh_user" in setup:
-        default["auth"]["ssh_user"] = setup["ssh_user"]
-    if "workers" in setup:
-        workers = setup["workers"]
-        default["max_workers"] = workers
-        default["available_node_types"]["ray.worker.default"]["min_workers"] = workers
-        default["available_node_types"]["ray.worker.default"]["max_workers"] = workers
-    if "instance_type" in setup:
-        instance_type = setup["instance_type"]
-        default["available_node_types"]["ray.head.default"]["node_config"][
-            "InstanceType"
-        ] = instance_type
-        default["available_node_types"]["ray.worker.default"]["node_config"][
-            "InstanceType"
-        ] = instance_type
-    if "image_id" in setup:
-        image_id = setup["image_id"]
-        default["available_node_types"]["ray.head.default"]["node_config"][
-            "ImageId"
-        ] = image_id
-        default["available_node_types"]["ray.worker.default"]["node_config"][
-            "ImageId"
-        ] = image_id
-    if "iam_instance_profile" in setup:
-        default["available_node_types"]["ray.worker.default"]["node_config"][
-            "IamInstanceProfile"
-        ]["Arn"] = setup["iam_instance_profile"]
-    run = custom["run"]
-    if "setup_commands" in run:
-        setup_commands: list[str] = default["setup_commands"]
-        setup_commands.extend(run["setup_commands"])
-
-    return default
-
-
-def merge_config_with_default(
-    config: Path,
-) -> dict | str:
-    with open(config, "rb") as stream:
+def get_custom_config(config_path: Path) -> tuple[dict, str]:
+    with open(config_path, "rb") as stream:
         custom_config = tomllib.load(stream)
         if "setup" not in custom_config:
+            raise click.UsageError("No setup section found in config file.")
             if "provider" not in custom_config["setup"]:
                 raise click.UsageError(
                     "Please provide a cloud provider in the config file."
                 )
         provider = custom_config["setup"]["provider"]
-        default_config = get_default(provider)
-        return merge(custom_config, default_config)
+        return custom_config, provider
 
 
-def merge_name_with_default(
-    provider: str,
-    name: str,
+def merge(
+    custom_config: dict,
+    ray_config: dict,
 ) -> dict:
-    default_config = get_default(provider)
-    default_config["cluster_name"] = name
-    return default_config
+    if "setup" not in custom_config:
+        raise click.UsageError("No setup section found in config file.")
+    setup: dict = custom_config["setup"]
+    setup_mappings: list[tuple[str, list[list[str]], bool]] = [
+        ("name", [["cluster_name"]], False),
+        ("provider", [["provider", "type"]], True),
+        ("region", [["provider", "region"]], True),
+        ("ssh_user", [["auth", "ssh_user"]], False),
+        (
+            "workers",
+            [
+                ["max_workers"],
+                ["available_node_types", "ray.worker.default", "min_workers"],
+                ["available_node_types", "ray.worker.default", "max_workers"],
+            ],
+            False,
+        ),
+        (
+            "instance_type",
+            [
+                [
+                    "available_node_types",
+                    "ray.head.default",
+                    "node_config",
+                    "InstanceType",
+                ],
+                [
+                    "available_node_types",
+                    "ray.worker.default",
+                    "node_config",
+                    "InstanceType",
+                ],
+            ],
+            True,
+        ),
+        (
+            "image_id",
+            [
+                ["available_node_types", "ray.head.default", "node_config", "ImageId"],
+                [
+                    "available_node_types",
+                    "ray.worker.default",
+                    "node_config",
+                    "ImageId",
+                ],
+            ],
+            True,
+        ),
+        (
+            "iam_instance_profile",
+            [
+                [
+                    "available_node_types",
+                    "ray.worker.default",
+                    "node_config",
+                    "IamInstanceProfile",
+                    "Arn",
+                ]
+            ],
+            True,
+        ),
+    ]
+    for a, b, required in setup_mappings:
+        value = setup.get(a)
+        if not value and required:
+            raise click.UsageError(
+                f"Required field {a} not found in custom config but is required."
+            )
+        elif not value:
+            continue
+        for b_i in b:
+            y = ray_config
+            for b_ii in b_i[:-1]:
+                y = y[b_ii]
+            y[b_i[-1]] = value
+    return ray_config
+
+
+def get_merged_config(config_path: Path) -> dict:
+    custom_config, provider = get_custom_config(config_path)
+    ray_config = get_ray_config(provider)
+    return merge(custom_config, ray_config)

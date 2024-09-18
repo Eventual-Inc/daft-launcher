@@ -1,7 +1,7 @@
 cluster_name: daft-aws
 
 provider:
-  type: aws
+  type: <provider>
   region: <region>
   cache_stopped_nodes: False
 

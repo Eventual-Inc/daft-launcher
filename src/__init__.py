@@ -12,20 +12,6 @@ from ray import job_submission, dashboard
 
 def cliwrapper(func):
     @click.option(
-        "-p",
-        "--provider",
-        required=False,
-        type=click.STRING,
-        help="The cloud provider to use.",
-    )
-    @click.option(
-        "-n",
-        "--name",
-        required=False,
-        type=click.STRING,
-        help="The name of the cluster.",
-    )
-    @click.option(
         "-c",
         "--config",
         required=False,
@@ -33,19 +19,37 @@ def cliwrapper(func):
         help="TOML configuration file.",
     )
     def wrapper(
-        provider: Optional[str], name: Optional[str], config: Optional[Path], **args
+        config: Optional[str],
+        **args,
     ):
-        func(provider, name, config, **args)
+        if config:
+            config_path = Path(config).absolute()
+            if not config_path.exists():
+                raise click.UsageError(
+                    f"Config file does not exist at path '{config_path}'."
+                )
+        else:
+            config_path = Path(".daft.toml").absolute()
+            if not config_path.exists():
+                raise click.UsageError(
+                    f"No default '.daft.toml' file found in current directory."
+                )
+        if not config_path.is_file():
+            raise click.UsageError(f"The path '{config_path}' is not a file.")
+        func(config_path, **args)
 
     return wrapper
 
 
 @click.command("up", help="Spin the cluster up.")
 @cliwrapper
-def up(provider: Optional[str], name: Optional[str], config: Optional[Path]):
-    final_config = configs.get_final_config(provider, name, config)
+def up(config: Path):
+    final_config = configs.get_merged_config(config)
     ray_sdk.create_or_update_cluster(
-        final_config, no_restart=False, restart_only=False, no_config_cache=True
+        final_config,
+        no_restart=False,
+        restart_only=False,
+        no_config_cache=True,
     )
     print(f"Head node IP: {ray_sdk.get_head_node_ip(final_config)}")
     print("Successfully spun the cluster up.")
@@ -106,20 +110,21 @@ def list():
     help="Enable port-forwarding between an existing cluster and your local machine; required before the submission of jobs.",
 )
 def connect():
-    subprocess.run(
-        [
-            "ssh",
-            "-N",
-            "-L",
-            "8265:localhost:8265",
-            "-i",
-            "/Users/rabh/.ssh/ray-autoscaler_5_us-west-2.pem",
-            "ec2-user@35.84.207.230",
-        ],
-        close_fds=True,
-        capture_output=False,
-        text=False,
-    )
+    # subprocess.run(
+    #     [
+    #         "ssh",
+    #         "-N",
+    #         "-L",
+    #         "8265:localhost:8265",
+    #         "-i",
+    #         "/Users/rabh/.ssh/ray-autoscaler_5_us-west-2.pem",
+    #         "ec2-user@35.86.59.3",
+    #     ],
+    #     close_fds=True,
+    #     capture_output=False,
+    #     text=False,
+    # )
+    ...
 
 
 @click.command("submit", help="Submit a job.")
@@ -139,9 +144,7 @@ def connect():
 )
 @cliwrapper
 def submit(
-    provider: Optional[str],
-    name: Optional[str],
-    config: Optional[Path],
+    config: Path,
     working_dir: str,
     cmd: str,
 ):
@@ -159,7 +162,7 @@ def submit(
 
 @click.command("down", help="Spin the cluster down.")
 @cliwrapper
-def down(provider: Optional[str], name: Optional[str], config: Optional[Path]):
-    final_config = configs.get_final_config(provider, name, config)
+def down(config: Path):
+    final_config = configs.get_merged_config(config)
     ray_sdk.teardown_cluster(final_config)
     print("Successfully spun the cluster down.")

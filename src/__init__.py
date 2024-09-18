@@ -218,7 +218,7 @@ def submit(
                     raise e
                 time.sleep(1)
         assert client
-        client.submit_job(
+        id = client.submit_job(
             entrypoint=cmd,
             runtime_env={
                 "working_dir": working_dir_path.absolute(),
@@ -226,6 +226,7 @@ def submit(
             if working_dir
             else None,
         )
+        print(f'Job ID: {id}')
     finally:
         process.terminate()
 

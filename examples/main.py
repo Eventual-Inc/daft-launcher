@@ -1,4 +1,7 @@
 import daft
 
-def main():
-    print("Hello, world!")
+print('Hello, world!')
+try:
+    raise Exception('This is an error!')
+except:
+    print('Exception caught!')

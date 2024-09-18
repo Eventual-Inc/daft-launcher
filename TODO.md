@@ -20,6 +20,3 @@
   - add some indentation (head is at the top; workers are one line indented; have some "aggregate" stats on workers status)
 - understand how public IPs / public DNSs are provisioned upon spin-up
 - add dependencies that are downloadable via `uv pip install`
-
-# Bugs
-- run commands are not being propagated to the end configuration file

@@ -206,7 +206,7 @@ wheels = [
 ]
 
 [[package]]
-name = "daftcli"
+name = "daft"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

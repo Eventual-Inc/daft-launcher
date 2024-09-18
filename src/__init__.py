@@ -11,16 +11,17 @@ from ray import job_submission
 import time
 import requests
 
+
 def ssh_command(ip: str) -> list[str]:
-        return [
-            "ssh",
-            "-N",
-            "-L",
-            "8265:localhost:8265",
-            "-i",
-            "/Users/rabh/.ssh/ray-autoscaler_5_us-west-2.pem",
-            f"ec2-user@{ip}",
-        ]
+    return [
+        "ssh",
+        "-N",
+        "-L",
+        "8265:localhost:8265",
+        "-i",
+        "/Users/rabh/.ssh/ray-autoscaler_5_us-west-2.pem",
+        f"ec2-user@{ip}",
+    ]
 
 
 def get_ip(config: Path):
@@ -43,13 +44,15 @@ def get_ip(config: Path):
     )
     instance_groups = json.loads(result.stdout)
     ip, state = find_ip(instance_groups, name)
-    if state != 'running':
-        raise click.UsageError(f"The cluster {name} is not running; cannot connect to it.")
+    if state != "running":
+        raise click.UsageError(
+            f"The cluster {name} is not running; cannot connect to it."
+        )
     if not ip:
-        raise click.UsageError(f"The cluster {name} does not have a public IP address available.")
+        raise click.UsageError(
+            f"The cluster {name} does not have a public IP address available."
+        )
     return ip
-
-
 
 
 def find_ip(instance_groups: List[List[Any]], name: str) -> tuple[Optional[str], str]:
@@ -58,7 +61,7 @@ def find_ip(instance_groups: List[List[Any]], name: str) -> tuple[Optional[str],
         for instance in instance_group:
             is_head = False
             cluster_name = None
-            state = instance['State']
+            state = instance["State"]
             for tag in instance["Tags"]:
                 if tag["Key"] == "ray-cluster-name":
                     cluster_name = tag["Value"]
@@ -94,6 +97,7 @@ def cliwrapper(func):
         if not config_path.is_file():
             raise click.UsageError(f"The path '{config_path}' is not a file.")
         func(config_path, **args)
+
     return wrapper
 
 

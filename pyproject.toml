@@ -6,7 +6,7 @@ dependencies = [
     "boto3>=1.35.17",
     "click>=8.1.7",
     "getdaft>=0.3.2",
-    "ray[client]>=2.35.0",
+    "ray[default]==2.36.0",
 ]
 
 [project.scripts]

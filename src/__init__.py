@@ -226,7 +226,7 @@ def submit(
             if working_dir
             else None,
         )
-        print(f'Job ID: {id}')
+        print(f"Job ID: {id}")
     finally:
         process.terminate()
 

@@ -8,68 +8,75 @@ import yaml
 RAY_DEFAULT_CONFIGS_PATH = Path(__file__).parent / "ray_default_configs"
 
 
-def get_ray_config(provider: str) -> tuple[dict, list[tuple[str, list[list[str]], bool]]]:
+def get_ray_config(
+    provider: str,
+) -> tuple[dict, list[tuple[str, list[list[str]], bool]]]:
     if provider == "aws":
         ray_config_path = RAY_DEFAULT_CONFIGS_PATH / "aws.yaml"
         setup_mappings = [
-                ("name", [["cluster_name"]], False),
-                ("provider", [["provider", "type"]], True),
-                ("region", [["provider", "region"]], False),
-                ("ssh_user", [["auth", "ssh_user"]], False),
-                (
-                    "workers",
+            ("name", [["cluster_name"]], False),
+            ("provider", [["provider", "type"]], True),
+            ("region", [["provider", "region"]], False),
+            ("ssh_user", [["auth", "ssh_user"]], False),
+            (
+                "workers",
+                [
+                    ["max_workers"],
+                    ["available_node_types", "ray.worker.default", "min_workers"],
+                    ["available_node_types", "ray.worker.default", "max_workers"],
+                ],
+                False,
+            ),
+            (
+                "instance_type",
+                [
                     [
-                        ["max_workers"],
-                        ["available_node_types", "ray.worker.default", "min_workers"],
-                        ["available_node_types", "ray.worker.default", "max_workers"],
+                        "available_node_types",
+                        "ray.head.default",
+                        "node_config",
+                        "InstanceType",
                     ],
-                    False,
-                ),
-                (
-                    "instance_type",
                     [
-                        [
-                            "available_node_types",
-                            "ray.head.default",
-                            "node_config",
-                            "InstanceType",
-                        ],
-                        [
-                            "available_node_types",
-                            "ray.worker.default",
-                            "node_config",
-                            "InstanceType",
-                        ],
+                        "available_node_types",
+                        "ray.worker.default",
+                        "node_config",
+                        "InstanceType",
                     ],
-                    False,
-                ),
-                (
-                    "image_id",
+                ],
+                False,
+            ),
+            (
+                "image_id",
+                [
                     [
-                        ["available_node_types", "ray.head.default", "node_config", "ImageId"],
-                        [
-                            "available_node_types",
-                            "ray.worker.default",
-                            "node_config",
-                            "ImageId",
-                        ],
+                        "available_node_types",
+                        "ray.head.default",
+                        "node_config",
+                        "ImageId",
                     ],
-                    False,
-                ),
-                # (
-                #     "iam_instance_profile",
-                #     [
-                #         [
-                #             "available_node_types",
-                #             "ray.worker.default",
-                #             "node_config",
-                #             "IamInstanceProfile",
-                #             "Arn",
-                #         ]
-                #     ],
-                #     False,
-                # ),
-            ]
+                    [
+                        "available_node_types",
+                        "ray.worker.default",
+                        "node_config",
+                        "ImageId",
+                    ],
+                ],
+                False,
+            ),
+            # (
+            #     "iam_instance_profile",
+            #     [
+            #         [
+            #             "available_node_types",
+            #             "ray.worker.default",
+            #             "node_config",
+            #             "IamInstanceProfile",
+            #             "Arn",
+            #         ]
+            #     ],
+            #     False,
+            # ),
+        ]
     else:
         raise click.UsageError(f"Cloud provider {provider} not found")
     with open(ray_config_path, "rb") as stream:

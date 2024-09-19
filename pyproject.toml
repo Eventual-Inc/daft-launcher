@@ -5,7 +5,7 @@ requires-python = ">=3.12"
 dependencies = ["boto3>=1.35.17", "click>=8.1.7", "ray[default]==2.36.0"]
 
 [project.scripts]
-daft_launcher = "daft_launcher.__main__:main"
+daft_launcher = "daft_launcher.__init__:main"
 
 [build-system]
 requires = ["setuptools>=42", "wheel"]

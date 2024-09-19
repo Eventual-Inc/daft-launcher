@@ -236,3 +236,17 @@ def down(config: Path):
     final_config = configs.get_merged_config(config)
     ray_sdk.teardown_cluster(final_config)
     print("Successfully spun the cluster down.")
+
+
+@click.group()
+def cli():
+    pass
+
+
+def main():
+    cli.add_command(up)
+    cli.add_command(list)
+    cli.add_command(submit)
+    cli.add_command(dashboard)
+    cli.add_command(down)
+    cli()

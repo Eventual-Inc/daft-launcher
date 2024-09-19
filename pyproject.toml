@@ -2,33 +2,28 @@
 name = "daft"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = [
-    "boto3>=1.35.17",
-    "click>=8.1.7",
-    "getdaft>=0.3.2",
-    "ray[default]==2.36.0",
-]
+dependencies = ["boto3>=1.35.17", "click>=8.1.7", "ray[default]==2.36.0"]
 
 [project.scripts]
-daft = "daft-launcher.__main__:main"
+daft_launcher = "daft_launcher.__main__:main"
 
 [build-system]
 requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptool]
-packages = ["daft"]
+packages = ["daft_launcher"]
 include_package_data = true
 
 [tool.setuptools.packages.find]
 exclude = ["examples"]
 
 [tool.setuptools.package-data]
-daft = ["daft-launcher/configs/*.yaml"]
+daft = ["daft_launcher/ray_default_configs/*.yaml"]
 
 [tool.pyright]
 venvPath = '.'
 venv = '.venv'
 
 [tool.ruff]
-include = ["daft-launcher/**/*.py"]
+include = ["daft_launcher/**/*.py"]

@@ -1,8 +1,7 @@
 from typing import Optional, List, Any
 from pathlib import Path
 import click
-import src.ray_default_configs
-from src import configs
+from . import configs
 from ray.autoscaler import sdk as ray_sdk
 import subprocess
 import json

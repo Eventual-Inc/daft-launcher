@@ -10,7 +10,7 @@ dependencies = [
 ]
 
 [project.scripts]
-daft = "src.__main__:main"
+daft = "daft-launcher.__main__:main"
 
 [build-system]
 requires = ["setuptools>=42", "wheel"]
@@ -21,14 +21,14 @@ packages = ["daft"]
 include_package_data = true
 
 [tool.setuptools.packages.find]
-exclude = ["daft_configs"]
+exclude = ["examples"]
 
 [tool.setuptools.package-data]
-daft = ["src/configs/*.yaml"]
+daft = ["daft-launcher/configs/*.yaml"]
 
 [tool.pyright]
 venvPath = '.'
 venv = '.venv'
 
 [tool.ruff]
-include = ["src/**/*.py"]
+include = ["daft-launcher/**/*.py"]

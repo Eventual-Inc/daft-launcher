@@ -1,8 +1,8 @@
 cluster_name: daft-aws
 
 provider:
-  type: <provider>
-  region: <region>
+  type: aws
+  region: us-west-2
   cache_stopped_nodes: False
 
 auth:
@@ -13,18 +13,16 @@ available_node_types:
   ray.head.default:
     resources: { CPU: 0 }
     node_config:
-      InstanceType: <instance_type>
-      ImageId: <image_id>
+      InstanceType: m7g.medium
+      ImageId: ami-01c3c55948a949a52
 
   ray.worker.default:
     min_workers: 2
     max_workers: 2
     resources: {}
     node_config:
-      InstanceType: <instance_type>
-      ImageId: <image_id>
-      IamInstanceProfile:
-        Arn: <arn>
+      InstanceType: m7g.medium
+      ImageId: ami-01c3c55948a949a52
 
 setup_commands:
   - curl -LsSf https://astral.sh/uv/install.sh | sh

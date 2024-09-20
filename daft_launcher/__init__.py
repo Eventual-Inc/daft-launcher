@@ -88,7 +88,7 @@ def cliwrapper(func):
                     f"Config file does not exist at path '{config_path}'."
                 )
         else:
-            config_path = Path(".daft.toml").absolute()
+            config_path = Path(".daft-launcher.toml").absolute()
             if not config_path.exists():
                 raise click.UsageError(
                     f"No default '.daft.toml' file found in current directory."

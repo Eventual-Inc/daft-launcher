@@ -117,10 +117,10 @@ def merge(
             for b_ii in b_i[:-1]:
                 y = y[b_ii]
             y[b_i[-1]] = value
-    if 'run' in custom_config:
-        if 'setup_commands' in custom_config['run']:
-            setup_commands: list[str] = ray_config['setup_commands']
-            setup_commands.extend(custom_config['run']['setup_commands'])
+    if "run" in custom_config:
+        if "setup_commands" in custom_config["run"]:
+            setup_commands: list[str] = ray_config["setup_commands"]
+            setup_commands.extend(custom_config["run"]["setup_commands"])
     return ray_config
 
 

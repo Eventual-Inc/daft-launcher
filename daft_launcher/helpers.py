@@ -41,7 +41,10 @@ def run_aws_command(args: list[str]) -> Any:
             raise click.UsageError(
                 "AWS token has expired. Please run `aws login`, `aws sso login`, or some other command to refresh it."
             )
-    return json.loads(result.stdout)
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError as e:
+        raise click.UsageError(f"Failed to parse AWS command output: {result.stdout}")
 
 
 def find_ip(instance_groups: List[List[Any]], name: str) -> tuple[Optional[str], str]:

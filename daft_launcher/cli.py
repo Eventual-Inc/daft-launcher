@@ -2,6 +2,7 @@ from typing import Optional
 import click
 from pathlib import Path
 from . import commands
+from importlib import metadata
 
 
 DEFAULT_CONFIG_PATH = Path(".daft.toml")
@@ -137,7 +138,8 @@ def down(config: Optional[Path]):
     commands.down(config)
 
 
-@click.group()
+@click.group(help=metadata.metadata('daft-launcher').get('Summary'))
+@click.version_option(version=metadata.version('daft-launcher'))
 def cli(): ...
 
 

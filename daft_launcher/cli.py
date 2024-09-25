@@ -45,6 +45,7 @@ def config_arg(func):
 def identity_file_option(func):
     return click.option(
         "--identity-file",
+        "-i",
         required=True,
         type=Path,
         help="Path to the identity file.",
@@ -54,6 +55,7 @@ def identity_file_option(func):
 def working_dir_option(func):
     return click.option(
         "--working-dir",
+        "-w",
         required=True,
         type=Path,
         help="Path to the working directory.",

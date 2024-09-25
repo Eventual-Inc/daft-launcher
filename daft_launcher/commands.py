@@ -23,17 +23,17 @@ def up(config: Path):
 
 def list():
     instance_groups: List[List[Any]] = helpers.run_aws_command(
-            [
-                "aws",
-                "ec2",
-                "describe-instances",
-                "--region",
-                "us-west-2",
-                "--filters",
-                "Name=tag:ray-node-type,Values=*",
-                "--query",
-                "Reservations[*].Instances[*].{Instance:InstanceId,State:State.Name,Tags:Tags,Ip:PublicIpAddress}",
-            ]
+        [
+            "aws",
+            "ec2",
+            "describe-instances",
+            "--region",
+            "us-west-2",
+            "--filters",
+            "Name=tag:ray-node-type,Values=*",
+            "--query",
+            "Reservations[*].Instances[*].{Instance:InstanceId,State:State.Name,Tags:Tags,Ip:PublicIpAddress}",
+        ]
     )
     state_to_name_map: dict[str, List[tuple]] = {}
     for instance_group in instance_groups:

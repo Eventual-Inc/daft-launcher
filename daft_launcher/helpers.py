@@ -65,13 +65,15 @@ def ssh_command(
     ip: str,
     pub_key: Optional[Path] = None,
 ) -> list[str]:
-    return [
-        "ssh",
-        "-N",
-        "-L",
-        "8265:localhost:8265",
-    ]
-    +["-i", str(pub_key)] if pub_key else []
-    +[
-        f"ec2-user@{ip}",
-    ]
+    return (
+        [
+            "ssh",
+            "-N",
+            "-L",
+            "8265:localhost:8265",
+        ]
+        + (["-i", str(pub_key)] if pub_key else [])
+        + [
+            f"ec2-user@{ip}",
+        ]
+    )

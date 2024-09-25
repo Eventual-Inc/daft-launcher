@@ -22,11 +22,11 @@ jobs:
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
           uv venv
+          source .venv/bin/activate
           uv pip install twine
 
       - name: Build the package
         run: |
-          uv venv
           source .venv/bin/activate
           uv build
 
@@ -35,5 +35,5 @@ jobs:
           TWINE_USERNAME: "__token__"
           TWINE_PASSWORD: "${{ secrets.PYPI_API_TOKEN }}"
         run: |
-          uv venv
+          source .venv/bin/activate
           twine upload dist/* --skip-existing

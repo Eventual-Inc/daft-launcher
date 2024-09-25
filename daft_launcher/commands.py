@@ -22,27 +22,19 @@ def up(config: Path):
 
 
 def list():
-    result = subprocess.run(
-        [
-            "aws",
-            "ec2",
-            "describe-instances",
-            "--region",
-            "us-west-2",
-            "--filters",
-            "Name=tag:ray-node-type,Values=*",
-            "--query",
-            "Reservations[*].Instances[*].{Instance:InstanceId,State:State.Name,Tags:Tags,Ip:PublicIpAddress}",
-        ],
-        capture_output=True,
-        text=True,
+    instance_groups: List[List[Any]] = helpers.run_aws_command(
+            [
+                "aws",
+                "ec2",
+                "describe-instances",
+                "--region",
+                "us-west-2",
+                "--filters",
+                "Name=tag:ray-node-type,Values=*",
+                "--query",
+                "Reservations[*].Instances[*].{Instance:InstanceId,State:State.Name,Tags:Tags,Ip:PublicIpAddress}",
+            ]
     )
-    if result.returncode != 0:
-        if "Token has expired" in result.stderr:
-            raise click.UsageError(
-                "AWS token has expired. Please run `aws login`, `aws sso login`, or some other command to refresh it."
-            )
-    instance_groups = json.loads(result.stdout)
     state_to_name_map: dict[str, List[tuple]] = {}
     for instance_group in instance_groups:
         for instance in instance_group:

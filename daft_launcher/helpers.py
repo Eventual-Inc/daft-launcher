@@ -9,7 +9,7 @@ import click
 def get_ip(config: Path):
     final_config = configs.get_merged_config(config)
     name = final_config["cluster_name"]
-    result = subprocess.run(
+    instance_groups: List[List[Any]] = run_aws_command(
         [
             "aws",
             "ec2",
@@ -21,10 +21,7 @@ def get_ip(config: Path):
             "--query",
             "Reservations[*].Instances[*].{State:State.Name,Tags:Tags,Ip:PublicIpAddress}",
         ],
-        capture_output=True,
-        text=True,
     )
-    instance_groups = json.loads(result.stdout)
     ip, state = find_ip(instance_groups, name)
     if state != "running":
         raise click.UsageError(
@@ -35,6 +32,16 @@ def get_ip(config: Path):
             f"The cluster {name} does not have a public IP address available."
         )
     return ip
+
+
+def run_aws_command(args: list[str]) -> Any:
+    result = subprocess.run(args, capture_output=True, text=True)
+    if result.returncode != 0:
+        if "Token has expired" in result.stderr:
+            raise click.UsageError(
+                "AWS token has expired. Please run `aws login`, `aws sso login`, or some other command to refresh it."
+            )
+    return json.loads(result.stdout)
 
 
 def find_ip(instance_groups: List[List[Any]], name: str) -> tuple[Optional[str], str]:

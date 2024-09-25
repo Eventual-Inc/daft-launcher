@@ -9,6 +9,15 @@ import click
 import time
 
 
+AWS_TEMPLATE_PATH = Path(__file__).parent / "templates" / "aws.toml"
+
+
+def init_config(name: Path):
+    with open(AWS_TEMPLATE_PATH) as template_f:
+        with open(name, "w") as config_f:
+            config_f.write(template_f.read())
+
+
 def up(config: Path):
     final_config = configs.get_merged_config(config)
     ray_sdk.create_or_update_cluster(

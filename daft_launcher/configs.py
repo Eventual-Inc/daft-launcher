@@ -19,7 +19,7 @@ def get_ray_config(
             ("region", [["provider", "region"]], False),
             ("ssh_user", [["auth", "ssh_user"]], False),
             (
-                "workers",
+                "number_of_workers",
                 [
                     ["max_workers"],
                     ["available_node_types", "ray.worker.default", "min_workers"],
@@ -63,19 +63,6 @@ def get_ray_config(
                 ],
                 False,
             ),
-            # (
-            #     "iam_instance_profile",
-            #     [
-            #         [
-            #             "available_node_types",
-            #             "ray.worker.default",
-            #             "node_config",
-            #             "IamInstanceProfile",
-            #             "Arn",
-            #         ]
-            #     ],
-            #     False,
-            # ),
         ]
     else:
         raise click.UsageError(f"Cloud provider {provider} not found")
@@ -121,8 +108,8 @@ def merge(
     setup_commands: list[str] = ray_config["setup_commands"]
     if "dependencies" in setup:
         quoted_dependencies = [f'"{dep}"' for dep in setup["dependencies"]]
-        dependencies  = " ".join(quoted_dependencies)
-        uv_install_command = f'uv pip install {dependencies}'
+        dependencies = " ".join(quoted_dependencies)
+        uv_install_command = f"uv pip install {dependencies}"
         setup_commands.append(uv_install_command)
     if "run" in custom_config:
         if "setup_commands" in custom_config["run"]:

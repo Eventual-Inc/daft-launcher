@@ -14,7 +14,9 @@ def get_config_path(config: Optional[Path]) -> Path:
     else:
         config = DEFAULT_CONFIG_PATH
         if not config.exists():
-            raise click.UsageError(f"No default '{DEFAULT_CONFIG_PATH}' file found in current directory.")
+            raise click.UsageError(
+                f"No default '{DEFAULT_CONFIG_PATH}' file found in current directory."
+            )
     return config
 
 

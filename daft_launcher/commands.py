@@ -1,7 +1,6 @@
 from typing import List, Optional, Any
 from pathlib import Path
 import subprocess
-import json
 from . import configs, helpers
 from ray.autoscaler import sdk as ray_sdk
 from ray import job_submission

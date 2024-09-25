@@ -117,10 +117,16 @@ def merge(
             for b_ii in b_i[:-1]:
                 y = y[b_ii]
             y[b_i[-1]] = value
-    if 'run' in custom_config:
-        if 'setup_commands' in custom_config['run']:
-            setup_commands: list[str] = ray_config['setup_commands']
-            setup_commands.extend(custom_config['run']['setup_commands'])
+
+    setup_commands: list[str] = ray_config["setup_commands"]
+    if "dependencies" in setup:
+        quoted_dependencies = [f'"{dep}"' for dep in setup["dependencies"]]
+        dependencies  = " ".join(quoted_dependencies)
+        uv_install_command = f'uv pip install {dependencies}'
+        setup_commands.append(uv_install_command)
+    if "run" in custom_config:
+        if "setup_commands" in custom_config["run"]:
+            setup_commands.extend(custom_config["run"]["setup_commands"])
     return ray_config
 
 

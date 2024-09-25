@@ -35,4 +35,5 @@ jobs:
           TWINE_USERNAME: "__token__"
           TWINE_PASSWORD: "${{ secrets.PYPI_API_TOKEN }}"
         run: |
+          uv venv
           twine upload dist/* --skip-existing

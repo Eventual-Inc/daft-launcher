@@ -62,7 +62,7 @@ def working_dir_option(func):
     )(func)
 
 
-def config_file_name_argument(func):
+def init_config_file_name_argument(func):
     return click.argument(
         "name",
         required=False,
@@ -70,16 +70,18 @@ def config_file_name_argument(func):
     )(func)
 
 
-def config_argument(func):
-    return click.argument(
-        "config",
+def config_option(func):
+    return click.option(
+        "--config",
+        "-c",
         required=False,
         type=Path,
+        help=f"Path to the configuration file; defaults to {DEFAULT_CONFIG_PATH}.",
     )(func)
 
 
-def cmd_args_option(func):
-    return click.option("--cmd", required=True, type=click.STRING)(func)
+def cmd_args_argument(func):
+    return click.argument("cmd_args", nargs=-1, type=click.UNPROCESSED, required=True)(func)
 
 
 def init_config_command(func):
@@ -110,14 +112,14 @@ def submit_command(func):
 
 
 @init_config_command
-@config_file_name_argument
+@init_config_file_name_argument
 def init_config(name: Optional[Path]):
     name = get_new_configuration_file_path(name)
     commands.init_config(name)
 
 
 @up_command
-@config_argument
+@config_option
 def up(config: Optional[Path]):
     config = get_config_path(config)
     commands.up(config)
@@ -129,7 +131,7 @@ def list():
 
 
 @dashboard_command
-@config_argument
+@config_option
 @identity_file_option
 def dashboard(
     config: Optional[Path],
@@ -141,24 +143,24 @@ def dashboard(
 
 
 @submit_command
-@config_argument
+@config_option
 @working_dir_option
 @identity_file_option
-@cmd_args_option
+@cmd_args_argument
 def submit(
     config: Optional[Path],
     identity_file: Optional[Path],
     working_dir: Path,
-    cmd: str,
+    cmd_args: tuple[str],
 ):
     config = get_config_path(config)
     assert_identity_file_path(identity_file)
     assert_working_dir(working_dir)
-    commands.submit(config, identity_file, working_dir, cmd)
+    commands.submit(config, identity_file, working_dir, cmd_args)
 
 
 @down_command
-@config_argument
+@config_option
 def down(config: Optional[Path]):
     config = get_config_path(config)
     commands.down(config)

@@ -154,7 +154,7 @@ def submit(
     config = get_config_path(config)
     assert_identity_file_path(identity_file)
     assert_working_dir(working_dir)
-    commands.submit(config, identity_file, working_dir, cmd_args)
+    commands.submit(config, identity_file, working_dir, cmd)
 
 
 @down_command

@@ -13,21 +13,12 @@ file = "LICENSE"
 daft = "daft_launcher.__init__:main"
 
 [build-system]
-requires = ["setuptools>=42", "wheel"]
+requires = ["setuptools>=60", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptool]
 packages = ["daft_launcher"]
 include_package_data = true
-
-[tool.setuptools.packages.find]
-exclude = ["examples"]
-
-[tool.setuptools.package-data]
-daft = [
-    "daft_launcher/ray_default_configs/*.yaml",
-    "daft_launcher/ray_default_configs/*.toml",
-]
 
 [tool.pyright]
 venvPath = '.'

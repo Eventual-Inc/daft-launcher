@@ -41,6 +41,8 @@ def run_aws_command(args: list[str]) -> Any:
             raise click.UsageError(
                 "AWS token has expired. Please run `aws login`, `aws sso login`, or some other command to refresh it."
             )
+    if result.stdout == "":
+        raise click.UsageError(f"Failed to parse AWS command into json (empty response string)")
     try:
         return json.loads(result.stdout)
     except json.JSONDecodeError as e:

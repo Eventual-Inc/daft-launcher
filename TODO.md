@@ -5,7 +5,6 @@
     1. spin up ec2 machines
     2. access s3
     3. pass role permissions
-- find out other types of `daft list` failures; protect against them and send user back a proper error message
 
 # Cherries on top
 - have the submit API hang and open a stdio connection between the remote and local

@@ -22,8 +22,15 @@ def get_ip(config: Path):
             "Reservations[*].Instances[*].{State:State.Name,Tags:Tags,Ip:PublicIpAddress}",
         ],
     )
-    ip, state = find_ip(instance_groups, name)
-    if state != "running":
+    state_to_ips_mapping = find_ip(instance_groups, name)
+    if 'running' not in state_to_ips_mapping:
+        raise click.UsageError(
+            f"The cluster {name} is not running; cannot connect to it."
+        )
+    assert len(state_to_ips_mapping['running']) <= 1
+    if state_to_ips_mapping['running']:
+        ip = state_to_ips_mapping['running'][0]
+    else:
         raise click.UsageError(
             f"The cluster {name} is not running; cannot connect to it."
         )
@@ -42,15 +49,24 @@ def run_aws_command(args: list[str]) -> Any:
                 "AWS token has expired. Please run `aws login`, `aws sso login`, or some other command to refresh it."
             )
     if result.stdout == "":
-        raise click.UsageError(f"Failed to parse AWS command into json (empty response string)")
+        raise click.UsageError(
+            f"Failed to parse AWS command into json (empty response string)"
+        )
     try:
         return json.loads(result.stdout)
     except json.JSONDecodeError as e:
         raise click.UsageError(f"Failed to parse AWS command output: {result.stdout}")
 
 
-def find_ip(instance_groups: List[List[Any]], name: str) -> tuple[Optional[str], str]:
+def find_ip(instance_groups: List[List[Any]], name: str) -> dict[str, list[Optional[str]]]:
     ip = None
+    state_to_ips_mapping: dict[str, list[Optional[str]]] = {}
+    def insert(state: str, ip: Optional[str]):
+        if state in state_to_ips_mapping:
+            state_to_ips_mapping[state].append(ip)
+        else:
+            state_to_ips_mapping[state] = [ip]
+
     for instance_group in instance_groups:
         for instance in instance_group:
             is_head = False
@@ -62,8 +78,12 @@ def find_ip(instance_groups: List[List[Any]], name: str) -> tuple[Optional[str],
                 elif tag["Key"] == "ray-node-type":
                     is_head = tag["Value"] == "head"
             if is_head and cluster_name == name:
-                return instance["Ip"], state
-    raise click.UsageError(f"The IP of the cluster with the name '{name}' not found.")
+                insert(state, instance["Ip"])
+
+    if not state_to_ips_mapping:
+        raise click.UsageError(f"The IP of the cluster with the name '{name}' not found.")
+
+    return state_to_ips_mapping
 
 
 def ssh_command(

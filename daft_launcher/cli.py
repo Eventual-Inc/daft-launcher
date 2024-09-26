@@ -46,7 +46,7 @@ def identity_file_option(func):
     return click.option(
         "--identity-file",
         "-i",
-        required=True,
+        required=False,
         type=Path,
         help="Path to the identity file.",
     )(func)
@@ -78,8 +78,8 @@ def config_argument(func):
     )(func)
 
 
-def cmd_args_argument(func):
-    return click.argument("cmd-args", nargs=-1)(func)
+def cmd_args_option(func):
+    return click.option("--cmd", required=True, type=click.STRING)(func)
 
 
 def init_config_command(func):
@@ -142,19 +142,19 @@ def dashboard(
 
 @submit_command
 @config_argument
-@identity_file_option
 @working_dir_option
-@cmd_args_argument
+@identity_file_option
+@cmd_args_option
 def submit(
     config: Optional[Path],
     identity_file: Optional[Path],
     working_dir: Path,
-    cmd_args: tuple[str],
+    cmd: str,
 ):
     config = get_config_path(config)
     assert_identity_file_path(identity_file)
     assert_working_dir(working_dir)
-    commands.submit(config, identity_file, working_dir, cmd_args)
+    commands.submit(config, identity_file, working_dir, cmd)
 
 
 @down_command

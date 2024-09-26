@@ -9,3 +9,4 @@
   - [Submit](./commands/submit.md)
   - [Dashboard](./commands/dashboard.md)
 - [Example](./example.md)
+- [Future Plans](./future_plans.md)

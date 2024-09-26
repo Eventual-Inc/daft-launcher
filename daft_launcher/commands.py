@@ -1,12 +1,20 @@
 from typing import List, Optional, Any
 from pathlib import Path
 import subprocess
-import json
 from . import configs, helpers
 from ray.autoscaler import sdk as ray_sdk
 from ray import job_submission
 import click
 import time
+
+
+AWS_TEMPLATE_PATH = Path(__file__).parent / "templates" / "aws.toml"
+
+
+def init_config(name: Path):
+    with open(AWS_TEMPLATE_PATH) as template_f:
+        with open(name, "w") as config_f:
+            config_f.write(template_f.read())
 
 
 def up(config: Path):

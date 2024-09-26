@@ -2,6 +2,7 @@ from typing import Optional
 import click
 from pathlib import Path
 from . import commands
+from importlib import metadata
 
 
 DEFAULT_CONFIG_PATH = Path(".daft.toml")
@@ -34,12 +35,11 @@ def assert_working_dir(working_dir: Path):
         raise click.UsageError("Working dir must be a directory.")
 
 
-def config_arg(func):
-    return click.argument(
-        "config",
-        required=False,
-        type=Path,
-    )(func)
+def get_new_configuration_file_path(name: Optional[Path]) -> Path:
+    name = name or DEFAULT_CONFIG_PATH
+    if name.exists():
+        raise click.UsageError(f"A configuration file at path {name} already exists.")
+    return name
 
 
 def identity_file_option(func):
@@ -62,8 +62,28 @@ def working_dir_option(func):
     )(func)
 
 
+def config_file_name_argument(func):
+    return click.argument(
+        "name",
+        required=False,
+        type=Path,
+    )(func)
+
+
+def config_argument(func):
+    return click.argument(
+        "config",
+        required=False,
+        type=Path,
+    )(func)
+
+
 def cmd_args_argument(func):
-    return click.argument("cmd_args", nargs=-1)(func)
+    return click.argument("cmd-args", nargs=-1)(func)
+
+
+def init_config_command(func):
+    return click.command("init-config", help="Create a new configuration file.")(func)
 
 
 def up_command(func):
@@ -89,8 +109,15 @@ def submit_command(func):
     return click.command("submit", help="Submit a job to the specified cluster.")(func)
 
 
+@init_config_command
+@config_file_name_argument
+def init_config(name: Optional[Path]):
+    name = get_new_configuration_file_path(name)
+    commands.init_config(name)
+
+
 @up_command
-@config_arg
+@config_argument
 def up(config: Optional[Path]):
     config = get_config_path(config)
     commands.up(config)
@@ -102,7 +129,7 @@ def list():
 
 
 @dashboard_command
-@config_arg
+@config_argument
 @identity_file_option
 def dashboard(
     config: Optional[Path],
@@ -114,7 +141,7 @@ def dashboard(
 
 
 @submit_command
-@config_arg
+@config_argument
 @identity_file_option
 @working_dir_option
 @cmd_args_argument
@@ -131,17 +158,19 @@ def submit(
 
 
 @down_command
-@config_arg
+@config_argument
 def down(config: Optional[Path]):
     config = get_config_path(config)
     commands.down(config)
 
 
-@click.group()
+@click.group(help=metadata.metadata("daft-launcher").get("Summary"))
+@click.version_option(version=metadata.version("daft-launcher"))
 def cli(): ...
 
 
 def run_cli():
+    cli.add_command(init_config)
     cli.add_command(up)
     cli.add_command(list)
     cli.add_command(dashboard)

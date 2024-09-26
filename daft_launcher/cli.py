@@ -80,8 +80,8 @@ def config_option(func):
     )(func)
 
 
-def cmd_args_option(func):
-    return click.option("--cmd", required=True, type=click.STRING)(func)
+def cmd_args_argument(func):
+    return click.argument("cmd_args", nargs=-1, type=click.UNPROCESSED, required=True)(func)
 
 
 def init_config_command(func):
@@ -146,17 +146,17 @@ def dashboard(
 @config_option
 @working_dir_option
 @identity_file_option
-@cmd_args_option
+@cmd_args_argument
 def submit(
     config: Optional[Path],
     identity_file: Optional[Path],
     working_dir: Path,
-    cmd: str,
+    cmd_args: tuple[str],
 ):
     config = get_config_path(config)
     assert_identity_file_path(identity_file)
     assert_working_dir(working_dir)
-    commands.submit(config, identity_file, working_dir, cmd)
+    commands.submit(config, identity_file, working_dir, cmd_args)
 
 
 @down_command

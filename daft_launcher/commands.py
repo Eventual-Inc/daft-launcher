@@ -89,8 +89,9 @@ def submit(
     config: Path,
     identity_file: Optional[Path],
     working_dir: Path,
-    cmd: str,
+    cmd_args: tuple[str],
 ):
+    cmd = " ".join([arg for arg in cmd_args])
     process = subprocess.Popen(
         helpers.ssh_command(
             helpers.get_ip(config), Path(identity_file) if identity_file else None

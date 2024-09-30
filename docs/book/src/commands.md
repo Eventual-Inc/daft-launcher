@@ -1,6 +1,6 @@
 # Commands
 
-Daft-launcher currently exposes 6 commands to interface with and manage your cluster.
+Daft launcher currently exposes 6 commands to interface with and manage your cluster.
 They are:
 
 1. [`daft init-config`](#init-config)
@@ -19,7 +19,7 @@ Let's dive into each command individually.
 
 ## Init Config
 
-This command is, in essence, the entrypoint to using daft-launcher.
+This command is, in essence, the entrypoint to using daft launcher.
 This will initialize an empty configuration file, named `.daft.toml`, in the current working directory.
 The file itself will contain some default values that you can tune to your liking.
 Some of the values are required, while others are optional; which ones are which will be denoted as such.
@@ -57,7 +57,7 @@ If it is optional, the default value that we use internally will be listed as we
 ## Up
 
 This command spins up a cluster given some configuration file.
-The configuration file itself will contain all of the information that daft-launcher will require in order to know *how* to spin that specific cluster up.
+The configuration file itself will contain all of the information that daft launcher will require in order to know *how* to spin that specific cluster up.
 
 ### Example
 

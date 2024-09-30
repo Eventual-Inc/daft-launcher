@@ -13,13 +13,13 @@ source .venv/bin/activate
 uv pip install "daft-launcher"
 ```
 
-At this point, you need to create your AWS token (so that daft-launcher can use it to manage your clusters)
+At this point, you need to create your AWS token (so that daft launcher can use it to manage your clusters)
 
 ```bash
 aws sso login
 ```
 
-Now you are able to run `daft-launcher`
+Now you are able to run daft launcher
 
 ```bash
 daft init-config

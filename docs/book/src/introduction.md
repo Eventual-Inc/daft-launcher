@@ -16,9 +16,9 @@ The story can be so challenging that after multiple attempts, the developer may 
 ## Simplifying launches
 
 Ideally, developers should be able to bring their own cloud and get up and running with running daft in a distributed setting as quickly as possible.
-This is where `daft-launcher` comes into the picture.
+This is where `daft launcher` comes into the picture.
 
-Daft-launcher is a command-line tool that aims to provide some simpler abstractions over ray, thus enabling a quick uptime during experimentation.
+Daft launcher is a command-line tool that aims to provide some simpler abstractions over ray, thus enabling a quick uptime during experimentation.
 This is also a great tool during actual development; the ability to quickly spin up and manage clusters is a powerful asset to any data engineer.
 
-This book will aim to introduce daft-launcher and how it enables the developers to get up and running quickly with daft.
+This book will aim to introduce daft launcher and how it enables the developers to get up and running quickly with daft.

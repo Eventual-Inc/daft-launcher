@@ -15,6 +15,7 @@ The following should be installed on your machine:
 We recommend using [`uv`](https://docs.astral.sh/uv) to manage everything (i.e., dependencies, as well as the python version itself).
 
 ## Permissions
+
 ...
 
 ## Getting started
@@ -30,7 +31,7 @@ uv init --python 3.12
 uv venv
 source .venv/bin/activate
 
-# install daft-launcher
+# install daft launcher
 uv pip install "daft-launcher"
 ```
 

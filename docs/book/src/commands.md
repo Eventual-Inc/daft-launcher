@@ -164,6 +164,14 @@ In a couple seconds, the state should then be finalized to "Terminated".
 
 ### Example
 
+```bash
+# submit a job using the default .daft.toml configuration file
+daft submit -i my-keypair.pem -w my-working-director
+
+# submit a job using the default .daft.toml configuration file
+daft submit -c my-custom-config.toml -i my-keypair.pem -w my-working-director
+```
+
 ## Dashboard
 
 The dashboard command enables you to view the Ray dashboard of a specified cluster that you currently have running.

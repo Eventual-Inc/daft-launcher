@@ -166,19 +166,19 @@ In a couple seconds, the state should then be finalized to "Terminated".
 
 ## Dashboard
 
-Dashboard is a command that will open up a web browser and display a Ray dashboard of all of the clusters that you currently have running.
-Internally, this is done by opening up a port-forward using SSH to the head node in the cluster (binding the localhost:8265 to the remotes 8265).
-The dashboard displays useful information such as the number of nodes, as well as the statuses of running and completed jobs.
+The dashboard command enables you to view the Ray dashboard of a specified cluster that you currently have running.
+The way this is done is by establishing a port-forward over SSH from your local machine to the head node of the cluster (connecting `localhost:8265` to the remote head's `8265`).
+The head node then serves some HTML/CSS/JS that you can view in your browser by pointing it towards `localhost:8265`).
 
-This command will require that you have an SSH key pair set up with the cloud provider that you are using.
-You will also need to pass in the keypair as an argument to the command.
+An important thing to note is that this command will require that you have the appropriate private SSH keypair to authenticate against the remote head's public SSH keypair.
+You will need to pass this SSH keypair as an argument to the command.
 
 ### Example
 
 ```bash
 # establish the port-forward using the default .daft.toml configuration file
-daft dashboard -k my-keypair.pem
+daft dashboard -i my-keypair.pem
 
 # or, if you want, establish the port-forward using a custom configuration file
-daft dashboard -c my-custom-config.toml -k my-keypair.pem
+daft dashboard -c my-custom-config.toml -i my-keypair.pem
 ```

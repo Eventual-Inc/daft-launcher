@@ -36,13 +36,13 @@ uv pip install "daft-launcher"
 ```
 
 So at this point, you should have a working python project.
-You should also have the actual daft-launcher CLI tool installed as well.
-In fact, if you run `daft --version`, you should see the version of the CLI tool printed to the screen.
-You can even try running `daft --help`; you should get some helpful output printed!
 
-Other commands for daft-launcher, however, may still not work just yet.
-This is because you may not have configured your aws credentials just yet.
+You should also have the daft launcher CLI tool installed as well.
+You can verify this by running `daft --version`, which should return the latest version of daft launcher which is available.
+You can even try running `daft --help` and see what commands are available.
 
+Other commands for daft launcher, however, may still not work just yet.
+This is because you may not have configured your AWS credentials just yet.
 In order to do so, you can run the following:
 
 ```bash

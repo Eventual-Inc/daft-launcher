@@ -65,7 +65,7 @@ def connect(
     if not identity_file:
         identity_file = helpers.detect_keypair(final_config)
 
-    process = helpers.ssh_helper(final_config, identity_file)
+    process = helpers.ssh_helper(final_config, identity_file, [10001])
     print(ON_CONNECTION_MESSAGE)
     process.wait()
 

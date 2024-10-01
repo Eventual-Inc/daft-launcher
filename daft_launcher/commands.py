@@ -30,38 +30,7 @@ def up(config: Path):
 
 
 def list():
-    instance_groups: List[List[Any]] = helpers.run_aws_command(
-        [
-            "aws",
-            "ec2",
-            "describe-instances",
-            "--region",
-            "us-west-2",
-            "--filters",
-            "Name=tag:ray-node-type,Values=*",
-            "--query",
-            "Reservations[*].Instances[*].{Instance:InstanceId,State:State.Name,Tags:Tags,Ip:PublicIpAddress}",
-        ]
-    )
-    state_to_name_map: dict[str, List[tuple]] = {}
-    for instance_group in instance_groups:
-        for instance in instance_group:
-            state = instance["State"]
-            instance_id: str = instance["Instance"]
-            ip: str = instance["Ip"]
-            name = None
-            node_type = None
-            for tag in instance["Tags"]:
-                if tag["Key"] == "ray-node-type":
-                    node_type = tag["Value"]
-                if tag["Key"] == "ray-cluster-name":
-                    name = tag["Value"]
-            assert name is not None
-            assert node_type is not None
-            if state in state_to_name_map:
-                state_to_name_map[state].append((name, instance_id, node_type, ip))
-            else:
-                state_to_name_map[state] = [(name, instance_id, node_type, ip)]
+    state_to_name_map = helpers.list_helper()
     for state, data in state_to_name_map.items():
         print(f"{state.capitalize()}:")
         for name, instance_id, node_type, ip in data:
@@ -77,7 +46,7 @@ def dashboard(
 ):
     final_config = configs.get_merged_config(config)
     if not identity_file:
-        identity_file = helpers.detect_keypair()
+        identity_file = helpers.detect_keypair(final_config)
 
     subprocess.run(
         helpers.ssh_command(helpers.get_ip(final_config), identity_file),
@@ -95,7 +64,7 @@ def submit(
 ):
     final_config = configs.get_merged_config(config)
     if not identity_file:
-        identity_file = helpers.detect_keypair()
+        identity_file = helpers.detect_keypair(final_config)
     cmd = " ".join([arg for arg in cmd_args])
 
     process = subprocess.Popen(

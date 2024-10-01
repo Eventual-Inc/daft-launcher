@@ -9,8 +9,7 @@ import time
 
 
 AWS_TEMPLATE_PATH = Path(__file__).parent / "templates" / "aws.toml"
-ON_CONNECTION_MESSAGE = """
-Successfully connected to Ray Cluster!
+ON_CONNECTION_MESSAGE = """Successfully connected to Ray Cluster!
 
 To view your cluster dashboard, navigate to: http://localhost:8265.
 
@@ -23,7 +22,10 @@ daft.context.set_runner_ray(address="ray://localhost:10001")
 
 df = daft.from_pydict({"foo": [1, 2, 3], "bar": [4, 5, 6]})
 df.show()
-```"""
+```
+
+Happy daft-ing! 🚀
+"""
 
 
 def init_config(name: Path):

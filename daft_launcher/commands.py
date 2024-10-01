@@ -1,3 +1,4 @@
+import asyncio
 from typing import List, Optional, Any
 from pathlib import Path
 import subprocess
@@ -103,18 +104,20 @@ def submit(
         working_dir_path = Path(working_dir).absolute()
         client = None
         tries = 0
-        max_tries = 3
+        max_tries = 10
         while tries <= max_tries:
             try:
-                client = job_submission.JobSubmissionClient("http://localhost:8265")
+                client = job_submission.JobSubmissionClient(
+                    address="http://localhost:8265"
+                )
                 break
             except Exception as e:
                 tries += 1
                 if tries >= max_tries:
                     raise e
-                time.sleep(1)
+                time.sleep(0.1)
         assert client
-        id = client.submit_job(
+        job_id = client.submit_job(
             entrypoint=cmd,
             runtime_env={
                 "working_dir": working_dir_path.absolute(),
@@ -122,7 +125,14 @@ def submit(
             if working_dir
             else None,
         )
-        print(f"Job ID: {id}")
+        print(f"Job ID: {job_id}")
+
+        asyncio.run(helpers.wait_on_job(client.tail_job_logs(job_id)))
+        status = client.get_job_status(job_id)
+        assert status.is_terminal(), "Job should have terminated"
+        job_info = client.get_job_info(job_id)
+        print(f"Job completed with {status}")
+
     finally:
         process.terminate()
 

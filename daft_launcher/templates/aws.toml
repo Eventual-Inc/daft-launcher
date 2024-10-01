@@ -19,7 +19,7 @@ provider = "aws"
 # ssh_user = "$SSH_USER"
 
 # (defaults to 2 worker nodes)
-# number_of_workers = $NUMBER_OF_WORKERS
+# number_of_workers = "$NUMBER_OF_WORKERS"
 
 # (defaults to "m7g.medium")
 # instance_type = "$INSTANCE_TYPE"

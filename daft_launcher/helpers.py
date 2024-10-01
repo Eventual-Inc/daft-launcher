@@ -228,5 +228,5 @@ async def print_logs(logs):
         print(lines, end="")
 
 
-async def wait_on_job(logs, timeout_s: float):
-    await asyncio.wait_for(print_logs(logs), timeout=timeout_s)
+async def wait_on_job(logs):
+    await asyncio.wait_for(print_logs(logs), timeout=None)

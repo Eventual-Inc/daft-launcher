@@ -1,11 +1,3 @@
-# Hard blocks
-- [ ] Quality of life improvements to submission:
-  - [ ] Forward stdout printouts from the remote cluster to local during the execution of a job.
-  - [ ] Automatic detection of private keypair file during submission as well.
-
-- [ ] Print a nice message when running `daft connect`.
-  Let the user know that something has happened.
-
 # Medium blocks
 
 - [ ] Create new `daft sql` command.

@@ -9,6 +9,21 @@ import time
 
 
 AWS_TEMPLATE_PATH = Path(__file__).parent / "templates" / "aws.toml"
+ON_CONNECTION_MESSAGE = """
+Successfully connected to Ray Cluster!
+
+To view your cluster dashboard, navigate to: http://localhost:8265.
+
+To run Daft against your Ray cluster, use the following code snippet:
+
+```
+import daft
+
+daft.context.set_runner_ray(address="ray://localhost:10001")
+
+df = daft.from_pydict({"foo": [1, 2, 3], "bar": [4, 5, 6]})
+df.show()
+```"""
 
 
 def init_config(name: Path):
@@ -48,12 +63,23 @@ def connect(
     if not identity_file:
         identity_file = helpers.detect_keypair(final_config)
 
-    subprocess.run(
-        helpers.ssh_command(helpers.get_ip(final_config), identity_file, additional_port_forwards=[10001]),
-        close_fds=True,
-        capture_output=False,
-        text=False,
+    process = subprocess.Popen(
+        helpers.ssh_command(
+            helpers.get_ip(final_config),
+            identity_file,
+            additional_port_forwards=[10001],
+        ),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
     )
+    if process.returncode and process.returncode != 0:
+        raise click.ClickException(
+            f"Failed to attach to the remote server. Return code: {process.returncode}"
+        )
+    else:
+        print(ON_CONNECTION_MESSAGE)
+    process.wait()
 
 
 def submit(

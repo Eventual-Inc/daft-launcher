@@ -203,7 +203,9 @@ def ssh_command(
 ) -> list[str]:
     additional_port_forward_args = [
         arg
-        for args in map(lambda pf: ["-L", f"{pf}:localhost:{pf}"], additional_port_forwards)
+        for args in map(
+            lambda pf: ["-L", f"{pf}:localhost:{pf}"], additional_port_forwards
+        )
         for arg in args
     ]
     return (

@@ -2,21 +2,21 @@
 # This is a template for the `daft-launcher` configuration file.
 #
 # Please edit the values below to match your requirements.
-# The values which are marked as "required" need to be present!
-# As for the other ones, feel free to remove as per your liking.
+# The values which are commented out are completely optional.
+# Please feel free to remove them, or specify them as per your liking.
 #
 # If you notice any bugs, please reach out to me (Raunak Bhagat) via our open Slack workspace, "Distributed Data Community":
 # https://join.slack.com/t/dist-data/shared_invite/zt-2ric3mssh-zX08IXaKNeyx8YtqXey41A
 
 [setup]
-name = "$NAME - required"
+name = "daft-launcher-example"
 provider = "aws"
-region = "$REGION - optional, defaults to us-west-2"
-ssh_user = "$SSH_USER - optional, defaults to ec2-user"
-number_of_workers = "$NUMBER_OF_WORKERS - optional, defaults to 2 worker nodes"
-instance_type = "$INSTANCE_TYPE - optional, defaults to m7g.medium"
-image_id = "$IMAGE_ID - optional, defaults to ami-01c3c55948a949a52"
-dependencies = ["$DEPENDENCIES - optional, defaults to an empty list"]
+# region = "$REGION - optional, defaults to us-west-2"
+# ssh_user = "$SSH_USER - optional, defaults to ec2-user"
+# number_of_workers = "$NUMBER_OF_WORKERS - optional, defaults to 2 worker nodes"
+# instance_type = "$INSTANCE_TYPE - optional, defaults to m7g.medium"
+# image_id = "$IMAGE_ID - optional, defaults to ami-01c3c55948a949a52"
+# dependencies = ["$DEPENDENCIES - optional, defaults to an empty list"]
 
 [run]
 setup_commands = ['echo "Hello, World!"']

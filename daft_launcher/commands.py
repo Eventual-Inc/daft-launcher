@@ -74,12 +74,12 @@ def submit(
     config: Path,
     identity_file: Optional[Path],
     working_dir: Path,
-    cmd_args: tuple[str],
+    cmd_args: List[str],
 ):
     final_config = configs.get_merged_config(config)
     if not identity_file:
         identity_file = helpers.detect_keypair(final_config)
-    cmd = " ".join([arg for arg in cmd_args])
+    cmd = " ".join(cmd_args)
 
     process = helpers.ssh_helper(final_config, identity_file)
     try:
@@ -117,6 +117,19 @@ def submit(
 
     finally:
         process.terminate()
+
+
+def sql(
+    config: Path,
+    identity_file: Optional[Path],
+    cmd_args: List[str],
+):
+    submit(
+        config,
+        identity_file,
+        Path(__file__).parent / "sql_templates",
+        ["python", "sql.py"] + cmd_args,
+    )
 
 
 def down(config: Path):

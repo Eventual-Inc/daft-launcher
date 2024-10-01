@@ -113,6 +113,10 @@ def submit_command(func):
     return click.command("submit", help="Submit a job to the specified cluster.")(func)
 
 
+def sql_command(func):
+    return click.command("sql", help="Submit a SQL query to the specified cluster.")(func)
+
+
 @init_config_command
 @init_config_file_name_argument
 def init_config(name: Optional[Path]):
@@ -158,7 +162,23 @@ def submit(
     config = get_config_path(config)
     assert_identity_file_path(identity_file)
     assert_working_dir(working_dir)
-    commands.submit(config, identity_file, working_dir, cmd_args)
+    cmd_args_list = [arg for arg in cmd_args]
+    commands.submit(config, identity_file, working_dir, cmd_args_list)
+
+
+@sql_command
+@config_option
+@identity_file_option
+@cmd_args_argument
+def sql(
+    config: Optional[Path],
+    identity_file: Optional[Path],
+    cmd_args: tuple[str],
+):
+    config = get_config_path(config)
+    assert_identity_file_path(identity_file)
+    cmd_args_list = [arg for arg in cmd_args]
+    commands.sql(config, identity_file, cmd_args_list)
 
 
 @down_command
@@ -179,5 +199,6 @@ def run_cli():
     cli.add_command(list)
     cli.add_command(connect)
     cli.add_command(submit)
+    cli.add_command(sql)
     cli.add_command(down)
     cli()

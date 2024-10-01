@@ -75,10 +75,12 @@ def dashboard(
     config: Path,
     identity_file: Optional[Path],
 ):
+    final_config = configs.get_merged_config(config)
+    if not identity_file:
+        identity_file = helpers.detect_keypair()
+
     subprocess.run(
-        helpers.ssh_command(
-            helpers.get_ip(config), Path(identity_file) if identity_file else None
-        ),
+        helpers.ssh_command(helpers.get_ip(final_config), identity_file),
         close_fds=True,
         capture_output=False,
         text=False,
@@ -91,11 +93,13 @@ def submit(
     working_dir: Path,
     cmd_args: tuple[str],
 ):
+    final_config = configs.get_merged_config(config)
+    if not identity_file:
+        identity_file = helpers.detect_keypair()
     cmd = " ".join([arg for arg in cmd_args])
+
     process = subprocess.Popen(
-        helpers.ssh_command(
-            helpers.get_ip(config), Path(identity_file) if identity_file else None
-        ),
+        helpers.ssh_command(helpers.get_ip(final_config), identity_file),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )

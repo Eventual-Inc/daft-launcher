@@ -6,8 +6,25 @@ from . import configs
 import click
 
 
-def get_ip(config: Path):
-    final_config = configs.get_merged_config(config)
+def query_for_public_keypair() -> Optional[str]:
+    run_aws_command(
+        [
+            "aws",
+        ]
+    )
+    ...
+
+
+def detect_keypair() -> Path:
+    if public_keypair_name := query_for_public_keypair():
+        ...
+    else:
+        raise click.UsageError(
+            "Could not detect keypair; please manually specify one by using the `-i <PATH_TO_KEY_PAIR>` flag."
+        )
+
+
+def get_ip(final_config: dict):
     name = final_config["cluster_name"]
     instance_groups: List[List[Any]] = run_aws_command(
         [

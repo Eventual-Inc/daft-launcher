@@ -1,0 +1,2 @@
+include daft_launcher/ray_default_configs/*.yaml
+include daft_launcher/templates/*.toml

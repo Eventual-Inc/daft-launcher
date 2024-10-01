@@ -1,0 +1,6 @@
+[setup]
+name = "test-cluster"
+provider = "aws"
+
+[run]
+setup_commands = ['echo "Hello, World!"']

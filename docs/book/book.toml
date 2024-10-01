@@ -1,0 +1,6 @@
+[book]
+authors = ["Raunak Bhagat"]
+language = "en"
+multilingual = false
+src = "src"
+title = "Daft Launcher"

@@ -1,0 +1,35 @@
+cluster_name: daft-aws
+
+provider:
+  type: aws
+  region: us-west-2
+  cache_stopped_nodes: False
+
+auth:
+  ssh_user: ec2-user
+
+max_workers: 2
+available_node_types:
+  ray.head.default:
+    resources: { CPU: 0 }
+    node_config:
+      InstanceType: m7g.medium
+      ImageId: ami-01c3c55948a949a52
+
+  ray.worker.default:
+    min_workers: 2
+    max_workers: 2
+    resources: {}
+    node_config:
+      InstanceType: m7g.medium
+      ImageId: ami-01c3c55948a949a52
+
+setup_commands:
+  - curl -LsSf https://astral.sh/uv/install.sh | sh
+  - uv python install 3.12.5
+  - uv python pin 3.12.5
+  - uv venv
+  - echo "alias pip='uv pip'" >> $HOME/.bashrc
+  - echo "source $HOME/.venv/bin/activate" >> $HOME/.bashrc
+  - source $HOME/.bashrc
+  - uv pip install "ray[default]==2.36.0" "getdaft>=0.3.2"

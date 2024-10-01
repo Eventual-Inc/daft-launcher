@@ -81,7 +81,9 @@ def config_option(func):
 
 
 def cmd_args_argument(func):
-    return click.argument("cmd_args", nargs=-1, type=click.UNPROCESSED, required=True)(func)
+    return click.argument("cmd_args", nargs=-1, type=click.UNPROCESSED, required=True)(
+        func
+    )
 
 
 def init_config_command(func):

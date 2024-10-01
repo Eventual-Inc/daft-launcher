@@ -23,13 +23,13 @@ def get_ip(config: Path):
         ],
     )
     state_to_ips_mapping = find_ip(instance_groups, name)
-    if 'running' not in state_to_ips_mapping:
+    if "running" not in state_to_ips_mapping:
         raise click.UsageError(
             f"The cluster {name} is not running; cannot connect to it."
         )
-    assert len(state_to_ips_mapping['running']) <= 1
-    if state_to_ips_mapping['running']:
-        ip = state_to_ips_mapping['running'][0]
+    assert len(state_to_ips_mapping["running"]) <= 1
+    if state_to_ips_mapping["running"]:
+        ip = state_to_ips_mapping["running"][0]
     else:
         raise click.UsageError(
             f"The cluster {name} is not running; cannot connect to it."
@@ -58,9 +58,12 @@ def run_aws_command(args: list[str]) -> Any:
         raise click.UsageError(f"Failed to parse AWS command output: {result.stdout}")
 
 
-def find_ip(instance_groups: List[List[Any]], name: str) -> dict[str, list[Optional[str]]]:
+def find_ip(
+    instance_groups: List[List[Any]], name: str
+) -> dict[str, list[Optional[str]]]:
     ip = None
     state_to_ips_mapping: dict[str, list[Optional[str]]] = {}
+
     def insert(state: str, ip: Optional[str]):
         if state in state_to_ips_mapping:
             state_to_ips_mapping[state].append(ip)
@@ -81,7 +84,9 @@ def find_ip(instance_groups: List[List[Any]], name: str) -> dict[str, list[Optio
                 insert(state, instance["Ip"])
 
     if not state_to_ips_mapping:
-        raise click.UsageError(f"The IP of the cluster with the name '{name}' not found.")
+        raise click.UsageError(
+            f"The IP of the cluster with the name '{name}' not found."
+        )
 
     return state_to_ips_mapping
 

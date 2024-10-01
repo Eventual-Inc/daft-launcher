@@ -1,3 +1,4 @@
+import asyncio
 from typing import List, Optional, Any
 from pathlib import Path
 import subprocess
@@ -221,3 +222,11 @@ def ssh_command(
             f"ec2-user@{ip}",
         ]
     )
+
+async def print_logs(logs):
+    async for lines in logs:
+        print(lines, end="")
+
+
+async def wait_on_job(logs, timeout_s: float):
+    await asyncio.wait_for(print_logs(logs), timeout=timeout_s)

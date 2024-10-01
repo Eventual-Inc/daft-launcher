@@ -7,6 +7,35 @@ from . import configs
 import click
 
 
+def ssh_helper(
+    final_config: dict,
+    identity_file: Path,
+    additional_port_forwards: list[int] = [],
+) -> subprocess.Popen[str]:
+    process = subprocess.Popen(
+        ssh_command(
+            get_ip(final_config),
+            identity_file,
+            additional_port_forwards,
+        ),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if process.returncode and process.returncode != 0:
+        raise click.ClickException(
+            f"Failed to attach to the remote server. Return code: {process.returncode}"
+        )
+    else:
+        assert process.stdout
+        if process.stdout.readable():
+            if text := process.stdout.read():
+                print(text)
+        else:
+            raise click.ClickException("Unable to establish a connection to the remote server.")
+    return process
+
+
 def list_helper() -> dict[str, List[tuple]]:
     instance_groups: List[List[Any]] = run_aws_command(
         [

@@ -65,22 +65,8 @@ def connect(
     if not identity_file:
         identity_file = helpers.detect_keypair(final_config)
 
-    process = subprocess.Popen(
-        helpers.ssh_command(
-            helpers.get_ip(final_config),
-            identity_file,
-            additional_port_forwards=[10001],
-        ),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-    if process.returncode and process.returncode != 0:
-        raise click.ClickException(
-            f"Failed to attach to the remote server. Return code: {process.returncode}"
-        )
-    else:
-        print(ON_CONNECTION_MESSAGE)
+    process = helpers.ssh_helper(final_config, identity_file)
+    print(ON_CONNECTION_MESSAGE)
     process.wait()
 
 
@@ -95,11 +81,7 @@ def submit(
         identity_file = helpers.detect_keypair(final_config)
     cmd = " ".join([arg for arg in cmd_args])
 
-    process = subprocess.Popen(
-        helpers.ssh_command(helpers.get_ip(final_config), identity_file),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
+    process = helpers.ssh_helper(final_config, identity_file)
     try:
         working_dir_path = Path(working_dir).absolute()
         client = None

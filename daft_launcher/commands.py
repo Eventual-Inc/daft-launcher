@@ -24,8 +24,7 @@ df = daft.from_pydict({"foo": [1, 2, 3], "bar": [4, 5, 6]})
 df.show()
 ```
 
-Happy daft-ing! 🚀
-"""
+Happy daft-ing! 🚀"""
 
 
 def init_config(name: Path):

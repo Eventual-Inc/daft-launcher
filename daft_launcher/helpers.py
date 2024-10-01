@@ -196,13 +196,16 @@ def find_ip(
     return state_to_ips_mapping
 
 
-# TODO!
-# pass in a list of ports instead
 def ssh_command(
     ip: str,
     pub_key: Optional[Path] = None,
-    connect_10001: bool = False,
+    additional_port_forwards: list[int] = [],
 ) -> list[str]:
+    additional_port_forward_args = [
+        arg
+        for args in map(lambda pf: ["-L", f"{pf}:localhost:{pf}"], additional_port_forwards)
+        for arg in args
+    ]
     return (
         [
             "ssh",
@@ -210,7 +213,7 @@ def ssh_command(
             "-L",
             "8265:localhost:8265",
         ]
-        + (["-L", "10001:localhost:10001"] if connect_10001 else [])
+        + additional_port_forward_args
         + (["-i", str(pub_key)] if pub_key else [])
         + [
             f"ec2-user@{ip}",

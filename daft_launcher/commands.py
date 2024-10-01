@@ -49,7 +49,7 @@ def connect(
         identity_file = helpers.detect_keypair(final_config)
 
     subprocess.run(
-        helpers.ssh_command(helpers.get_ip(final_config), identity_file),
+        helpers.ssh_command(helpers.get_ip(final_config), identity_file, additional_port_forwards=[10001]),
         close_fds=True,
         capture_output=False,
         text=False,

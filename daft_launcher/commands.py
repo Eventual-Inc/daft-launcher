@@ -1,3 +1,4 @@
+import asyncio
 from typing import List, Optional, Any
 from pathlib import Path
 import subprocess
@@ -9,6 +10,22 @@ import time
 
 
 AWS_TEMPLATE_PATH = Path(__file__).parent / "templates" / "aws.toml"
+ON_CONNECTION_MESSAGE = """Successfully connected to Ray Cluster!
+
+To view your cluster dashboard, navigate to: http://localhost:8265.
+
+To run Daft against your Ray cluster, use the following code snippet:
+
+```
+import daft
+
+daft.context.set_runner_ray(address="ray://localhost:10001")
+
+df = daft.from_pydict({"foo": [1, 2, 3], "bar": [4, 5, 6]})
+df.show()
+```
+
+Happy daft-ing! 🚀"""
 
 
 def init_config(name: Path):
@@ -30,38 +47,7 @@ def up(config: Path):
 
 
 def list():
-    instance_groups: List[List[Any]] = helpers.run_aws_command(
-        [
-            "aws",
-            "ec2",
-            "describe-instances",
-            "--region",
-            "us-west-2",
-            "--filters",
-            "Name=tag:ray-node-type,Values=*",
-            "--query",
-            "Reservations[*].Instances[*].{Instance:InstanceId,State:State.Name,Tags:Tags,Ip:PublicIpAddress}",
-        ]
-    )
-    state_to_name_map: dict[str, List[tuple]] = {}
-    for instance_group in instance_groups:
-        for instance in instance_group:
-            state = instance["State"]
-            instance_id: str = instance["Instance"]
-            ip: str = instance["Ip"]
-            name = None
-            node_type = None
-            for tag in instance["Tags"]:
-                if tag["Key"] == "ray-node-type":
-                    node_type = tag["Value"]
-                if tag["Key"] == "ray-cluster-name":
-                    name = tag["Value"]
-            assert name is not None
-            assert node_type is not None
-            if state in state_to_name_map:
-                state_to_name_map[state].append((name, instance_id, node_type, ip))
-            else:
-                state_to_name_map[state] = [(name, instance_id, node_type, ip)]
+    state_to_name_map = helpers.list_helper()
     for state, data in state_to_name_map.items():
         print(f"{state.capitalize()}:")
         for name, instance_id, node_type, ip in data:
@@ -71,18 +57,31 @@ def list():
             )
 
 
-def dashboard(
+def connect(
     config: Path,
     identity_file: Optional[Path],
 ):
-    subprocess.run(
+    final_config = configs.get_merged_config(config)
+    if not identity_file:
+        identity_file = helpers.detect_keypair(final_config)
+
+    process = subprocess.Popen(
         helpers.ssh_command(
-            helpers.get_ip(config), Path(identity_file) if identity_file else None
+            helpers.get_ip(final_config),
+            identity_file,
+            additional_port_forwards=[10001],
         ),
-        close_fds=True,
-        capture_output=False,
-        text=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
     )
+    if process.returncode and process.returncode != 0:
+        raise click.ClickException(
+            f"Failed to attach to the remote server. Return code: {process.returncode}"
+        )
+    else:
+        print(ON_CONNECTION_MESSAGE)
+    process.wait()
 
 
 def submit(
@@ -91,11 +90,13 @@ def submit(
     working_dir: Path,
     cmd_args: tuple[str],
 ):
+    final_config = configs.get_merged_config(config)
+    if not identity_file:
+        identity_file = helpers.detect_keypair(final_config)
     cmd = " ".join([arg for arg in cmd_args])
+
     process = subprocess.Popen(
-        helpers.ssh_command(
-            helpers.get_ip(config), Path(identity_file) if identity_file else None
-        ),
+        helpers.ssh_command(helpers.get_ip(final_config), identity_file),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
@@ -103,18 +104,20 @@ def submit(
         working_dir_path = Path(working_dir).absolute()
         client = None
         tries = 0
-        max_tries = 3
+        max_tries = 10
         while tries <= max_tries:
             try:
-                client = job_submission.JobSubmissionClient("http://localhost:8265")
+                client = job_submission.JobSubmissionClient(
+                    address="http://localhost:8265"
+                )
                 break
             except Exception as e:
                 tries += 1
                 if tries >= max_tries:
                     raise e
-                time.sleep(1)
+                time.sleep(0.1)
         assert client
-        id = client.submit_job(
+        job_id = client.submit_job(
             entrypoint=cmd,
             runtime_env={
                 "working_dir": working_dir_path.absolute(),
@@ -122,7 +125,14 @@ def submit(
             if working_dir
             else None,
         )
-        print(f"Job ID: {id}")
+        print(f"Job ID: {job_id}")
+
+        asyncio.run(helpers.wait_on_job(client.tail_job_logs(job_id)))
+        status = client.get_job_status(job_id)
+        assert status.is_terminal(), "Job should have terminated"
+        job_info = client.get_job_info(job_id)
+        print(f"Job completed with {status}")
+
     finally:
         process.terminate()
 

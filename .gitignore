@@ -8,6 +8,3 @@ __pycache__/
 
 # zed
 .zed
-
-# daft launcher
-.daft.toml

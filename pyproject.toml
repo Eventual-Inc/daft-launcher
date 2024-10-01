@@ -1,6 +1,6 @@
 [project]
 name = "daft_launcher"
-version = "0.2.5"
+version = "0.3.0"
 requires-python = ">=3.12"
 dependencies = ["boto3>=1.35.17", "click>=8.1.7", "ray[default]>=2.36.0"]
 description = "A simple launcher for spinning up and managing Ray clusters for Daft."

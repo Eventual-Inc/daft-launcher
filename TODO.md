@@ -1,17 +1,3 @@
-# Hard blocks
-- [ ] Perform automatic detection of the local private SSH keypair file.
-  This should be based off of the remote cluster's head's public keypair *name*.
-  (The remote cluster's head node should be able to be queried in order to grab its public keypair name).
-  - [ ] Or add a new field inside of the TOML file that specifies the private keypair file.
-  - [ ] Overridable with `-i`.
-
-- [ ] Quality of life improvements to submission:
-  - [ ] Forward stdout printouts from the remote cluster to local during the execution of a job.
-  - [ ] Automatic detection of private keypair file during submission as well.
-
-- [ ] Print a nice message when running `daft connect`.
-  Let the user know that something has happened.
-
 # Medium blocks
 
 - [ ] Create new `daft sql` command.

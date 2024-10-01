@@ -86,9 +86,12 @@ def find_ip(instance_groups: List[List[Any]], name: str) -> dict[str, list[Optio
     return state_to_ips_mapping
 
 
+# TODO!
+# pass in a list of ports instead
 def ssh_command(
     ip: str,
     pub_key: Optional[Path] = None,
+    connect_10001: bool = False,
 ) -> list[str]:
     return (
         [
@@ -97,6 +100,7 @@ def ssh_command(
             "-L",
             "8265:localhost:8265",
         ]
+        + (["-L", "10001:localhost:10001"] if connect_10001 else [])
         + (["-i", str(pub_key)] if pub_key else [])
         + [
             f"ec2-user@{ip}",

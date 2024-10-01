@@ -40,7 +40,7 @@ def list():
             )
 
 
-def dashboard(
+def connect(
     config: Path,
     identity_file: Optional[Path],
 ):

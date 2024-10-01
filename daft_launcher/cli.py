@@ -102,9 +102,9 @@ def list_command(func):
     return click.command("list", help="List all running clusters.")(func)
 
 
-def dashboard_command(func):
+def connect_command(func):
     return click.command(
-        "dashboard",
+        "connect",
         help="Enable port-forwarding between a cluster and your local machine.",
     )(func)
 
@@ -132,16 +132,16 @@ def list():
     commands.list()
 
 
-@dashboard_command
+@connect_command
 @config_option
 @identity_file_option
-def dashboard(
+def connect(
     config: Optional[Path],
     identity_file: Optional[Path],
 ):
     config = get_config_path(config)
     assert_identity_file_path(identity_file)
-    commands.dashboard(config, identity_file)
+    commands.connect(config, identity_file)
 
 
 @submit_command
@@ -177,7 +177,7 @@ def run_cli():
     cli.add_command(init_config)
     cli.add_command(up)
     cli.add_command(list)
-    cli.add_command(dashboard)
+    cli.add_command(connect)
     cli.add_command(submit)
     cli.add_command(down)
     cli()

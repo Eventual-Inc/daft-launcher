@@ -32,7 +32,9 @@ def ssh_helper(
             if text := process.stdout.read():
                 print(text)
         else:
-            raise click.ClickException("Unable to establish a connection to the remote server.")
+            raise click.ClickException(
+                "Unable to establish a connection to the remote server."
+            )
     return process
 
 
@@ -251,6 +253,7 @@ def ssh_command(
             f"ec2-user@{ip}",
         ]
     )
+
 
 async def print_logs(logs):
     async for lines in logs:

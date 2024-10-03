@@ -1,3 +1,18 @@
+<div align="center">
+  <img src="https://emojis.wiki/thumbs/emojis/rocket.webp" alt="Daft Launcher" height="256">
+</div>
+
+<div style="display: flex; flex-direction: row;">
+  <a href="https://github.com/Eventual-Inc/daft-launcher/actions/workflows/publish-to-pypi.yaml" style="padding: 0px 5px;">
+    <img src="https://github.com/Eventual-Inc/Daft/actions/workflows/python-package.yml/badge.svg" alt="GitHub Actions Publishing to PyPI">
+  </a>
+  <a href="./LICENSE-MIT" style="padding: 0px 5px;">
+    <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License">
+  </a>
+</div>
+
+<br/>
+
 # Daft Launcher CLI Tool
 
 A simple launcher for spinning up and managing Ray clusters for Daft.
@@ -11,6 +26,7 @@ What `daft-launcher` is capable of:
 4. Opening up a "dashboard process" to allow end-users to connect to a Ray dashboard to view metrics about their cluster.
 5. Spinning down clusters.
 6. Creating a default configuration file.
+7. Running raw SQL statements using `daft`'s SQL API.
 
 ## Currently supported cloud providers
 

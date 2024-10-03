@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://emojis.wiki/thumbs/emojis/rocket.webp" alt="Daft Launcher" height="256">
+  <img src="https://emojis.wiki/thumbs/emojis/rocket.webp" alt="Daft Launcher">
 </div>
 
 <div style="display: flex; flex-direction: row;">

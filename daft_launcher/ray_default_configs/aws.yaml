@@ -32,4 +32,4 @@ setup_commands:
   - echo "alias pip='uv pip'" >> $HOME/.bashrc
   - echo "source $HOME/.venv/bin/activate" >> $HOME/.bashrc
   - source $HOME/.bashrc
-  - uv pip install "ray[default]==2.36.0" "getdaft"
+  - uv pip install "ray[default]" "getdaft" "deltalake"

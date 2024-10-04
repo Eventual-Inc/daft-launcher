@@ -2,6 +2,8 @@
   <img src="https://emojis.wiki/thumbs/emojis/rocket.webp" alt="Daft Launcher">
 </div>
 
+<br>
+
 [![PyPI Package](https://github.com/Eventual-Inc/daft-launcher/actions/workflows/publish-to-pypi.yaml/badge.svg)](https://github.com/Eventual-Inc/daft-launcher/actions/workflows/publish-to-pypi.yaml)
 [![Deploy mdBook site to GitHub Pages](https://github.com/Eventual-Inc/daft-launcher/actions/workflows/deploy-mdbook.yaml/badge.svg)](https://github.com/Eventual-Inc/daft-launcher/actions/workflows/deploy-mdbook.yaml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE-MIT)

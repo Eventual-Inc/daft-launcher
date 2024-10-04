@@ -98,6 +98,11 @@ daft submit --working-dir <...> -- command arg1 arg2 ...
 # or optionally, pass in a custom config file
 daft submit -c my-custom-config.toml --working-dir $WORKING_DIR -- command arg1 arg2 ...
 
+# run a direct SQL query against the daft query engine running in the remote cluster
+daft sql -- "SELECT * FROM my_table WHERE column = 'value'"
+# or optionally, pass in a custom config file
+daft sql -c my-custom-config.toml -- "SELECT * FROM my_table WHERE column = 'value'"
+
 # spin down a cluster
 daft down
 # or optionally, pass in a custom name

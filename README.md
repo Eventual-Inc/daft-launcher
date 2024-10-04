@@ -3,8 +3,8 @@
 </div>
 
 [![PyPI Package](https://github.com/Eventual-Inc/daft-launcher/actions/workflows/publish-to-pypi.yaml/badge.svg)](https://github.com/Eventual-Inc/daft-launcher/actions/workflows/publish-to-pypi.yaml)
-[![Docs](https://github.com/Eventual-Inc/daft-launcher/actions/workflows/deploy-mdbook.yaml/badge.svg)](https://github.com/Eventual-Inc/daft-launcher/actions/workflows/deploy-mdbook.yaml)
-[![license](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE-MIT)
+[![Deploy mdBook site to GitHub Pages](https://github.com/Eventual-Inc/daft-launcher/actions/workflows/deploy-mdbook.yaml/badge.svg)](https://github.com/Eventual-Inc/daft-launcher/actions/workflows/deploy-mdbook.yaml)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE-MIT)
 
 <br/>
 

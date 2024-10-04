@@ -1,7 +1,10 @@
 name: Deploy mdBook site to GitHub Pages
 
 on:
+  workflow_dispatch:
   push:
+    branches:
+      - master
     tags:
       - "v*.*.*"
 

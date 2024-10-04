@@ -1,4 +1,4 @@
-name: Deploy mdBook site to GitHub Pages
+name: Deploy mdBook
 
 on:
   workflow_dispatch:

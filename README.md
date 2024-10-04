@@ -2,14 +2,9 @@
   <img src="https://emojis.wiki/thumbs/emojis/rocket.webp" alt="Daft Launcher">
 </div>
 
-<div style="display: flex; flex-direction: row;">
-  <a href="https://github.com/Eventual-Inc/daft-launcher/actions/workflows/publish-to-pypi.yaml" style="padding: 0px 5px;">
-    <img src="https://github.com/Eventual-Inc/Daft/actions/workflows/python-package.yml/badge.svg" alt="GitHub Actions Publishing to PyPI">
-  </a>
-  <a href="./LICENSE-MIT" style="padding: 0px 5px;">
-    <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License">
-  </a>
-</div>
+[![PyPI Package](https://github.com/Eventual-Inc/daft-launcher/actions/workflows/publish-to-pypi.yaml/badge.svg)](https://github.com/Eventual-Inc/daft-launcher/actions/workflows/publish-to-pypi.yaml)
+[![Docs](https://github.com/Eventual-Inc/daft-launcher/actions/workflows/deploy-mdbook.yaml/badge.svg)](https://github.com/Eventual-Inc/daft-launcher/actions/workflows/deploy-mdbook.yaml)
+[![license](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE-MIT)
 
 <br/>
 

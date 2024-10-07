@@ -9,6 +9,7 @@ They are:
 4. [`daft list`](#list)
 5. [`daft submit`](#submit)
 6. [`daft dashboard`](#dashboard)
+7. [`daft sql`](#sql)
 
 Succinctly, the idea is that you are able to list clusters (`list`), start new clusters (`up`), and tear down existing clusters (`down`).
 You are also able to submit jobs to the cluster (`submit`) and view the dashboard of a given cluster (`dashboard`).
@@ -197,4 +198,20 @@ daft dashboard -i my-keypair.pem
 
 # or, if you want, establish the port-forward using a custom configuration file
 daft dashboard -c my-custom-config.toml -i my-keypair.pem
+```
+
+## Sql
+
+Daft now supports a SQL API.
+This means that you can run raw SQL queries against your data using daft.
+The SQL dialect is the `postgres` standard.
+
+### Example
+
+```bash
+# run a sql query using the default .daft.toml configuration file
+daft sql -- "\"SELECT * FROM my_table\""
+
+# or, if you want, establish the port-forward using a custom configuration file
+daft sql -c my-custom-config.toml -- "\"SELECT * FROM my_table\""
 ```

@@ -1,5 +1,16 @@
+import sys
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
+
+
+def load_toml(path):
+    return tomllib.load(path)
+
+
 from pathlib import Path
-import tomllib
 from typing import Optional
 import click
 import yaml
@@ -72,7 +83,7 @@ def get_ray_config(
 
 def get_custom_config(config_path: Path) -> tuple[dict, str]:
     with open(config_path, "rb") as stream:
-        custom_config = tomllib.load(stream)
+        custom_config = load_toml(stream)
         if "setup" not in custom_config:
             raise click.UsageError("No setup section found in config file.")
             if "provider" not in custom_config["setup"]:

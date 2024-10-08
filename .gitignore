@@ -1,4 +1,5 @@
 # python
+.python-version
 .venv
 build
 dist

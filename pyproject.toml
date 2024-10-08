@@ -6,6 +6,9 @@ dependencies = ["boto3>=1.35.17", "click>=8.1.7", "ray[default]>=2.36.0"]
 description = "A simple launcher for spinning up and managing Ray clusters for Daft."
 readme = "README.md"
 
+[project.optional-dependencies]
+tomli = ["tomli ; python_version < '3.11'"]
+
 [project.license]
 file = "LICENSE"
 

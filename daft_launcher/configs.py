@@ -74,6 +74,26 @@ def get_ray_config(
                 ],
                 False,
             ),
+            (
+                "iam_instance_profile_arn",
+                [
+                    [
+                        "available_node_types",
+                        "ray.head.default",
+                        "node_config",
+                        "IamInstanceProfile",
+                        "Arn",
+                    ],
+                    [
+                        "available_node_types",
+                        "ray.worker.default",
+                        "node_config",
+                        "IamInstanceProfile",
+                        "Arn",
+                    ],
+                ],
+                False,
+            ),
         ]
     else:
         raise click.UsageError(f"Cloud provider {provider} not found")

@@ -15,8 +15,6 @@ available_node_types:
     node_config:
       InstanceType: m7g.medium
       ImageId: ami-01c3c55948a949a52
-      IamInstanceProfile:
-        Arn:
 
   ray.worker.default:
     min_workers: 2
@@ -25,8 +23,6 @@ available_node_types:
     node_config:
       InstanceType: m7g.medium
       ImageId: ami-01c3c55948a949a52
-      IamInstanceProfile:
-        Arn:
 
 setup_commands:
   - curl -LsSf https://astral.sh/uv/install.sh | sh

@@ -12,6 +12,9 @@
 name = "daft-launcher-example"
 provider = "aws"
 
+# (required, or else certain features may be disabled)
+iam_instance_profile_arn = "$IAM_INSTANCE_PROFILE_ARN"
+
 # (defaults to "us-west-2")
 # region = "$REGION"
 

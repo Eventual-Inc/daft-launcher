@@ -37,8 +37,13 @@ def assert_working_dir(working_dir: Path):
 
 def get_new_configuration_file_path(name: Optional[Path]) -> Path:
     name = name or DEFAULT_CONFIG_PATH
-    if name.exists():
+    if name.is_file():
         raise click.UsageError(f"A configuration file at path {name} already exists.")
+    elif name.is_dir():
+        raise click.UsageError(f"That is the path to a directory; please pass in a file name.")
+    elif name.exists():
+        raise click.UsageError(f"That path already exists; please use a new one.")
+
     return name
 
 

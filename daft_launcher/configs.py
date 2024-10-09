@@ -74,6 +74,26 @@ def get_ray_config(
                 ],
                 False,
             ),
+            (
+                "iam_instance_profile_arn",
+                [
+                    [
+                        "available_node_types",
+                        "ray.head.default",
+                        "node_config",
+                        "IamInstanceProfile",
+                        "Arn",
+                    ],
+                    [
+                        "available_node_types",
+                        "ray.worker.default",
+                        "node_config",
+                        "IamInstanceProfile",
+                        "Arn",
+                    ],
+                ],
+                False,
+            ),
         ]
     else:
         raise click.UsageError(f"Cloud provider {provider} not found")
@@ -113,6 +133,8 @@ def merge(
         for b_i in b:
             y = ray_config
             for b_ii in b_i[:-1]:
+                if b_ii not in y:
+                    y[b_ii] = {}
                 y = y[b_ii]
             y[b_i[-1]] = value
 

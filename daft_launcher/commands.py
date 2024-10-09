@@ -32,6 +32,7 @@ def init_config(name: Path):
     with open(AWS_TEMPLATE_PATH) as template_f:
         with open(name, "w") as config_f:
             config_f.write(template_f.read())
+            print(f"Successfully created a new configuration file: {name}")
 
 
 def up(config: Path):

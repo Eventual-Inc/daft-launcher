@@ -133,7 +133,9 @@ def merge(
         for b_i in b:
             y = ray_config
             for b_ii in b_i[:-1]:
-                y = y.get(b_ii, {})
+                if b_ii not in y:
+                    y[b_ii] = {}
+                y = y[b_ii]
             y[b_i[-1]] = value
 
     setup_commands: list[str] = ray_config["setup_commands"]

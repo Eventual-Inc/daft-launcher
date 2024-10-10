@@ -46,7 +46,9 @@ def get_new_configuration_file_path(name: Optional[Path]) -> Path:
     if name.is_file():
         raise click.UsageError(f"A configuration file at path {name} already exists.")
     elif name.is_dir():
-        raise click.UsageError("That is the path to a directory; please pass in a file name.")
+        raise click.UsageError(
+            "That is the path to a directory; please pass in a file name."
+        )
     elif name.exists():
         raise click.UsageError("That path already exists; please use a new one.")
 
@@ -125,7 +127,9 @@ def submit_command(func):
 
 
 def sql_command(func):
-    return click.command("sql", help="Submit a SQL query to the specified cluster.")(func)
+    return click.command("sql", help="Submit a SQL query to the specified cluster.")(
+        func
+    )
 
 
 @init_config_command

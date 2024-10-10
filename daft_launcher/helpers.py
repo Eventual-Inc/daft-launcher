@@ -14,9 +14,10 @@ def ssh_helper(
 ) -> subprocess.Popen[str]:
     process = subprocess.Popen(
         ssh_command(
-            get_ip(final_config),
-            identity_file,
-            additional_port_forwards,
+            ip=get_ip(final_config),
+            user=final_config["ssh-user"],
+            pub_key=identity_file,
+            additional_port_forwards=additional_port_forwards,
         ),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -230,6 +231,7 @@ def find_ip(
 
 def ssh_command(
     ip: str,
+    user: str | None,
     pub_key: Optional[Path] = None,
     additional_port_forwards: list[int] = [],
 ) -> list[str]:
@@ -250,7 +252,7 @@ def ssh_command(
         + additional_port_forward_args
         + (["-i", str(pub_key)] if pub_key else [])
         + [
-            f"ec2-user@{ip}",
+            f"{user}@{ip}" if user else f"ec2-user@{ip}",
         ]
     )
 

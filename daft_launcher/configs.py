@@ -146,8 +146,8 @@ def merge(
         setup_commands.append(uv_install_command)
     if "run" in custom_config:
         if "pre_setup_commands" in custom_config["run"]:
-            setup_commands = custom_config["run"]["pre_setup_commands"]
-        elif "setup_commands" in custom_config["run"]:
+            setup_commands = custom_config["run"]["pre_setup_commands"] + setup_commands
+        if "setup_commands" in custom_config["run"]:
             setup_commands.extend(custom_config["run"]["setup_commands"])
     return ray_config
 

@@ -34,4 +34,5 @@ iam_instance_profile_arn = "$IAM_INSTANCE_PROFILE_ARN"
 # dependencies = ["$DEPENDENCY_1", "$DEPENDENCY_2"]
 
 [run]
+pre_setup_commands = ['echo "Hello, World!"']
 setup_commands = ['echo "Hello, World!"']

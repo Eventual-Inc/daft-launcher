@@ -147,6 +147,7 @@ def merge(
     if "run" in custom_config:
         if "pre_setup_commands" in custom_config["run"]:
             setup_commands = custom_config["run"]["pre_setup_commands"] + setup_commands
+            ray_config["setup_commands"] = setup_commands
         if "setup_commands" in custom_config["run"]:
             setup_commands.extend(custom_config["run"]["setup_commands"])
     return ray_config

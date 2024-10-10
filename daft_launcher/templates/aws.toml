@@ -12,27 +12,48 @@
 name = "daft-launcher-example"
 provider = "aws"
 
-# (required, or else certain features may be disabled)
-iam_instance_profile_arn = "$IAM_INSTANCE_PROFILE_ARN"
+# # (optional; defaults to None)
+# # The IAM Instance Profile ARN that allows these instances to access resources in your AWS account (e.g., S3 Buckets).
+# # Without this, certain workflows that require access to external resources may not work.
+# iam_instance_profile_arn = ...
 
-# (defaults to "us-west-2")
-# region = "$REGION"
+# # (optional; defaults to latest python version)
+# # The python version to use on the remote nodes.
+# python_version = ...
 
-# (defaults to "ec2-user")
-# ssh_user = "$SSH_USER"
+# # (optional; defaults to latest ray version)
+# # The ray version to use on the remote nodes.
+# ray_version = ...
 
-# (defaults to 2 worker nodes)
-# number_of_workers = "$NUMBER_OF_WORKERS"
+# # (optional; defaults to "us-west-2")
+# # The region in which to launch the instances.
+# region = ..
 
-# (defaults to "m7g.medium")
-# instance_type = "$INSTANCE_TYPE"
+# # (optional; defaults to "ec2-user")
+# # The ssh-user to use when ssh-ing into the head node.
+# ssh_user = ...
 
-# (defaults to "ami-01c3c55948a949a52")
-# image_id = "$IMAGE_ID"
+# # (optional; defaults to 2)
+# # The number of worker nodes to launch.
+# number_of_workers = ...
 
-# (defaults to [])
+# # (optional; defaults to "m7g.medium")
+# # The instance types of the head and worker nodes in the cluster.
+# instance_type = ...
+
+# # (optional; defaults to "ami-01c3c55948a949a52")
+# # The image id (ami) to use for the instances.
+# image_id = ...
+
+# # (optional; defaults to [])
+# # The dependencies for your python project that will be downloaded (using uv).
 # dependencies = ["$DEPENDENCY_1", "$DEPENDENCY_2"]
 
 [run]
-pre_setup_commands = ['echo "Hello, World!"']
-setup_commands = ['echo "Hello, World!"']
+# # (optional; defaults to [])
+# # Any pre-setup commands that need to be run *before* the setup commands that daft launcher runs, as well as before `run.setup_commands`.
+# pre_setup_commands = ['echo "Hello, World!"']
+
+# # (optional; defaults to [])
+# # Any generic setup commands that need to be run.
+# setup_commands = ['echo "Hello, World!"']

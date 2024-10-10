@@ -8,6 +8,12 @@ from importlib import metadata
 DEFAULT_CONFIG_PATH = Path(".daft.toml")
 
 
+def generate_intro_message():
+    summary = metadata.metadata("daft-launcher").get("Summary")
+    info_string = "For more documentation, please visit:\n\nhttps://eventual-inc.github.io/daft-launcher"
+    return f"{summary}\n\n{info_string}"
+
+
 def get_config_path(config: Optional[Path]) -> Path:
     if config:
         if not config.exists():
@@ -40,9 +46,9 @@ def get_new_configuration_file_path(name: Optional[Path]) -> Path:
     if name.is_file():
         raise click.UsageError(f"A configuration file at path {name} already exists.")
     elif name.is_dir():
-        raise click.UsageError(f"That is the path to a directory; please pass in a file name.")
+        raise click.UsageError("That is the path to a directory; please pass in a file name.")
     elif name.exists():
-        raise click.UsageError(f"That path already exists; please use a new one.")
+        raise click.UsageError("That path already exists; please use a new one.")
 
     return name
 
@@ -193,7 +199,7 @@ def down(config: Optional[Path]):
     commands.down(config)
 
 
-@click.group(help=metadata.metadata("daft-launcher").get("Summary"))
+@click.group(help=generate_intro_message())
 @click.version_option(version=metadata.version("daft-launcher"))
 def cli(): ...
 

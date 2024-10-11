@@ -1,9 +1,15 @@
+"""All internal implementations of each command provided by daft launcher.
+
+All implementations should go here.
+The actual bindings to the CLI commands should go in `cli.py`.
+"""
+
 import asyncio
 from botocore.exceptions import TokenRetrievalError
 from typing import List, Optional, Any
 from pathlib import Path
 import subprocess
-from . import helpers, data_definitions
+from daft_launcher import helpers, data_definitions
 from ray.autoscaler import sdk as ray_sdk
 from ray import job_submission
 import click
@@ -36,7 +42,8 @@ def init_config(name: Path):
             print(f"Successfully created a new configuration file: {name}")
 
 
-def up(ray_config: data_definitions.RayConfiguration):
+def up(config_bundle: data_definitions.ConfigurationBundle):
+    _, ray_config = config_bundle
     ray_sdk.create_or_update_cluster(
         ray_config,
         no_restart=False,
@@ -48,7 +55,7 @@ def up(ray_config: data_definitions.RayConfiguration):
 
 
 def list():
-    state_map = helpers.list_helper()
+    state_map = helpers.get_state_map()
     for state_index, (state, instance_infos) in enumerate(state_map.items()):
         if state_index != 0:
             print()
@@ -60,27 +67,27 @@ def list():
 
 
 def connect(
-    ray_config: data_definitions.RayConfiguration,
+    config_bundle: data_definitions.ConfigurationBundle,
     identity_file: Optional[Path],
 ):
     if not identity_file:
-        identity_file = helpers.detect_keypair(ray_config)
-    process = helpers.ssh_helper(ray_config, identity_file, [10001])
+        identity_file = helpers.detect_keypair(config_bundle)
+    process = helpers.ssh(config_bundle, identity_file, [10001])
     print(ON_CONNECTION_MESSAGE)
     process.wait()
 
 
 def submit(
-    ray_config: data_definitions.RayConfiguration,
+    config_bundle: data_definitions.ConfigurationBundle,
     identity_file: Optional[Path],
     working_dir: Path,
     cmd_args: List[str],
 ):
     if not identity_file:
-        identity_file = helpers.detect_keypair(ray_config)
+        identity_file = helpers.detect_keypair(config_bundle)
     cmd = " ".join(cmd_args)
 
-    process = helpers.ssh_helper(ray_config, identity_file)
+    process = helpers.ssh(config_bundle, identity_file)
     try:
         working_dir_path = Path(working_dir).absolute()
         client = None
@@ -119,18 +126,19 @@ def submit(
 
 
 def sql(
-    ray_config: data_definitions.RayConfiguration,
+    config_bundle: data_definitions.ConfigurationBundle,
     identity_file: Optional[Path],
     cmd_args: List[str],
 ):
     submit(
-        ray_config,
+        config_bundle,
         identity_file,
         Path(__file__).parent / "assets",
         ["python", "sql.py"] + cmd_args,
     )
 
 
-def down(ray_config: data_definitions.RayConfiguration):
+def down(config_bundle: data_definitions.ConfigurationBundle):
+    _, ray_config = config_bundle
     ray_sdk.teardown_cluster(ray_config)
     print("Successfully spun the cluster down.")

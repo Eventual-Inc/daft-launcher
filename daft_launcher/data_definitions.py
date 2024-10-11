@@ -44,13 +44,23 @@ class Run:
 
 
 @dataclass
-class Configuration:
+class CustomConfiguration:
     setup: Setup
     run: Run = field(default_factory=Run)
 
+    def to_aws(self) -> Optional["AwsConfiguration"]:
+        if self.setup.provider == "aws":
+            aws_custom_config: AwsConfiguration = self  # type: ignore
+            return aws_custom_config
+
+    def force_to_aws(self) -> "AwsConfiguration":
+        aws_custom_config = self.to_aws()
+        assert aws_custom_config
+        return aws_custom_config
+
 
 @dataclass
-class AwsConfiguration(Configuration):
+class AwsConfiguration(CustomConfiguration):
     region: str = field(default="us-west-2")
     ssh_user: str = field(default="ec2-user")
     instance_type: str = field(default="m7g.medium")
@@ -58,8 +68,11 @@ class AwsConfiguration(Configuration):
     iam_instance_profile_arn: Optional[str] = None
 
 
+ConfigurationBundle = tuple[CustomConfiguration, RayConfiguration]
+
+
 def _generate_setup_commands(
-    config: Configuration,
+    config: CustomConfiguration,
 ) -> List[str]:
     return [
         "curl -LsSf https://astral.sh/uv/install.sh | sh",
@@ -73,7 +86,9 @@ def _generate_setup_commands(
     ]
 
 
-def _construct_config_from_raw_dict(custom_config: dict[str, Any]) -> Configuration:
+def _construct_config_from_raw_dict(
+    custom_config: dict[str, Any],
+) -> CustomConfiguration:
     if "setup" not in custom_config:
         raise click.UsageError("No setup section found in config file.")
     if "provider" not in custom_config["setup"]:
@@ -89,7 +104,7 @@ def _construct_config_from_raw_dict(custom_config: dict[str, Any]) -> Configurat
         raise click.UsageError(f"Cloud provider {provider} not found")
 
 
-def _construct_config_from_path(custom_config_path: Path) -> Configuration:
+def _construct_config_from_path(custom_config_path: Path) -> CustomConfiguration:
     try:
         with open(custom_config_path, "rb") as stream:
             custom_config = tomllib.load(stream)
@@ -105,7 +120,7 @@ def _construct_config_from_path(custom_config_path: Path) -> Configuration:
 
 
 def _build_ray_config(
-    custom_config: Configuration,
+    custom_config: CustomConfiguration,
 ) -> RayConfiguration:
     if custom_config.setup.provider == "aws":
         aws_custom_config: AwsConfiguration = custom_config  # type: ignore
@@ -146,7 +161,7 @@ def _build_ray_config(
         raise Exception("unreachable")
 
 
-def build_ray_config_from_path(custom_config_path: Path) -> RayConfiguration:
+def build_ray_config_from_path(custom_config_path: Path) -> ConfigurationBundle:
     """Takes in a path to a file and returns a RayConfiguration object.
 
     # Assumptions:
@@ -156,4 +171,5 @@ def build_ray_config_from_path(custom_config_path: Path) -> RayConfiguration:
     """
 
     custom_config = _construct_config_from_path(custom_config_path)
-    return _build_ray_config(custom_config)
+    ray_config = _build_ray_config(custom_config)
+    return custom_config, ray_config

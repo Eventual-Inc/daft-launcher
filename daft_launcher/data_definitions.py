@@ -14,25 +14,18 @@ else:
 RayConfiguration = dict[str, Any]
 
 
-def _determine_python_version() -> Optional[str]:
-    tokens = sys.version.split(" ")
-    if tokens:
-        token = tokens[0]
-        try:
-            major, minor, patch = token.split(".")
-            _ = int(major)
-            _ = int(minor)
-            _ = int(patch)
-            return token
-        except:
-            return None
+def _determine_python_version() -> str:
+    maj = sys.version_info.major
+    min = sys.version_info.minor
+    mic = sys.version_info.micro
+    return f'{maj}.{min}.{mic}'
 
 
 @dataclass
 class Setup:
     name: str
     provider: Literal["aws"]
-    python_version: Optional[str] = field(default_factory=_determine_python_version)
+    python_version: str = field(default_factory=_determine_python_version)
     ray_version: str = field(default=ray.__version__)
     number_of_workers: int = field(default=2)
     dependencies: List[int] = field(default_factory=list)

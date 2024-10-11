@@ -1,3 +1,4 @@
+import ray
 import sys
 import click
 from dataclasses import dataclass, field
@@ -13,12 +14,26 @@ else:
 RayConfiguration = dict[str, Any]
 
 
+def _determine_python_version() -> Optional[str]:
+    tokens = sys.version.split(" ")
+    if tokens:
+        token = tokens[0]
+        try:
+            major, minor, patch = token.split(".")
+            _ = int(major)
+            _ = int(minor)
+            _ = int(patch)
+            return token
+        except:
+            return None
+
+
 @dataclass
 class Setup:
     name: str
     provider: Literal["aws"]
-    python_version: Optional[str] = None
-    ray_version: Optional[str] = None
+    python_version: Optional[str] = field(default_factory=_determine_python_version)
+    ray_version: str = field(default=ray.__version__)
     number_of_workers: int = field(default=2)
     dependencies: List[int] = field(default_factory=list)
 
@@ -47,30 +62,16 @@ class AwsConfiguration(Configuration):
 def _generate_setup_commands(
     config: Configuration,
 ) -> List[str]:
-    return (
-        [
-            "curl -LsSf https://astral.sh/uv/install.sh | sh",
-            f"uv python install {config.setup.python_version}",
-        ]
-        + (
-            [
-                f"uv python pin {config.setup.python_version}",
-            ]
-            if config.setup.python_version
-            else []
-        )
-        + [
-            "uv venv",
-            """echo "alias pip='uv pip'" >> $HOME/.bashrc""",
-            'echo "source $HOME/.venv/bin/activate" >> $HOME/.bashrc',
-            "source $HOME/.bashrc",
-        ]
-        + [
-            f'uv pip install "ray[default]=={config.setup.ray_version}" "getdaft" "deltalake"'
-            if config.setup.ray_version
-            else 'uv pip install "ray[default]" "getdaft" "deltalake"',
-        ]
-    )
+    return [
+        "curl -LsSf https://astral.sh/uv/install.sh | sh",
+        f"uv python install {config.setup.python_version}",
+        f"uv python pin {config.setup.python_version}",
+        "uv venv",
+        """echo "alias pip='uv pip'" >> $HOME/.bashrc""",
+        'echo "source $HOME/.venv/bin/activate" >> $HOME/.bashrc',
+        "source $HOME/.bashrc",
+        f'uv pip install "ray[default]=={config.setup.ray_version}" "getdaft" "deltalake"',
+    ]
 
 
 def _construct_config_from_raw_dict(custom_config: dict[str, Any]) -> Configuration:
@@ -121,25 +122,19 @@ def _build_ray_config(
             },
             "max_workers": aws_custom_config.setup.number_of_workers,
             "available_node_types": {
-                "ray": {
-                    "head": {
-                        "default": {
-                            "node_config": {
-                                "InstanceType": aws_custom_config.instance_type,
-                                "ImageId": aws_custom_config.image_id,
-                            },
-                        },
+                "ray.head.default": {
+                    "node_config": {
+                        "InstanceType": aws_custom_config.instance_type,
+                        "ImageId": aws_custom_config.image_id,
                     },
-                    "worker": {
-                        "default": {
-                            "node_config": {
-                                "InstanceType": aws_custom_config.instance_type,
-                                "ImageId": aws_custom_config.image_id,
-                            },
-                            "min_workers": aws_custom_config.setup.number_of_workers,
-                            "max_workers": aws_custom_config.setup.number_of_workers,
-                        },
+                },
+                "ray.worker.default": {
+                    "node_config": {
+                        "InstanceType": aws_custom_config.instance_type,
+                        "ImageId": aws_custom_config.image_id,
                     },
+                    "min_workers": aws_custom_config.setup.number_of_workers,
+                    "max_workers": aws_custom_config.setup.number_of_workers,
                 },
             },
             "setup_commands": aws_custom_config.run.pre_setup_commands

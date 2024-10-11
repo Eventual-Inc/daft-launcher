@@ -4,7 +4,6 @@ Defines how the .daft.toml file should be structured.
 The primary entrypoint into this module is the `build_ray_config_from_path` function.
 """
 
-
 import ray
 import sys
 import click
@@ -25,7 +24,7 @@ def _determine_python_version() -> str:
     maj = sys.version_info.major
     min = sys.version_info.minor
     mic = sys.version_info.micro
-    return f'{maj}.{min}.{mic}'
+    return f"{maj}.{min}.{mic}"
 
 
 @dataclass
@@ -123,12 +122,14 @@ def _build_ray_config(
             "max_workers": aws_custom_config.setup.number_of_workers,
             "available_node_types": {
                 "ray.head.default": {
+                    "resources": {},
                     "node_config": {
                         "InstanceType": aws_custom_config.instance_type,
                         "ImageId": aws_custom_config.image_id,
                     },
                 },
                 "ray.worker.default": {
+                    "resources": {},
                     "node_config": {
                         "InstanceType": aws_custom_config.instance_type,
                         "ImageId": aws_custom_config.image_id,

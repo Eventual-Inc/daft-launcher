@@ -1,4 +1,5 @@
 import asyncio
+from botocore.exceptions import TokenRetrievalError
 from typing import List, Optional, Any
 from pathlib import Path
 import subprocess
@@ -47,14 +48,15 @@ def up(ray_config: data_definitions.RayConfiguration):
 
 
 def list():
-    state_to_name_map = helpers.list_helper()
-    for state, data in state_to_name_map.items():
-        print(f"{state.capitalize()}:")
-        for name, instance_id, node_type, ip in data:
-            formatted_name = f""
-            print(
-                f"\t - {name}, {node_type}, {instance_id}" + (f", {ip}" if ip else "")
-            )
+    state_map = helpers.list_helper()
+    for state_index, (state, instance_infos) in enumerate(state_map.items()):
+        if state_index != 0:
+            print()
+        print(f"{state.replace('-', ' ').capitalize()}:")
+        for index, instance_info in enumerate(instance_infos):
+            if index != 0:
+                print()
+            print(str(instance_info))
 
 
 def connect(

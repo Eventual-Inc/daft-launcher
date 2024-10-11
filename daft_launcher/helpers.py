@@ -1,9 +1,89 @@
+"""Generic helpers.
+
+Contain helpers for sshing, parsing outputs from `aws` commands, etc.
+
+# Note
+All helper/utility functions should go in here.
+All core functions should go elsewhere.
+"""
+
 import asyncio
-from typing import List, Optional, Any
+from dataclasses import dataclass, field
+from typing import List, Literal, Optional, Any, Union
 from pathlib import Path
 import subprocess
 import json
 import click
+
+
+@dataclass
+class Tag:
+    Key: str
+    Value: str
+
+
+@dataclass
+class InstanceInformation:
+    instance_id: str
+    iam_role: str
+    state: Union[
+        Literal["terminated"], Literal["shutting-down"], Literal["running"], Any
+    ]
+    ip: str
+    tags: List[Tag]
+
+    @staticmethod
+    def from_dict(data: dict) -> "InstanceInformation":
+        tags_data = data.get("tags", [])
+        tags = [
+            Tag(**tag) for tag in tags_data
+        ]  # Convert each dict in 'tags' to a Tag instance
+        instance_info = InstanceInformation(**data)
+        instance_info.tags = tags
+        return instance_info
+
+    def __str__(self) -> str:
+        name = self.get_tag("ray-cluster-name")
+        node_type = self.get_tag("ray-node-type")
+        return f"""\tName: {name} ({node_type})
+        Instance ID: {self.instance_id}
+        IAM Role: {self.iam_role}
+        State: {self.state}
+        Ip: {self.ip}"""
+
+    def get_tag(self, tag_name: str) -> Optional[str]:
+        for tag in self.tags:
+            if tag.Key == tag_name:
+                return tag.Value
+
+
+def _parse_describe_instances_query() -> List[InstanceInformation]:
+    query_items = {
+        "instance_id": "InstanceId",
+        "iam_role": "IamInstanceProfile.Arn",
+        "state": "State.Name",
+        "tags": "Tags",
+        "ip": "PublicIpAddress",
+    }
+    query = ",".join([f"{key}:{value}" for key, value in query_items.items()])
+    instance_groups: List[List[Any]] = run_aws_command(
+        [
+            "aws",
+            "ec2",
+            "describe-instances",
+            "--region",
+            "us-west-2",
+            "--filters",
+            "Name=tag:ray-node-type,Values=*",
+            "--query",
+            f"Reservations[*].Instances[*].{{{query}}}",
+        ]
+    )
+    return [
+        InstanceInformation.from_dict(instance)
+        for instance_group in instance_groups
+        for instance in instance_group
+    ]
 
 
 def ssh_helper(
@@ -38,42 +118,14 @@ def ssh_helper(
     return process
 
 
-def list_helper() -> dict[str, List[tuple]]:
-    instance_groups: List[List[Any]] = run_aws_command(
-        [
-            "aws",
-            "ec2",
-            "describe-instances",
-            "--region",
-            "us-west-2",
-            "--filters",
-            "Name=tag:ray-node-type,Values=*",
-            "--query",
-            "Reservations[*].Instances[*].{Instance:InstanceId,State:State.Name,Tags:Tags,Ip:PublicIpAddress}",
-        ]
-    )
-    state_to_cluster_info_map: dict[str, List[tuple]] = {}
-    for instance_group in instance_groups:
-        for instance in instance_group:
-            state = instance["State"]
-            instance_id: str = instance["Instance"]
-            ip: str = instance["Ip"]
-            name = None
-            node_type = None
-            for tag in instance["Tags"]:
-                if tag["Key"] == "ray-node-type":
-                    node_type = tag["Value"]
-                if tag["Key"] == "ray-cluster-name":
-                    name = tag["Value"]
-            assert name is not None
-            assert node_type is not None
-            if state in state_to_cluster_info_map:
-                state_to_cluster_info_map[state].append(
-                    (name, instance_id, node_type, ip)
-                )
-            else:
-                state_to_cluster_info_map[state] = [(name, instance_id, node_type, ip)]
-    return state_to_cluster_info_map
+def list_helper() -> dict[str, List[InstanceInformation]]:
+    instance_infos = _parse_describe_instances_query()
+    state_map = {}
+    for instance_info in instance_infos:
+        if instance_info.state not in state_map:
+            state_map[instance_info.state] = []
+        state_map[instance_info.state].append(instance_info)
+    return state_map
 
 
 def get_region(final_config: dict) -> str:
@@ -86,18 +138,19 @@ def get_region(final_config: dict) -> str:
 
 def get_instance_id(final_config: dict) -> str:
     name = final_config["cluster_name"]
-    state_to_cluster_info_map = list_helper()
-    if "running" not in state_to_cluster_info_map:
+    state_map = list_helper()
+    if "running" not in state_map:
         raise click.UsageError(
             f"The cluster {name} is not running; cannot connect to it."
         )
-    if len(state_to_cluster_info_map["running"]) == 0:
+    if len(state_map["running"]) == 0:
         raise click.UsageError(
             f"The cluster {name} is not running; cannot connect to it."
         )
-    for _, instance_id, node_type, _ in state_to_cluster_info_map["running"]:
-        if node_type == "head":
-            return instance_id
+    # for _, instance_id, node_type, _ in state_map["running"]:
+    for instance_info in state_map["running"]:
+        if instance_info.get_tag("ray-node-type") == "head":
+            return instance_info.instance_id
     raise click.UsageError("Could not find the head node's Instance-Id.")
 
 

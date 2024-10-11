@@ -13,6 +13,18 @@ else:
 RayConfiguration = dict[str, Any]
 
 
+SETUP_COMMANDS = [
+    "curl -LsSf https://astral.sh/uv/install.sh | sh",
+    "uv python install 3.12.5",
+    "uv python pin 3.12.5",
+    "uv venv",
+    """echo "alias pip='uv pip'" >> $HOME/.bashrc""",
+    'echo "source $HOME/.venv/bin/activate" >> $HOME/.bashrc',
+    "source $HOME/.bashrc",
+    'uv pip install "ray[default]" "getdaft" "deltalake"',
+]
+
+
 @dataclass
 class Setup:
     name: str
@@ -79,7 +91,7 @@ def _build_ray_config(
     custom_config: Configuration,
 ) -> RayConfiguration:
     if custom_config.setup.provider == "aws":
-        aws_custom_config: AwsConfiguration = custom_config #type: ignore
+        aws_custom_config: AwsConfiguration = custom_config  # type: ignore
         return {
             "cluster_name": aws_custom_config.setup.name,
             "provider": {
@@ -114,6 +126,7 @@ def _build_ray_config(
                 },
             },
             "setup_commands": aws_custom_config.run.pre_setup_commands
+            + SETUP_COMMANDS
             + aws_custom_config.run.setup_commands,
         }
     else:

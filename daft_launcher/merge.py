@@ -41,7 +41,8 @@ def _merge(
                     },
                 },
             },
-            "setup_commands": aws_custom_config.run.pre_setup_commands + aws_custom_config.run.setup_commands,
+            "setup_commands": aws_custom_config.run.pre_setup_commands
+            + aws_custom_config.run.setup_commands,
         }
     else:
         raise Exception("unreachable")

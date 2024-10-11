@@ -132,7 +132,6 @@ def sql(
     )
 
 
-def down(config: Path):
-    final_config = configs.get_merged_config(config)
-    ray_sdk.teardown_cluster(final_config)
+def down(ray_config: data_definitions.RayConfiguration):
+    ray_sdk.teardown_cluster(ray_config)
     print("Successfully spun the cluster down.")

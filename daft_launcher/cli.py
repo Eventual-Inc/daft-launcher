@@ -200,8 +200,13 @@ def sql(
 @down_command
 @config_option
 def down(config: Optional[Path]):
+    # config = get_config_path(config)
+    # ray_config = merge.merge_from_path(config)
+    # commands.up(ray_config)
+
     config = get_config_path(config)
-    commands.down(config)
+    ray_config = merge.merge_from_path(config)
+    commands.down(ray_config)
 
 
 @click.group(help=generate_intro_message())

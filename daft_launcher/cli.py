@@ -1,7 +1,7 @@
 from typing import Optional
 import click
 from pathlib import Path
-from . import commands, configs, data_definitions, merge
+from . import commands, data_definitions
 from importlib import metadata
 
 
@@ -14,7 +14,7 @@ def generate_intro_message():
     return f"{summary}\n\n{info_string}"
 
 
-def get_config_path(config: Optional[Path]) -> Path:
+def get_config_path(config: Optional[Path]) -> data_definitions.RayConfiguration:
     if config:
         if not config.exists():
             raise click.UsageError("Config file does not exist.")
@@ -24,7 +24,7 @@ def get_config_path(config: Optional[Path]) -> Path:
             raise click.UsageError(
                 f"No default '{DEFAULT_CONFIG_PATH}' file found in current directory."
             )
-    return config
+    return data_definitions.build_ray_config_from_path(config)
 
 
 def assert_identity_file_path(identity_file: Optional[Path]):
@@ -142,8 +142,7 @@ def init_config(name: Optional[Path]):
 @up_command
 @config_option
 def up(config: Optional[Path]):
-    config = get_config_path(config)
-    ray_config = merge.merge_from_path(config)
+    ray_config = get_config_path(config)
     commands.up(ray_config)
 
 
@@ -159,9 +158,9 @@ def connect(
     config: Optional[Path],
     identity_file: Optional[Path],
 ):
-    config = get_config_path(config)
+    ray_config = get_config_path(config)
     assert_identity_file_path(identity_file)
-    commands.connect(config, identity_file)
+    commands.connect(ray_config, identity_file)
 
 
 @submit_command
@@ -175,11 +174,11 @@ def submit(
     working_dir: Path,
     cmd_args: tuple[str],
 ):
-    config = get_config_path(config)
+    ray_config = get_config_path(config)
     assert_identity_file_path(identity_file)
     assert_working_dir(working_dir)
     cmd_args_list = [arg for arg in cmd_args]
-    commands.submit(config, identity_file, working_dir, cmd_args_list)
+    commands.submit(ray_config, identity_file, working_dir, cmd_args_list)
 
 
 @sql_command
@@ -191,21 +190,16 @@ def sql(
     identity_file: Optional[Path],
     cmd_args: tuple[str],
 ):
-    config = get_config_path(config)
+    ray_config = get_config_path(config)
     assert_identity_file_path(identity_file)
     cmd_args_list = [arg for arg in cmd_args]
-    commands.sql(config, identity_file, cmd_args_list)
+    commands.sql(ray_config, identity_file, cmd_args_list)
 
 
 @down_command
 @config_option
 def down(config: Optional[Path]):
-    # config = get_config_path(config)
-    # ray_config = merge.merge_from_path(config)
-    # commands.up(ray_config)
-
-    config = get_config_path(config)
-    ray_config = merge.merge_from_path(config)
+    ray_config = get_config_path(config)
     commands.down(ray_config)
 
 

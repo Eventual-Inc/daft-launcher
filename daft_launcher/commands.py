@@ -2,14 +2,14 @@ import asyncio
 from typing import List, Optional, Any
 from pathlib import Path
 import subprocess
-from . import configs, helpers, data_definitions
+from . import helpers, data_definitions
 from ray.autoscaler import sdk as ray_sdk
 from ray import job_submission
 import click
 import time
 
 
-AWS_TEMPLATE_PATH = Path(__file__).parent / "templates" / "aws.toml"
+AWS_TEMPLATE_PATH = Path(__file__).parent / "assets" / "aws.toml"
 ON_CONNECTION_MESSAGE = """Successfully connected to Ray Cluster!
 
 To view your cluster dashboard, navigate to: http://localhost:8265.
@@ -58,30 +58,28 @@ def list():
 
 
 def connect(
-    config: Path,
+    ray_config: data_definitions.RayConfiguration,
     identity_file: Optional[Path],
 ):
-    final_config = configs.get_merged_config(config)
     if not identity_file:
-        identity_file = helpers.detect_keypair(final_config)
-
-    process = helpers.ssh_helper(final_config, identity_file, [10001])
+        identity_file = helpers.detect_keypair(ray_config)
+    process = helpers.ssh_helper(ray_config, identity_file, [10001])
     print(ON_CONNECTION_MESSAGE)
     process.wait()
 
 
 def submit(
-    config: Path,
+    ray_config: data_definitions.RayConfiguration,
     identity_file: Optional[Path],
     working_dir: Path,
     cmd_args: List[str],
 ):
-    final_config = configs.get_merged_config(config)
+    # final_config = configs.get_merged_config(config)
     if not identity_file:
-        identity_file = helpers.detect_keypair(final_config)
+        identity_file = helpers.detect_keypair(ray_config)
     cmd = " ".join(cmd_args)
 
-    process = helpers.ssh_helper(final_config, identity_file)
+    process = helpers.ssh_helper(ray_config, identity_file)
     try:
         working_dir_path = Path(working_dir).absolute()
         client = None
@@ -120,14 +118,14 @@ def submit(
 
 
 def sql(
-    config: Path,
+    ray_config: data_definitions.RayConfiguration,
     identity_file: Optional[Path],
     cmd_args: List[str],
 ):
     submit(
-        config,
+        ray_config,
         identity_file,
-        Path(__file__).parent / "sql_templates",
+        Path(__file__).parent / "assets",
         ["python", "sql.py"] + cmd_args,
     )
 

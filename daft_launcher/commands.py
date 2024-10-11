@@ -9,7 +9,7 @@ import click
 import time
 
 
-AWS_TEMPLATE_PATH = Path(__file__).parent.parent / "assets" / "aws.toml"
+AWS_TEMPLATE_PATH = Path(__file__).parent / "assets" / "aws.toml"
 ON_CONNECTION_MESSAGE = """Successfully connected to Ray Cluster!
 
 To view your cluster dashboard, navigate to: http://localhost:8265.
@@ -125,7 +125,7 @@ def sql(
     submit(
         ray_config,
         identity_file,
-        Path(__file__).parent.parent / "assets",
+        Path(__file__).parent / "assets",
         ["python", "sql.py"] + cmd_args,
     )
 

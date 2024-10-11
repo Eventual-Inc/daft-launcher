@@ -1,6 +1,6 @@
 [project]
 name = "daft_launcher"
-version = "0.3.8dev0"
+version = "0.3.8dev1"
 requires-python = ">=3.9"
 dependencies = [
     "boto3",

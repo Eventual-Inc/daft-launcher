@@ -12,10 +12,11 @@ def ssh_helper(
     identity_file: Path,
     additional_port_forwards: list[int] = [],
 ) -> subprocess.Popen[str]:
+    breakpoint()
     process = subprocess.Popen(
         ssh_command(
             ip=get_ip(final_config),
-            user=final_config["ssh-user"],
+            user=final_config['auth']["ssh_user"],
             pub_key=identity_file,
             additional_port_forwards=additional_port_forwards,
         ),

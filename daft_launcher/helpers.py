@@ -3,7 +3,6 @@ from typing import List, Optional, Any
 from pathlib import Path
 import subprocess
 import json
-from . import configs
 import click
 
 

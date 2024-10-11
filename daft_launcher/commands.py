@@ -74,7 +74,6 @@ def submit(
     working_dir: Path,
     cmd_args: List[str],
 ):
-    # final_config = configs.get_merged_config(config)
     if not identity_file:
         identity_file = helpers.detect_keypair(ray_config)
     cmd = " ".join(cmd_args)

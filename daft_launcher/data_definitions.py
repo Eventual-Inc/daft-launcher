@@ -13,18 +13,6 @@ else:
 RayConfiguration = dict[str, Any]
 
 
-SETUP_COMMANDS = [
-    "curl -LsSf https://astral.sh/uv/install.sh | sh",
-    "uv python install 3.12.5",
-    "uv python pin 3.12.5",
-    "uv venv",
-    """echo "alias pip='uv pip'" >> $HOME/.bashrc""",
-    'echo "source $HOME/.venv/bin/activate" >> $HOME/.bashrc',
-    "source $HOME/.bashrc",
-    'uv pip install "ray[default]" "getdaft" "deltalake"',
-]
-
-
 @dataclass
 class Setup:
     name: str
@@ -54,6 +42,35 @@ class AwsConfiguration(Configuration):
     instance_type: str = field(default="m7g.medium")
     image_id: str = field(default="ami-01c3c55948a949a52")
     iam_instance_profile_arn: Optional[str] = None
+
+
+def _generate_setup_commands(
+    config: Configuration,
+) -> List[str]:
+    return (
+        [
+            "curl -LsSf https://astral.sh/uv/install.sh | sh",
+            f"uv python install {config.setup.python_version}",
+        ]
+        + (
+            [
+                f"uv python pin {config.setup.python_version}",
+            ]
+            if config.setup.python_version
+            else []
+        )
+        + [
+            "uv venv",
+            """echo "alias pip='uv pip'" >> $HOME/.bashrc""",
+            'echo "source $HOME/.venv/bin/activate" >> $HOME/.bashrc',
+            "source $HOME/.bashrc",
+        ]
+        + [
+            f'uv pip install "ray[default]=={config.setup.ray_version}" "getdaft" "deltalake"'
+            if config.setup.ray_version
+            else 'uv pip install "ray[default]" "getdaft" "deltalake"',
+        ]
+    )
 
 
 def _construct_config_from_raw_dict(custom_config: dict[str, Any]) -> Configuration:
@@ -126,7 +143,7 @@ def _build_ray_config(
                 },
             },
             "setup_commands": aws_custom_config.run.pre_setup_commands
-            + SETUP_COMMANDS
+            + _generate_setup_commands(aws_custom_config)
             + aws_custom_config.run.setup_commands,
         }
     else:

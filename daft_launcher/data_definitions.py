@@ -1,3 +1,10 @@
+"""Data definitions for the ray cluster setup.
+Defines how the .daft.toml file should be structured.
+
+The primary entrypoint into this module is the `build_ray_config_from_path` function.
+"""
+
+
 import ray
 import sys
 import click

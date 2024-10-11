@@ -1,2 +1,2 @@
-include assets/*.toml
-include assets/*.yaml
+include daft_launcher/assets/*.toml
+include daft_launcher/assets/*.yaml

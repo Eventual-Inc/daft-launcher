@@ -1,15 +1,16 @@
 import asyncio
+from botocore.exceptions import TokenRetrievalError
 from typing import List, Optional, Any
 from pathlib import Path
 import subprocess
-from . import configs, helpers
+from . import helpers, data_definitions
 from ray.autoscaler import sdk as ray_sdk
 from ray import job_submission
 import click
 import time
 
 
-AWS_TEMPLATE_PATH = Path(__file__).parent / "templates" / "aws.toml"
+AWS_TEMPLATE_PATH = Path(__file__).parent / "assets" / "aws.toml"
 ON_CONNECTION_MESSAGE = """Successfully connected to Ray Cluster!
 
 To view your cluster dashboard, navigate to: http://localhost:8265.
@@ -35,54 +36,51 @@ def init_config(name: Path):
             print(f"Successfully created a new configuration file: {name}")
 
 
-def up(config: Path):
-    final_config = configs.get_merged_config(config)
+def up(ray_config: data_definitions.RayConfiguration):
     ray_sdk.create_or_update_cluster(
-        final_config,
+        ray_config,
         no_restart=False,
         restart_only=False,
         no_config_cache=True,
     )
-    print(f"Head node IP: {ray_sdk.get_head_node_ip(final_config)}")
+    print(f"Head node IP: {ray_sdk.get_head_node_ip(ray_config)}")
     print("Successfully spun the cluster up.")
 
 
 def list():
-    state_to_name_map = helpers.list_helper()
-    for state, data in state_to_name_map.items():
-        print(f"{state.capitalize()}:")
-        for name, instance_id, node_type, ip in data:
-            formatted_name = f""
-            print(
-                f"\t - {name}, {node_type}, {instance_id}" + (f", {ip}" if ip else "")
-            )
+    state_map = helpers.list_helper()
+    for state_index, (state, instance_infos) in enumerate(state_map.items()):
+        if state_index != 0:
+            print()
+        print(f"{state.replace('-', ' ').capitalize()}:")
+        for index, instance_info in enumerate(instance_infos):
+            if index != 0:
+                print()
+            print(str(instance_info))
 
 
 def connect(
-    config: Path,
+    ray_config: data_definitions.RayConfiguration,
     identity_file: Optional[Path],
 ):
-    final_config = configs.get_merged_config(config)
     if not identity_file:
-        identity_file = helpers.detect_keypair(final_config)
-
-    process = helpers.ssh_helper(final_config, identity_file, [10001])
+        identity_file = helpers.detect_keypair(ray_config)
+    process = helpers.ssh_helper(ray_config, identity_file, [10001])
     print(ON_CONNECTION_MESSAGE)
     process.wait()
 
 
 def submit(
-    config: Path,
+    ray_config: data_definitions.RayConfiguration,
     identity_file: Optional[Path],
     working_dir: Path,
     cmd_args: List[str],
 ):
-    final_config = configs.get_merged_config(config)
     if not identity_file:
-        identity_file = helpers.detect_keypair(final_config)
+        identity_file = helpers.detect_keypair(ray_config)
     cmd = " ".join(cmd_args)
 
-    process = helpers.ssh_helper(final_config, identity_file)
+    process = helpers.ssh_helper(ray_config, identity_file)
     try:
         working_dir_path = Path(working_dir).absolute()
         client = None
@@ -121,19 +119,18 @@ def submit(
 
 
 def sql(
-    config: Path,
+    ray_config: data_definitions.RayConfiguration,
     identity_file: Optional[Path],
     cmd_args: List[str],
 ):
     submit(
-        config,
+        ray_config,
         identity_file,
-        Path(__file__).parent / "sql_templates",
+        Path(__file__).parent / "assets",
         ["python", "sql.py"] + cmd_args,
     )
 
 
-def down(config: Path):
-    final_config = configs.get_merged_config(config)
-    ray_sdk.teardown_cluster(final_config)
+def down(ray_config: data_definitions.RayConfiguration):
+    ray_sdk.teardown_cluster(ray_config)
     print("Successfully spun the cluster down.")

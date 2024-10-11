@@ -79,7 +79,7 @@ def _build_ray_config(
     custom_config: Configuration,
 ) -> RayConfiguration:
     if custom_config.setup.provider == "aws":
-        aws_custom_config: AwsConfiguration = custom_config
+        aws_custom_config: AwsConfiguration = custom_config #type: ignore
         return {
             "cluster_name": aws_custom_config.setup.name,
             "provider": {

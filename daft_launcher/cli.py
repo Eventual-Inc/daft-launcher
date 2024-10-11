@@ -1,7 +1,7 @@
 from typing import Optional
 import click
 from pathlib import Path
-from . import commands
+from . import commands, configs, data_definitions, merge
 from importlib import metadata
 
 
@@ -143,7 +143,8 @@ def init_config(name: Optional[Path]):
 @config_option
 def up(config: Optional[Path]):
     config = get_config_path(config)
-    commands.up(config)
+    ray_config = merge.merge_from_path(config)
+    commands.up(ray_config)
 
 
 @list_command

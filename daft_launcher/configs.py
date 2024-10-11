@@ -6,38 +6,16 @@ else:
     import tomli as tomllib
 
 
-def load_toml(path):
-    return tomllib.load(path)
-
-
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Optional, Union
 import click
 import yaml
 
 
-@dataclass
-class Setup:
-    name: str
-    provider: Literal["aws"]
-    python_version: str
-    ray_version: str
-    number_of_workers: int
-    dependencies: list[int]
-
-
-@dataclass
-class Run: ...
-
-
-@dataclass
-class Configuration:
-    setup: Setup
-    run: Run
-
-
 RAY_DEFAULT_CONFIGS_PATH = Path(__file__).parent / "ray_default_configs"
+
+
+def load_toml(stream):
+    return tomllib.load(stream)
 
 
 def get_ray_config(

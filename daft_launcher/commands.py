@@ -2,7 +2,7 @@ import asyncio
 from typing import List, Optional, Any
 from pathlib import Path
 import subprocess
-from . import configs, helpers
+from . import configs, helpers, data_definitions
 from ray.autoscaler import sdk as ray_sdk
 from ray import job_submission
 import click
@@ -35,15 +35,14 @@ def init_config(name: Path):
             print(f"Successfully created a new configuration file: {name}")
 
 
-def up(config: Path):
-    final_config = configs.get_merged_config(config)
+def up(ray_config: data_definitions.RayConfiguration):
     ray_sdk.create_or_update_cluster(
-        final_config,
+        ray_config,
         no_restart=False,
         restart_only=False,
         no_config_cache=True,
     )
-    print(f"Head node IP: {ray_sdk.get_head_node_ip(final_config)}")
+    print(f"Head node IP: {ray_sdk.get_head_node_ip(ray_config)}")
     print("Successfully spun the cluster up.")
 
 

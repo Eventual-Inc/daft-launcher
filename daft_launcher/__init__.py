@@ -1,4 +1,4 @@
-from . import cli
+from daft_launcher import cli
 
 
 def main():

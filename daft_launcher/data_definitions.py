@@ -7,9 +7,11 @@ The primary entrypoint into this module is the `build_ray_config_from_path` func
 import ray
 import sys
 import click
-from dataclasses import dataclass, field
 from typing import Literal, Optional, Union, Any, List
 from pathlib import Path
+from pydantic import BaseModel, Field, ValidationError
+
+from daft_launcher import helpers
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -27,39 +29,49 @@ def _determine_python_version() -> str:
     return f"{maj}.{min}.{mic}"
 
 
-@dataclass
-class Setup:
+class Setup(BaseModel):
     name: str
     provider: Literal["aws"]
-    python_version: str = field(default_factory=_determine_python_version)
-    ray_version: str = field(default=ray.__version__)
-    number_of_workers: int = field(default=2)
-    dependencies: List[int] = field(default_factory=list)
+    python_version: str = Field(default_factory=_determine_python_version)
+    ray_version: str = Field(default=ray.__version__)
+    number_of_workers: int = Field(default=2)
+    dependencies: List[int] = Field(default_factory=list)
 
 
-@dataclass
-class Run:
-    pre_setup_commands: List[str] = field(default_factory=list)
-    setup_commands: List[str] = field(default_factory=list)
+class Run(BaseModel):
+    pre_setup_commands: List[str] = Field(default_factory=list)
+    setup_commands: List[str] = Field(default_factory=list)
 
 
-@dataclass
-class Configuration:
+class CustomConfiguration(BaseModel):
+    daft_launcher_version: str
     setup: Setup
-    run: Run = field(default_factory=Run)
+    run: Run = Field(default_factory=Run)
+
+    def to_aws(self) -> Optional["AwsConfiguration"]:
+        if self.setup.provider == "aws":
+            aws_custom_config: AwsConfiguration = self  # type: ignore
+            return aws_custom_config
+
+    def force_to_aws(self) -> "AwsConfiguration":
+        aws_custom_config = self.to_aws()
+        assert aws_custom_config
+        return aws_custom_config
 
 
-@dataclass
-class AwsConfiguration(Configuration):
-    region: str = field(default="us-west-2")
-    ssh_user: str = field(default="ec2-user")
-    instance_type: str = field(default="m7g.medium")
-    image_id: str = field(default="ami-01c3c55948a949a52")
-    iam_instance_profile_arn: Optional[str] = None
+class AwsConfiguration(CustomConfiguration):
+    region: str = Field(default="us-west-2")
+    ssh_user: str = Field(default="ec2-user")
+    instance_type: str = Field(default="m7g.medium")
+    image_id: str = Field(default="ami-01c3c55948a949a52")
+    iam_instance_profile_arn: Optional[str] = Field(default=None)
+
+
+ConfigurationBundle = tuple[CustomConfiguration, RayConfiguration]
 
 
 def _generate_setup_commands(
-    config: Configuration,
+    config: CustomConfiguration,
 ) -> List[str]:
     return [
         "curl -LsSf https://astral.sh/uv/install.sh | sh",
@@ -73,7 +85,9 @@ def _generate_setup_commands(
     ]
 
 
-def _construct_config_from_raw_dict(custom_config: dict[str, Any]) -> Configuration:
+def _construct_config_from_raw_dict(
+    custom_config: dict[str, Any],
+) -> CustomConfiguration:
     if "setup" not in custom_config:
         raise click.UsageError("No setup section found in config file.")
     if "provider" not in custom_config["setup"]:
@@ -82,14 +96,16 @@ def _construct_config_from_raw_dict(custom_config: dict[str, Any]) -> Configurat
         )
     provider = custom_config["setup"]["provider"]
     if provider == "aws":
-        setup = Setup(**custom_config["setup"])
-        run = Run(**custom_config["run"])
-        return AwsConfiguration(setup=setup, run=run)
+        try:
+            return AwsConfiguration(**custom_config)
+        except ValidationError as validation_error:
+            error_string = helpers.format_pydantic_validation_error(validation_error)
+            raise click.UsageError(f"Error in config file: {error_string}")
     else:
         raise click.UsageError(f"Cloud provider {provider} not found")
 
 
-def _construct_config_from_path(custom_config_path: Path) -> Configuration:
+def _construct_config_from_path(custom_config_path: Path) -> CustomConfiguration:
     try:
         with open(custom_config_path, "rb") as stream:
             custom_config = tomllib.load(stream)
@@ -105,7 +121,7 @@ def _construct_config_from_path(custom_config_path: Path) -> Configuration:
 
 
 def _build_ray_config(
-    custom_config: Configuration,
+    custom_config: CustomConfiguration,
 ) -> RayConfiguration:
     if custom_config.setup.provider == "aws":
         aws_custom_config: AwsConfiguration = custom_config  # type: ignore
@@ -146,7 +162,7 @@ def _build_ray_config(
         raise Exception("unreachable")
 
 
-def build_ray_config_from_path(custom_config_path: Path) -> RayConfiguration:
+def build_ray_config_from_path(custom_config_path: Path) -> ConfigurationBundle:
     """Takes in a path to a file and returns a RayConfiguration object.
 
     # Assumptions:
@@ -156,4 +172,9 @@ def build_ray_config_from_path(custom_config_path: Path) -> RayConfiguration:
     """
 
     custom_config = _construct_config_from_path(custom_config_path)
-    return _build_ray_config(custom_config)
+    toml_version = custom_config.daft_launcher_version
+    launcher_version = helpers.daft_launcher_version()
+    if toml_version != launcher_version:
+        raise click.UsageError(f"Mismatch between launcher version and config file version; launcher version: {launcher_version}, config file version: {toml_version}")
+    ray_config = _build_ray_config(custom_config)
+    return custom_config, ray_config

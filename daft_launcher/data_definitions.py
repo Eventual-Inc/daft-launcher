@@ -175,6 +175,8 @@ def build_ray_config_from_path(custom_config_path: Path) -> ConfigurationBundle:
     toml_version = custom_config.daft_launcher_version
     launcher_version = helpers.daft_launcher_version()
     if toml_version != launcher_version:
-        raise click.UsageError(f"Mismatch between launcher version and config file version; launcher version: {launcher_version}, config file version: {toml_version}")
+        raise click.UsageError(
+            f"Mismatch between launcher version and config file version; launcher version: {launcher_version}, config file version: {toml_version}"
+        )
     ray_config = _build_ray_config(custom_config)
     return custom_config, ray_config

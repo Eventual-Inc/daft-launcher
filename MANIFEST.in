@@ -1,0 +1,3 @@
+include scripts/*.py
+include daft_launcher/assets/*.py
+include daft_launcher/assets/*.toml

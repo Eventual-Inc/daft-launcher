@@ -245,5 +245,6 @@ def format_pydantic_validation_error(validation_error: ValidationError) -> str:
     assert error_string, "`error_string` cannot be empty"
     return error_string
 
+
 def daft_launcher_version() -> str:
     return metadata.version("daft-launcher")

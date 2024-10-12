@@ -12,19 +12,19 @@ dependencies = [
 description = "A simple launcher for spinning up and managing Ray clusters for Daft."
 readme = "README.md"
 
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project.license]
 file = "LICENSE"
 
 [project.scripts]
 daft = "daft_launcher.__init__:main"
 
-[tool.setuptool]
-packages = ["daft_launcher"]
-include_package_data = true
-
 [tool.pyright]
 venvPath = '.'
 venv = '.venv'
 
 [tool.ruff]
-include = ["daft_launcher/**/*.py"]
+include = ["daft_launcher/**/*.py", "scripts/*.py"]

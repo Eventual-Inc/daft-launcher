@@ -3,7 +3,7 @@
 from typing import Optional
 import click
 from pathlib import Path
-from daft_launcher import commands, data_definitions
+from daft_launcher import commands, data_definitions, helpers
 from importlib import metadata
 
 
@@ -222,7 +222,7 @@ def down(config: Optional[Path]):
 
 
 @click.group(help=_generate_intro_message())
-@click.version_option(version=metadata.version("daft-launcher"))
+@click.version_option(version=helpers.daft_launcher_version())
 def cli(): ...
 
 

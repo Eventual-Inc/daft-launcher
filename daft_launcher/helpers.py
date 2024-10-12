@@ -8,6 +8,7 @@ All core functions should go elsewhere.
 """
 
 import asyncio
+from importlib import metadata
 from dataclasses import dataclass, field
 from typing import List, Literal, Optional, Any, Union
 from pathlib import Path
@@ -243,3 +244,6 @@ def format_pydantic_validation_error(validation_error: ValidationError) -> str:
             error_string = f"{type} {error}"
     assert error_string, "`error_string` cannot be empty"
     return error_string
+
+def daft_launcher_version() -> str:
+    return metadata.version("daft-launcher")

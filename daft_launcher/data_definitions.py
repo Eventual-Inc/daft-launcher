@@ -38,6 +38,14 @@ class Setup(BaseModel):
     dependencies: List[int] = Field(default_factory=list)
 
 
+class Preconfigure(BaseModel):
+    type: Union[
+        Literal['light'],
+        Literal['normal'],
+        Literal['gpus'],
+    ]
+
+
 class Run(BaseModel):
     pre_setup_commands: List[str] = Field(default_factory=list)
     setup_commands: List[str] = Field(default_factory=list)
@@ -46,6 +54,7 @@ class Run(BaseModel):
 class CustomConfiguration(BaseModel):
     daft_launcher_version: str
     setup: Setup
+    preconfigure: Optional[Preconfigure] = Field(default=None)
     run: Run = Field(default_factory=Run)
 
     def to_aws(self) -> Optional["AwsConfiguration"]:

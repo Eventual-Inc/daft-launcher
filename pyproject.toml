@@ -18,10 +18,6 @@ file = "LICENSE"
 [project.scripts]
 daft = "daft_launcher.__init__:main"
 
-[build-system]
-requires = ["setuptools>=60", "wheel"]
-build-backend = "setuptools.build_meta"
-
 [tool.setuptool]
 packages = ["daft_launcher"]
 include_package_data = true

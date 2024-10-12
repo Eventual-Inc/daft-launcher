@@ -1,3 +1,5 @@
+"""All CLI bindings."""
+
 from typing import Optional
 import click
 from pathlib import Path
@@ -14,7 +16,7 @@ def _generate_intro_message():
     return f"{summary}\n\n{info_string}"
 
 
-def _get_config_path(config: Optional[Path]) -> data_definitions.ConfigurationBundle:
+def _get_config_bundle(config: Optional[Path]) -> data_definitions.ConfigurationBundle:
     if config:
         if not config.exists():
             raise click.UsageError("Config file does not exist.")
@@ -158,7 +160,7 @@ def init_config(name: Optional[Path]):
 @up_command
 @config_option
 def up(config: Optional[Path]):
-    ray_config = _get_config_path(config)
+    ray_config = _get_config_bundle(config)
     commands.up(ray_config)
 
 
@@ -174,7 +176,7 @@ def connect(
     config: Optional[Path],
     identity_file: Optional[Path],
 ):
-    ray_config = _get_config_path(config)
+    ray_config = _get_config_bundle(config)
     _assert_identity_file_path(identity_file)
     commands.connect(ray_config, identity_file)
 
@@ -190,7 +192,7 @@ def submit(
     working_dir: Path,
     cmd_args: tuple[str],
 ):
-    ray_config = _get_config_path(config)
+    ray_config = _get_config_bundle(config)
     _assert_identity_file_path(identity_file)
     _assert_working_dir(working_dir)
     cmd_args_list = [arg for arg in cmd_args]
@@ -206,7 +208,7 @@ def sql(
     identity_file: Optional[Path],
     cmd_args: tuple[str],
 ):
-    ray_config = _get_config_path(config)
+    ray_config = _get_config_bundle(config)
     _assert_identity_file_path(identity_file)
     cmd_args_list = [arg for arg in cmd_args]
     commands.sql(ray_config, identity_file, cmd_args_list)
@@ -215,7 +217,7 @@ def sql(
 @down_command
 @config_option
 def down(config: Optional[Path]):
-    ray_config = _get_config_path(config)
+    ray_config = _get_config_bundle(config)
     commands.down(ray_config)
 
 

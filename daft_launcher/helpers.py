@@ -14,36 +14,25 @@ from pathlib import Path
 import subprocess
 import json
 import click
+from pydantic import BaseModel, Field, ValidationError
 
 from daft_launcher import data_definitions
 
 
-@dataclass
-class Tag:
+class Tag(BaseModel):
     Key: str
     Value: str
 
 
-@dataclass
-class InstanceInformation:
+class InstanceInformation(BaseModel):
     instance_id: str
-    iam_role: str
+    iam_role: Optional[str]
     state: Union[
         Literal["terminated"], Literal["shutting-down"], Literal["running"], Any
     ]
-    ip: str
+    ip: Optional[str]
     keyname: str
     tags: List[Tag]
-
-    @staticmethod
-    def from_dict(data: dict) -> "InstanceInformation":
-        tags_data = data.get("tags", [])
-        tags = [
-            Tag(**tag) for tag in tags_data
-        ]  # Convert each dict in 'tags' to a Tag instance
-        instance_info = InstanceInformation(**data)
-        instance_info.tags = tags
-        return instance_info
 
     def __str__(self) -> str:
         name = self.get_tag("ray-cluster-name")
@@ -83,8 +72,13 @@ def _parse_describe_instances_query() -> List[InstanceInformation]:
             f"Reservations[*].Instances[*].{{{query}}}",
         ]
     )
+    def _parse_instance(instance: Any) -> InstanceInformation:
+        try:
+            return InstanceInformation(**instance)
+        except ValidationError as e:
+            raise click.ClickException(f'Failed to list clusters; failing on parsing {instance}')
     return [
-        InstanceInformation.from_dict(instance)
+        _parse_instance(instance)
         for instance_group in instance_groups
         for instance in instance_group
     ]
@@ -98,6 +92,7 @@ def _get_ip(config_bundle: data_definitions.ConfigurationBundle) -> str:
         b = instance_info.get_tag("ray-node-type") == "head"
         c = instance_info.get_tag("ray-cluster-name") == custom_config.setup.name
         if a and b and c:
+            assert instance_info.ip, "All running instances must have a public ip"
             return instance_info.ip
     raise click.UsageError(
         f"Could not find the public ip of {custom_config.setup.name}'s head node."
@@ -225,3 +220,20 @@ async def print_logs(logs):
 
 async def wait_on_job(logs):
     await asyncio.wait_for(print_logs(logs), timeout=None)
+
+
+def format_pydantic_validation_error(validation_error: ValidationError) -> str:
+    errors = validation_error.errors()
+    assert errors
+    def pull(error) -> tuple[str, str]:
+        type = error['type']
+        location = ".".join(error['loc'])
+        return (type, f"`{location}`")
+    error_string = ""
+    for index, (type, error) in enumerate(map(pull, errors)):
+        if index != 0:
+            error_string = f"{error_string}, {type} {error}"
+        else:
+            error_string = f"{type} {error}"
+    assert error_string, "`error_string` cannot be empty"
+    return error_string

@@ -8,6 +8,8 @@
 # If you notice any bugs, please reach out to me (Raunak Bhagat) via our open Slack workspace, "Distributed Data Community":
 # https://join.slack.com/t/dist-data/shared_invite/zt-2ric3mssh-zX08IXaKNeyx8YtqXey41A
 
+daft_launcher_version = "0.4.1"
+
 [setup]
 name = "daft-launcher-example"
 provider = "aws"

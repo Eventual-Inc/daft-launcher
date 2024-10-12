@@ -72,11 +72,15 @@ def _parse_describe_instances_query() -> List[InstanceInformation]:
             f"Reservations[*].Instances[*].{{{query}}}",
         ]
     )
+
     def _parse_instance(instance: Any) -> InstanceInformation:
         try:
             return InstanceInformation(**instance)
         except ValidationError as e:
-            raise click.ClickException(f'Failed to list clusters; failing on parsing {instance}')
+            raise click.ClickException(
+                f"Failed to list clusters; failing on parsing {instance}"
+            )
+
     return [
         _parse_instance(instance)
         for instance_group in instance_groups
@@ -225,10 +229,12 @@ async def wait_on_job(logs):
 def format_pydantic_validation_error(validation_error: ValidationError) -> str:
     errors = validation_error.errors()
     assert errors
+
     def pull(error) -> tuple[str, str]:
-        type = error['type']
-        location = ".".join(error['loc'])
+        type = error["type"]
+        location = ".".join(error["loc"])
         return (type, f"`{location}`")
+
     error_string = ""
     for index, (type, error) in enumerate(map(pull, errors)):
         if index != 0:

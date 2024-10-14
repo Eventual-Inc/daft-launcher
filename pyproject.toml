@@ -1,3 +1,13 @@
+# build-system
+# ------------------------------------------------------------------------------
+
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+# project
+# ------------------------------------------------------------------------------
+
 [project]
 name = "daft_launcher"
 version = "0.4.1-alpha0"
@@ -17,6 +27,12 @@ file = "LICENSE"
 
 [project.scripts]
 daft = "daft_launcher.__init__:main"
+
+# tool
+# ------------------------------------------------------------------------------
+
+[tool.maturin]
+bindings = "bin"
 
 [tool.pyright]
 venvPath = '.'

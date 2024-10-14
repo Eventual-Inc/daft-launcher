@@ -53,7 +53,7 @@ provider = "aws"
 
 # (optional; defaults to None)
 # Default, pre-configured templates that can get you up and running quickly!
-[preconfigure]
+# [pre_configured_templates]
 
 # (optional; defaults to None)
 # Default, pre-configured templates that can get you up and running quickly!
@@ -61,7 +61,7 @@ provider = "aws"
 
 # (optional; defaults to None)
 # This section corresponds to all of runtime commands which are invoked when the clusters are up and running.
-[run]
+# [run]
 
 # (optional; defaults to [])
 # Any pre-setup commands that need to be run *before* the setup commands that daft launcher runs, as well as before `run.setup_commands`.

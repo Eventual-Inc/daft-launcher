@@ -166,7 +166,7 @@ wheels = [
 [[package]]
 name = "daft-launcher"
 version = "0.4.1a0"
-source = { editable = "." }
+source = { virtual = "." }
 dependencies = [
     { name = "boto3" },
     { name = "click" },

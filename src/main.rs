@@ -11,25 +11,17 @@ macro_rules! path_from_root {
 
 mod cli;
 mod config;
+mod handlers;
+mod utils;
 
-use std::{io, path};
+use clap::CommandFactory;
 
-use thiserror::Error;
-
-type Result<T> = std::result::Result<T, Error>;
-
-#[derive(Debug, Error)]
-enum Error {
-    #[error("{_0}")]
-    IoError(#[from] io::Error),
-
-    #[error("{_0}")]
-    TomlError(#[from] toml::de::Error),
-
-    #[error("A file with that name already exists at that location: {_0:?}")]
-    AlreadyExistsError(path::PathBuf),
-}
-
-fn main() -> Result<()> {
-    cli::handle()
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    if let Err(error) = handlers::handle().await {
+        cli::Cli::command()
+            .error(clap::error::ErrorKind::ArgumentConflict, error)
+            .exit();
+    };
+    Ok(())
 }

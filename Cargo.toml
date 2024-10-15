@@ -1,11 +1,25 @@
 [package]
-name = "daft_launcher"
-version = "0.1.0"
+name = "daft"
 edition = "2021"
 
 [dependencies]
-thiserror = "1.0"
+aws-config = "1.5.8"
+aws-sdk-sts = "1.46.0"
+serde_yaml = "0.9.34"
+tempdir = "0.3.7"
 toml = "0.8.19"
+
+[dependencies.anyhow]
+version = "1.0.89"
+features = ["backtrace"]
+
+[dependencies.tokio]
+version = "1.40.0"
+features = ["full"]
+
+[dependencies.hashbrown]
+version = "0.15.0"
+features = ["serde"]
 
 [dependencies.clap]
 version = "4.5"

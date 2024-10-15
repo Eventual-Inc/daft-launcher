@@ -1,12 +1,14 @@
-use std::{fs, io::Read, path};
+pub mod ray;
+
+use std::path;
 
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
-pub struct Config {
+pub struct CustomConfig {
     pub package: Package,
     pub cluster: Cluster,
-    #[serde(rename = "job")]
+    #[serde(rename = "job", default)]
     pub jobs: Vec<Job>,
 }
 
@@ -92,12 +94,4 @@ fn default_image_id() -> String {
 
 fn default_instance_type() -> String {
     "m7g.medium".to_string()
-}
-
-pub fn read_config(path: &path::Path) -> crate::Result<Config> {
-    let mut file = fs::OpenOptions::new().read(true).open(path)?;
-    let mut buf = String::new();
-    let _ = file.read_to_string(&mut buf)?;
-    let config = toml::from_str::<Config>(&buf)?;
-    Ok(config)
 }

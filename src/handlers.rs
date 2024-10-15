@@ -38,7 +38,10 @@ fn handle_up(up: cli::Up) -> anyhow::Result<()> {
     let ray_config = custom_config.try_into()?;
     let (temp_dir, path) = utils::write_ray_config(&ray_config)?;
     let _ = process::Command::new("ray")
-        .args(["up", path.to_str().expect("Invalid characters in file")])
+        .args([
+            "up",
+            path.to_str().expect("Invalid characters in file path"),
+        ])
         .spawn()?
         .wait()?;
     drop(temp_dir);

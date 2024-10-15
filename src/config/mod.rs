@@ -1,93 +1,122 @@
+pub mod custom;
 pub mod ray;
 
-use std::path;
+use std::{fs, future, io::Read, path};
 
+use anyhow::Context;
 use serde::Deserialize;
 
-use crate::utils;
-
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
-pub struct CustomConfig {
-    pub package: Package,
-    pub cluster: Cluster,
-    #[serde(rename = "job", default)]
-    pub jobs: Vec<Job>,
+#[serde(untagged)]
+#[must_use]
+pub enum ProcessState<T> {
+    Unprocessed(Option<T>),
+    #[serde(skip_serializing)]
+    Processed(T),
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
-pub struct Package {
-    pub daft_launcher_version: semver::Version,
-    pub name: String,
-    pub python_version: Option<semver::VersionReq>,
-    pub ray_version: Option<semver::VersionReq>,
+impl<T: Default> Default for ProcessState<T> {
+    fn default() -> Self {
+        Self::Unprocessed(Some(T::default()))
+    }
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
-pub struct Cluster {
-    #[serde(flatten)]
-    pub provider: Provider,
-    #[serde(default = "utils::default_number_of_workers")]
-    pub number_of_workers: usize,
-    #[serde(default)]
-    pub dependencies: Vec<String>,
-    #[serde(default)]
-    pub pre_setup_commands: Vec<String>,
-    #[serde(default)]
-    pub post_setup_commands: Vec<String>,
+impl<T> ProcessState<T> {
+    pub fn empty() -> Self {
+        Self::Unprocessed(None)
+    }
+
+    pub fn try_process(
+        self,
+        f: impl FnOnce(Option<T>) -> anyhow::Result<T>,
+    ) -> anyhow::Result<Self> {
+        match self {
+            Self::Unprocessed(t) => Ok(Self::Processed(f(t)?)),
+            Self::Processed(..) => panic!(),
+        }
+    }
+
+    pub async fn try_process_async<
+        F: future::Future<Output = anyhow::Result<T>>,
+    >(
+        self,
+        f: impl FnOnce(Option<T>) -> F,
+    ) -> anyhow::Result<Self> {
+        match self {
+            Self::Unprocessed(t) => Ok(Self::Processed(f(t).await?)),
+            Self::Processed(..) => panic!(),
+        }
+    }
+
+    pub fn as_processed(&self) -> &T {
+        match self {
+            Self::Unprocessed(..) => panic!(),
+            Self::Processed(t) => t,
+        }
+    }
+
+    pub fn as_processed_mut(&mut self) -> &mut T {
+        match self {
+            Self::Unprocessed(..) => panic!(),
+            Self::Processed(t) => t,
+        }
+    }
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
-#[serde(tag = "provider")]
-#[serde(rename_all = "snake_case")]
-pub enum Provider {
-    Aws(AwsCluster),
+async fn process(
+    mut custom_config: custom::CustomConfig,
+) -> anyhow::Result<custom::CustomConfig> {
+    async fn process_ssh_private_key(
+        process_state: ProcessState<Option<path::PathBuf>>,
+    ) -> anyhow::Result<ProcessState<Option<path::PathBuf>>> {
+        let process_state = process_state
+            .try_process_async(|_| async { todo!() })
+            .await?;
+        Ok(process_state)
+    }
+
+    match custom_config.cluster.provider {
+        custom::Provider::Aws(ref mut aws_cluster) => {
+            // if aws_cluster.region.is_none() {
+            //     aws_cluster.region = Some("us-west-2".to_string());
+            // }
+            // if aws_cluster.ssh_user.is_none() {
+            //     aws_cluster.ssh_user = Some("ubuntu".to_string());
+            // }
+            // if aws_cluster.iam_instance_profile_arn.is_none() {
+            //     aws_cluster.iam_instance_profile_arn =
+            //         Some("arn:aws:iam::123456789012:instance-profile/your-instance-profile".to_string());
+            // }
+            // if aws_cluster.template.is_none() {
+            //     aws_cluster.template = Some(custom::AwsTemplateType::Normal);
+            // }
+        }
+    }
+
+    todo!()
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
-pub struct AwsCluster {
-    #[serde(flatten)]
-    pub template_type: Option<AwsTemplateType>,
-    pub custom: Option<AwsCustom>,
+pub async fn read_custom(
+    path: &path::Path,
+) -> anyhow::Result<custom::CustomConfig> {
+    let mut file =
+        fs::OpenOptions::new()
+            .read(true)
+            .open(path)
+            .with_context(|| {
+                format!("No configuration file found at the path {path:?}")
+            })?;
+    let mut buf = String::new();
+    let _ = file
+        .read_to_string(&mut buf)
+        .with_context(|| format!("Failed to read file {path:?}"))?;
+    let custom_config = toml::from_str(&buf)?;
+    let custom_config = process(custom_config).await?;
+    Ok(custom_config)
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
-#[serde(tag = "template", rename_all = "snake_case")]
-pub enum AwsTemplateType {
-    Light(AwsTemplate),
-    Normal(AwsTemplate),
-    Gpus(AwsTemplate),
-}
-
-#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
-pub struct AwsTemplate {
-    #[serde(default)]
-    pub ssh_user: Option<String>,
-
-    #[serde(default = "utils::default_region")]
-    pub region: String,
-
-    #[serde(default)]
-    pub ssh_private_key: Option<path::PathBuf>,
-
-    #[serde(default)]
-    pub iam_instance_profile_arn: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
-pub struct AwsCustom {
-    #[serde(flatten)]
-    pub aws_template: AwsTemplate,
-
-    #[serde(default)]
-    pub image_id: Option<String>,
-
-    #[serde(default)]
-    pub instance_type: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
-pub struct Job {
-    pub name: String,
-    pub working_dir: path::PathBuf,
-    pub command: String,
+pub fn write_ray(
+    ray: ray::RayConfig,
+) -> anyhow::Result<(tempdir::TempDir, path::PathBuf)> {
+    todo!()
 }

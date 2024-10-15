@@ -4,7 +4,8 @@ use clap::Parser;
 
 use crate::{cli, utils};
 
-const DEFAULT_CONFIG: &str = include_str!(path_from_root!("assets" / "default.toml"));
+const DEFAULT_CONFIG: &str =
+    include_str!(path_from_root!("assets" / "default.toml"));
 
 pub async fn handle() -> anyhow::Result<()> {
     match cli::Cli::parse() {
@@ -28,7 +29,8 @@ fn handle_init_config(init_config: cli::InitConfig) -> anyhow::Result<()> {
     if init_config.interactive {
         todo!()
     } else {
-        utils::create_new_file(&init_config.name)?.write_all(DEFAULT_CONFIG.as_bytes())?;
+        utils::create_new_file(&init_config.name)?
+            .write_all(DEFAULT_CONFIG.as_bytes())?;
         Ok(())
     }
 }

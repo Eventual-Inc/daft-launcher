@@ -2,7 +2,7 @@ use std::path;
 
 use serde::Serialize;
 
-use crate::{config, utils};
+use crate::{config::custom, utils};
 
 #[derive(Debug, Serialize, Clone, PartialEq)]
 pub struct RayConfig {
@@ -49,17 +49,23 @@ pub struct AwsNodeConfig {
     #[serde(rename = "InstanceType")]
     pub instance_type: String,
 
-    #[serde(rename = "IamInstanceProfile")]
-    pub iam_instance_profile: IamInstanceProfile,
+    #[serde(
+        rename = "IamInstanceProfile",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub iam_instance_profile: Option<IamInstanceProfile>,
 
     #[serde(rename = "ImageId")]
     pub image_id: String,
+
+    #[serde(rename = "KeyName")]
+    pub key_name: Option<String>,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq)]
 pub struct IamInstanceProfile {
-    #[serde(rename = "Arn", skip_serializing_if = "Option::is_none")]
-    pub arn: Option<String>,
+    #[serde(rename = "Arn")]
+    pub arn: String,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq)]
@@ -70,10 +76,10 @@ pub struct Resources {
     pub gpu: usize,
 }
 
-impl TryFrom<config::CustomConfig> for RayConfig {
+impl TryFrom<custom::CustomConfig> for RayConfig {
     type Error = anyhow::Error;
 
-    fn try_from(custom_config: config::CustomConfig) -> anyhow::Result<Self> {
+    fn try_from(custom_config: custom::CustomConfig) -> anyhow::Result<Self> {
         utils::custom_to_ray_config(custom_config)
     }
 }

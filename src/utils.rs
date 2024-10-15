@@ -77,46 +77,70 @@ pub struct AwsOverridden {
     pub post_setup_commands: Vec<String>,
 }
 
-fn aws_template_light(
+fn aws_template_light_overrides(
     pre_setup_commands: Vec<String>,
     post_setup_commands: Vec<String>,
-    aws_cluster: config::AwsCluster,
+    aws_template: config::AwsTemplate,
 ) -> AwsOverridden {
     AwsOverridden {
         image_id: "ami-07c5ecd8498c59db5".into(),
         instance_type: "t2.nano".into(),
-        region: aws_cluster.region,
-        ssh_user: aws_cluster.ssh_user.unwrap_or_else(ssh_ec2_user),
-        ssh_private_key: aws_cluster.ssh_private_key,
-        iam_instance_profile_arn: aws_cluster.iam_instance_profile_arn,
+        region: aws_template.region,
+        ssh_user: aws_template.ssh_user.unwrap_or_else(ssh_ec2_user),
+        ssh_private_key: aws_template.ssh_private_key,
+        iam_instance_profile_arn: aws_template.iam_instance_profile_arn,
         pre_setup_commands,
         post_setup_commands,
     }
 }
 
-fn aws_template_normal(
+fn aws_template_normal_overrides(
     pre_setup_commands: Vec<String>,
     post_setup_commands: Vec<String>,
-    aws_cluster: config::AwsCluster,
+    aws_template: config::AwsTemplate,
 ) -> AwsOverridden {
     AwsOverridden {
         image_id: "ami-07dcfc8123b5479a8".into(),
         instance_type: "m7g.medium".into(),
-        region: aws_cluster.region,
-        ssh_user: aws_cluster.ssh_user.unwrap_or_else(ssh_ec2_user),
-        ssh_private_key: aws_cluster.ssh_private_key,
-        iam_instance_profile_arn: aws_cluster.iam_instance_profile_arn,
+        region: aws_template.region,
+        ssh_user: aws_template.ssh_user.unwrap_or_else(ssh_ec2_user),
+        ssh_private_key: aws_template.ssh_private_key,
+        iam_instance_profile_arn: aws_template.iam_instance_profile_arn,
         pre_setup_commands,
         post_setup_commands,
     }
 }
 
-fn aws_template_gpus(
+fn aws_template_gpus_overrides(
     pre_setup_commands: Vec<String>,
     post_setup_commands: Vec<String>,
-    aws_cluster: config::AwsCluster,
+    aws_template: config::AwsTemplate,
 ) -> AwsOverridden {
     todo!()
+}
+
+fn aws_custom_overrides(
+    pre_setup_commands: Vec<String>,
+    post_setup_commands: Vec<String>,
+    aws_custom: config::AwsCustom,
+) -> AwsOverridden {
+    AwsOverridden {
+        image_id: aws_custom.image_id.clone().unwrap_or_else(image_id),
+        instance_type: aws_custom
+            .instance_type
+            .clone()
+            .unwrap_or_else(instance_type),
+        region: aws_custom.aws_template.region.clone(),
+        ssh_user: aws_custom
+            .aws_template
+            .ssh_user
+            .clone()
+            .unwrap_or_else(ssh_ec2_user),
+        ssh_private_key: aws_custom.aws_template.ssh_private_key.clone(),
+        iam_instance_profile_arn: aws_custom.aws_template.iam_instance_profile_arn.clone(),
+        pre_setup_commands,
+        post_setup_commands,
+    }
 }
 
 fn ssh_ec2_user() -> String {
@@ -146,28 +170,14 @@ pub fn default_number_of_workers() -> usize {
 fn override_aws(
     pre_setup_commands: Vec<String>,
     post_setup_commands: Vec<String>,
-    mut aws_cluster: config::AwsCluster,
+    aws_cluster: config::AwsCluster,
 ) -> anyhow::Result<AwsOverridden> {
-    let overridden = match (aws_cluster.template.as_mut(), aws_cluster.custom.as_mut()) {
+    let overridden = match (aws_cluster.template_type, aws_cluster.custom) {
         (Some(..), Some(..)) => anyhow::bail!("Both template and custom cluster configurations are specified; please specify only one or the other"),
-
-        (Some(config::AwsTemplate::Light), None) => aws_template_light(pre_setup_commands, post_setup_commands, aws_cluster),
-        (Some(config::AwsTemplate::Normal), None) => aws_template_normal(pre_setup_commands, post_setup_commands, aws_cluster),
-        (Some(config::AwsTemplate::Gpus), None) => aws_template_gpus(pre_setup_commands, post_setup_commands, aws_cluster),
-
-        (None, Some(overridable)) => {
-            AwsOverridden {
-                image_id: overridable.image_id.take().unwrap_or_else(image_id),
-                instance_type: overridable.instance_type.take().unwrap_or_else(instance_type),
-                region: aws_cluster.region,
-                ssh_user: aws_cluster.ssh_user.unwrap_or_else(ssh_ec2_user),
-                ssh_private_key: aws_cluster.ssh_private_key,
-                iam_instance_profile_arn: aws_cluster.iam_instance_profile_arn,
-                pre_setup_commands,
-                post_setup_commands,
-            }
-        },
-
+        (Some(config::AwsTemplateType::Light(aws_template)), None) => aws_template_light_overrides(pre_setup_commands, post_setup_commands, aws_template),
+        (Some(config::AwsTemplateType::Normal(aws_template)), None) => aws_template_normal_overrides(pre_setup_commands, post_setup_commands, aws_template),
+        (Some(config::AwsTemplateType::Gpus(aws_template)), None) => aws_template_gpus_overrides(pre_setup_commands, post_setup_commands, aws_template),
+        (None, Some(aws_custom)) => aws_custom_overrides(pre_setup_commands, post_setup_commands, aws_custom),
         (None, None) => anyhow::bail!("Neither template nor custom cluster configurations are specified; please specify exactly one of the two"),
     };
     Ok(overridden)

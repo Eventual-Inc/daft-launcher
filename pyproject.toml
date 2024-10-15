@@ -36,4 +36,4 @@ venvPath = '.'
 venv = '.venv'
 
 [tool.ruff]
-include = ["daft_launcher/**/*.py", "scripts/*.py"]
+include = ["daft_launcher/**/*.py"]

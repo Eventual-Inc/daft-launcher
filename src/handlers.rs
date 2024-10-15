@@ -1,10 +1,8 @@
-use std::io::Write;
-use std::process;
+use std::{io::Write, process};
 
 use clap::Parser;
 
-use crate::cli;
-use crate::utils;
+use crate::{cli, utils};
 
 const DEFAULT_CONFIG: &str = include_str!(path_from_root!("assets" / "default.toml"));
 
@@ -37,7 +35,8 @@ fn handle_init_config(init_config: cli::InitConfig) -> anyhow::Result<()> {
 
 fn handle_up(up: cli::Up) -> anyhow::Result<()> {
     let custom_config = utils::read_custom_config(&up.config.config)?;
-    let (temp_dir, path) = utils::write_ray_config(&custom_config.into())?;
+    let ray_config = custom_config.try_into()?;
+    let (temp_dir, path) = utils::write_ray_config(&ray_config)?;
     let _ = process::Command::new("ray")
         .args(["up", path.to_str().expect("Invalid characters in file")])
         .spawn()?

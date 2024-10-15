@@ -9,6 +9,10 @@ serde_yaml = "0.9.34"
 tempdir = "0.3.7"
 toml = "0.8.19"
 
+[dependencies.map-macro]
+version = "0.3.0"
+features = ["hashbrown"]
+
 [dependencies.anyhow]
 version = "1.0.89"
 features = ["backtrace"]

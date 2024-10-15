@@ -1,10 +1,11 @@
 use std::{
     fs,
     io::{self, Read, Write},
-    path,
+    path::{self, PathBuf},
 };
 
 use anyhow::Context;
+use map_macro::hashbrown as hb;
 
 use crate::config::{self, ray};
 
@@ -63,4 +64,152 @@ pub fn create_new_file(path: &path::Path) -> anyhow::Result<fs::File> {
             io::ErrorKind::AlreadyExists => anyhow::anyhow!("The file {:?} already exists", path),
             _ => error.into(),
         })
+}
+
+pub struct AwsOverridden {
+    pub image_id: String,
+    pub instance_type: String,
+    pub region: String,
+    pub ssh_user: String,
+    pub ssh_private_key: Option<PathBuf>,
+    pub iam_instance_profile_arn: Option<String>,
+    pub pre_setup_commands: Vec<String>,
+    pub post_setup_commands: Vec<String>,
+}
+
+fn aws_template_light(
+    pre_setup_commands: Vec<String>,
+    post_setup_commands: Vec<String>,
+    aws_cluster: config::AwsCluster,
+) -> AwsOverridden {
+    AwsOverridden {
+        image_id: "ami-07c5ecd8498c59db5".into(),
+        instance_type: "t2.nano".into(),
+        region: aws_cluster.region,
+        ssh_user: aws_cluster.ssh_user.unwrap_or_else(ssh_ec2_user),
+        ssh_private_key: aws_cluster.ssh_private_key,
+        iam_instance_profile_arn: aws_cluster.iam_instance_profile_arn,
+        pre_setup_commands,
+        post_setup_commands,
+    }
+}
+
+fn aws_template_normal(
+    pre_setup_commands: Vec<String>,
+    post_setup_commands: Vec<String>,
+    aws_cluster: config::AwsCluster,
+) -> AwsOverridden {
+    AwsOverridden {
+        image_id: "ami-07dcfc8123b5479a8".into(),
+        instance_type: "m7g.medium".into(),
+        region: aws_cluster.region,
+        ssh_user: aws_cluster.ssh_user.unwrap_or_else(ssh_ec2_user),
+        ssh_private_key: aws_cluster.ssh_private_key,
+        iam_instance_profile_arn: aws_cluster.iam_instance_profile_arn,
+        pre_setup_commands,
+        post_setup_commands,
+    }
+}
+
+fn aws_template_gpus(
+    pre_setup_commands: Vec<String>,
+    post_setup_commands: Vec<String>,
+    aws_cluster: config::AwsCluster,
+) -> AwsOverridden {
+    todo!()
+}
+
+fn ssh_ec2_user() -> String {
+    "ec2-user".into()
+}
+
+fn ssh_ubuntu_user() -> String {
+    "ubuntu".into()
+}
+
+fn image_id() -> String {
+    "ami-01c3c55948a949a52".to_string()
+}
+
+fn instance_type() -> String {
+    "m7g.medium".to_string()
+}
+
+pub fn default_region() -> String {
+    "us-west-2".to_string()
+}
+
+pub fn default_number_of_workers() -> usize {
+    2
+}
+
+fn override_aws(
+    pre_setup_commands: Vec<String>,
+    post_setup_commands: Vec<String>,
+    mut aws_cluster: config::AwsCluster,
+) -> anyhow::Result<AwsOverridden> {
+    let overridden = match (aws_cluster.template.as_mut(), aws_cluster.custom.as_mut()) {
+        (Some(..), Some(..)) => anyhow::bail!("Both template and custom cluster configurations are specified; please specify only one or the other"),
+
+        (Some(config::AwsTemplate::Light), None) => aws_template_light(pre_setup_commands, post_setup_commands, aws_cluster),
+        (Some(config::AwsTemplate::Normal), None) => aws_template_normal(pre_setup_commands, post_setup_commands, aws_cluster),
+        (Some(config::AwsTemplate::Gpus), None) => aws_template_gpus(pre_setup_commands, post_setup_commands, aws_cluster),
+
+        (None, Some(overridable)) => {
+            AwsOverridden {
+                image_id: overridable.image_id.take().unwrap_or_else(image_id),
+                instance_type: overridable.instance_type.take().unwrap_or_else(instance_type),
+                region: aws_cluster.region,
+                ssh_user: aws_cluster.ssh_user.unwrap_or_else(ssh_ec2_user),
+                ssh_private_key: aws_cluster.ssh_private_key,
+                iam_instance_profile_arn: aws_cluster.iam_instance_profile_arn,
+                pre_setup_commands,
+                post_setup_commands,
+            }
+        },
+
+        (None, None) => anyhow::bail!("Neither template nor custom cluster configurations are specified; please specify exactly one of the two"),
+    };
+    Ok(overridden)
+}
+
+pub fn custom_to_ray_config(custom_config: config::CustomConfig) -> anyhow::Result<ray::RayConfig> {
+    let ray_config = match custom_config.cluster.provider {
+        config::Provider::Aws(aws_cluster) => {
+            let overridden = override_aws(
+                custom_config.cluster.pre_setup_commands,
+                custom_config.cluster.post_setup_commands,
+                aws_cluster,
+            )?;
+            ray::RayConfig {
+                cluster_name: custom_config.package.name,
+                max_workers: Some(custom_config.cluster.number_of_workers),
+                provider: ray::Provider {
+                    r#type: "aws".to_string(),
+                    region: overridden.region,
+                },
+                auth: ray::Auth {
+                    ssh_user: Some(overridden.ssh_user),
+                    ssh_private_key: overridden.ssh_private_key,
+                },
+                available_node_types: hb::hash_map! {
+                    "ray.head.default".to_string() => ray::NodeType {
+                        node_config: ray::NodeConfig::Aws(ray::AwsNodeConfig {
+                            instance_type: overridden.instance_type,
+                            iam_instance_profile: ray::IamInstanceProfile {
+                                arn: overridden.iam_instance_profile_arn,
+                            },
+                            image_id: overridden.image_id,
+                        }),
+                        min_workers: custom_config.cluster.number_of_workers,
+                        max_workers: custom_config.cluster.number_of_workers,
+                        resources: ray::Resources { cpu: 1, gpu: 0 },
+                    },
+                },
+                initialization_commands: overridden.pre_setup_commands,
+                setup_commands: overridden.post_setup_commands,
+            }
+        }
+    };
+    Ok(ray_config)
 }

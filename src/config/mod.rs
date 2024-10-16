@@ -130,56 +130,109 @@ pub fn write_ray(ray: RayConfig) -> anyhow::Result<(TempDir, PathBuf)> {
 
 #[cfg(test)]
 mod tests {
+    use rstest::{fixture, rstest};
+
     use super::*;
     use crate::{
         config::custom::{
-            AwsCluster, AwsTemplateType, Cluster, CustomConfig, Job, Package,
-            Provider,
+            AwsCluster, AwsCustom, AwsTemplateType, Cluster, CustomConfig, Job,
+            Package, Provider,
         },
         processable_option::ProcessableOption,
     };
 
-    #[test]
-    fn test_processing_simple_toml() {
-        let custom_config = read_custom(&PathBuf::from(path_from_root!(
-            "assets" / "tests" / "light.toml"
-        )))
-        .unwrap();
-        assert_eq!(
-            custom_config,
-            CustomConfig {
-                package: Package {
-                    name: "hello-world".into(),
-                    daft_launcher_version: "0.4.0-alpha0".parse().unwrap(),
-                    python_version: ProcessableOption::Processed(
-                        get_python_version().unwrap()
-                    ),
-                    ray_version: ProcessableOption::Processed(
-                        get_ray_version().unwrap()
-                    ),
-                },
-                cluster: Cluster {
-                    provider: Provider::Aws(AwsCluster {
-                        region: "us-west-2".into(),
-                        ssh_user: ProcessableOption::Processed(
-                            "ec2-user".into()
-                        ),
-                        ssh_private_key: ProcessableOption::Raw(None),
-                        iam_instance_profile_arn: None,
-                        template: Some(AwsTemplateType::Light),
-                        custom: None,
+    #[fixture]
+    fn light() -> CustomConfig {
+        CustomConfig {
+            package: Package {
+                name: "light".into(),
+                daft_launcher_version: "0.4.0-alpha0".parse().unwrap(),
+                python_version: ProcessableOption::Processed(
+                    get_python_version().unwrap(),
+                ),
+                ray_version: ProcessableOption::Processed(
+                    get_ray_version().unwrap(),
+                ),
+            },
+            cluster: Cluster {
+                provider: Provider::Aws(AwsCluster {
+                    region: "us-west-2".into(),
+                    ssh_user: ProcessableOption::Processed("ec2-user".into()),
+                    ssh_private_key: ProcessableOption::Raw(None),
+                    iam_instance_profile_arn: None,
+                    template: Some(AwsTemplateType::Light),
+                    custom: None,
+                }),
+                number_of_workers: 2,
+                dependencies: vec![],
+                pre_setup_commands: vec![],
+                post_setup_commands: vec![],
+            },
+            jobs: vec![Job {
+                name: "filter".into(),
+                working_dir: "jobs".into(),
+                command: "python filter.py".into(),
+            }],
+        }
+    }
+
+    #[fixture]
+    fn custom() -> CustomConfig {
+        CustomConfig {
+            package: Package {
+                name: "custom".into(),
+                daft_launcher_version: "0.1.0".parse().unwrap(),
+                python_version: ProcessableOption::Processed(
+                    get_python_version().unwrap(),
+                ),
+                ray_version: ProcessableOption::Processed(
+                    get_ray_version().unwrap(),
+                ),
+            },
+            cluster: Cluster {
+                provider: Provider::Aws(AwsCluster {
+                    region: "us-west-2".into(),
+                    ssh_user: ProcessableOption::Processed("ec2-user".into()),
+                    ssh_private_key: ProcessableOption::Raw(None),
+                    iam_instance_profile_arn: None,
+                    template: None,
+                    custom: Some(AwsCustom {
+                        image_id: Some("...".into()),
+                        instance_type: Some("...".into()),
                     }),
-                    number_of_workers: 2,
-                    dependencies: vec![],
-                    pre_setup_commands: vec![],
-                    post_setup_commands: vec![],
-                },
-                jobs: vec![Job {
+                }),
+                number_of_workers: 4,
+                dependencies: vec![
+                    "pytorch".into(),
+                    "pandas".into(),
+                    "numpy".into(),
+                ],
+                pre_setup_commands: vec!["echo 'Hello, world!'".into()],
+                post_setup_commands: vec!["echo 'Finished!'".into()],
+            },
+            jobs: vec![
+                Job {
                     name: "filter".into(),
                     working_dir: "jobs".into(),
                     command: "python filter.py".into(),
-                }],
-            }
-        );
+                },
+                Job {
+                    name: "dedupe".into(),
+                    working_dir: "jobs".into(),
+                    command: "python dedupe.py".into(),
+                },
+            ],
+        }
+    }
+
+    #[rstest]
+    #[case(read_toml!("assets" / "tests" / "light.toml"), light())]
+    #[case(read_toml!("assets" / "tests" / "custom.toml"), custom())]
+    fn test_processing_simple_toml(
+        #[case] input: CustomConfig,
+        #[case] expected: CustomConfig,
+    ) {
+        let input = process(input).unwrap();
+        assert_eq!(input, expected);
     }
 }

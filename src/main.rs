@@ -9,6 +9,14 @@ macro_rules! path_from_root {
     };
 }
 
+#[cfg(test)]
+macro_rules! read_toml {
+    ($($t:tt)*) => {{
+        let contents = include_str!(path_from_root!($($t)*));
+        toml::from_str(contents).unwrap()
+    }};
+}
+
 mod cli;
 mod config;
 mod handlers;

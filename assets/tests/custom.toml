@@ -1,0 +1,24 @@
+[package]
+name = "custom"
+daft_launcher_version = "0.1.0"
+
+[cluster]
+provider = "aws"
+number_of_workers = 4
+dependencies = ["pytorch", "pandas", "numpy"]
+pre_setup_commands = ["echo 'Hello, world!'"]
+post_setup_commands = ["echo 'Finished!'"]
+
+[cluster.custom]
+image_id = "..."
+instance_type = "..."
+
+[[job]]
+name = "filter"
+working_dir = "jobs"
+command = "python filter.py"
+
+[[job]]
+name = "dedupe"
+working_dir = "jobs"
+command = "python dedupe.py"

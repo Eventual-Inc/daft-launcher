@@ -1,5 +1,5 @@
 [package]
-name = "hello-world"
+name = "light"
 daft_launcher_version = "0.4.0-alpha0"
 
 [cluster]

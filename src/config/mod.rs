@@ -1,78 +1,27 @@
 pub mod custom;
+pub mod processable_option;
 pub mod ray;
 
-use std::{fs, future, io::Read, path};
+use std::{
+    fs,
+    io::Read,
+    path::{self, PathBuf},
+};
 
 use anyhow::Context;
-use serde::Deserialize;
-
-#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
-#[serde(untagged)]
-#[must_use]
-pub enum ProcessState<T> {
-    Unprocessed(Option<T>),
-    #[serde(skip_serializing)]
-    Processed(T),
-}
-
-impl<T: Default> Default for ProcessState<T> {
-    fn default() -> Self {
-        Self::Unprocessed(Some(T::default()))
-    }
-}
-
-impl<T> ProcessState<T> {
-    pub fn empty() -> Self {
-        Self::Unprocessed(None)
-    }
-
-    pub fn try_process(
-        self,
-        f: impl FnOnce(Option<T>) -> anyhow::Result<T>,
-    ) -> anyhow::Result<Self> {
-        match self {
-            Self::Unprocessed(t) => Ok(Self::Processed(f(t)?)),
-            Self::Processed(..) => panic!(),
-        }
-    }
-
-    pub async fn try_process_async<
-        F: future::Future<Output = anyhow::Result<T>>,
-    >(
-        self,
-        f: impl FnOnce(Option<T>) -> F,
-    ) -> anyhow::Result<Self> {
-        match self {
-            Self::Unprocessed(t) => Ok(Self::Processed(f(t).await?)),
-            Self::Processed(..) => panic!(),
-        }
-    }
-
-    pub fn as_processed(&self) -> &T {
-        match self {
-            Self::Unprocessed(..) => panic!(),
-            Self::Processed(t) => t,
-        }
-    }
-
-    pub fn as_processed_mut(&mut self) -> &mut T {
-        match self {
-            Self::Unprocessed(..) => panic!(),
-            Self::Processed(t) => t,
-        }
-    }
-}
+use custom::CustomConfig;
+use processable_option::ProcessableOption;
 
 async fn process(
-    mut custom_config: custom::CustomConfig,
-) -> anyhow::Result<custom::CustomConfig> {
+    mut custom_config: CustomConfig,
+) -> anyhow::Result<CustomConfig> {
     async fn process_ssh_private_key(
-        process_state: ProcessState<Option<path::PathBuf>>,
-    ) -> anyhow::Result<ProcessState<Option<path::PathBuf>>> {
-        let process_state = process_state
-            .try_process_async(|_| async { todo!() })
+        ssh_private_key: &mut ProcessableOption<Option<PathBuf>>,
+    ) -> anyhow::Result<()> {
+        ssh_private_key
+            .or_else_try_process_async(|| async { todo!() })
             .await?;
-        Ok(process_state)
+        Ok(())
     }
 
     match custom_config.cluster.provider {
@@ -119,4 +68,23 @@ pub fn write_ray(
     ray: ray::RayConfig,
 ) -> anyhow::Result<(tempdir::TempDir, path::PathBuf)> {
     todo!()
+}
+
+#[cfg(test)]
+mod tests {
+    use serde::Deserialize;
+
+    use crate::config::processable_option;
+
+    #[test]
+    fn test() {
+        #[derive(Debug, Deserialize)]
+        struct Test {
+            #[serde(default = "processable_option::ProcessableOption::empty")]
+            test: processable_option::ProcessableOption<Option<bool>>,
+        }
+
+        let result = toml::from_str::<Test>("");
+        dbg!(&result);
+    }
 }

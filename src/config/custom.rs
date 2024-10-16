@@ -2,6 +2,8 @@ use std::path;
 
 use serde::Deserialize;
 
+use super::processable_option;
+
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 pub struct CustomConfig {
     pub package: Package,
@@ -30,10 +32,10 @@ pub struct Cluster {
     pub dependencies: Vec<String>,
 
     #[serde(default)]
-    pub pre_setup_commands: super::ProcessState<Vec<String>>,
+    pub pre_setup_commands: processable_option::ProcessableOption<Vec<String>>,
 
     #[serde(default)]
-    pub post_setup_commands: super::ProcessState<Vec<String>>,
+    pub post_setup_commands: processable_option::ProcessableOption<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
@@ -48,14 +50,16 @@ pub struct AwsCluster {
     #[serde(default = "default_region")]
     pub region: String,
 
-    #[serde(default = "super::ProcessState::empty")]
-    pub ssh_user: super::ProcessState<String>,
+    #[serde(default = "processable_option::ProcessableOption::empty")]
+    pub ssh_user: processable_option::ProcessableOption<String>,
 
-    #[serde(default = "super::ProcessState::empty")]
-    pub ssh_private_key: super::ProcessState<Option<path::PathBuf>>,
+    #[serde(default = "processable_option::ProcessableOption::empty")]
+    pub ssh_private_key:
+        processable_option::ProcessableOption<Option<path::PathBuf>>,
 
-    #[serde(default = "super::ProcessState::empty")]
-    pub iam_instance_profile_arn: super::ProcessState<Option<String>>,
+    #[serde(default = "processable_option::ProcessableOption::empty")]
+    pub iam_instance_profile_arn:
+        processable_option::ProcessableOption<Option<String>>,
 
     pub template: Option<AwsTemplateType>,
     pub custom: Option<AwsCustom>,
@@ -71,11 +75,11 @@ pub enum AwsTemplateType {
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 pub struct AwsCustom {
-    #[serde(default = "super::ProcessState::empty")]
-    pub image_id: super::ProcessState<String>,
+    #[serde(default = "processable_option::ProcessableOption::empty")]
+    pub image_id: processable_option::ProcessableOption<String>,
 
-    #[serde(default = "super::ProcessState::empty")]
-    pub instance_type: super::ProcessState<String>,
+    #[serde(default = "processable_option::ProcessableOption::empty")]
+    pub instance_type: processable_option::ProcessableOption<String>,
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]

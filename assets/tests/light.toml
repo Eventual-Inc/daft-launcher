@@ -1,0 +1,12 @@
+[package]
+name = "hello-world"
+daft_launcher_version = "0.4.0-alpha0"
+
+[cluster]
+provider = "aws"
+template = "light"
+
+[[job]]
+name = "filter"
+working_dir = "jobs"
+command = "python filter.py"

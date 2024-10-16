@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use serde::Deserialize;
 
-use processable_option::ProcessableOption;
+use crate::processable_option::ProcessableOption;
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 pub struct CustomConfig {
@@ -16,8 +16,8 @@ pub struct CustomConfig {
 pub struct Package {
     pub daft_launcher_version: semver::Version,
     pub name: String,
-    pub python_version: Option<semver::VersionReq>,
-    pub ray_version: Option<semver::VersionReq>,
+    pub python_version: ProcessableOption<semver::VersionReq>,
+    pub ray_version: ProcessableOption<semver::VersionReq>,
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
@@ -32,10 +32,10 @@ pub struct Cluster {
     pub dependencies: Vec<String>,
 
     #[serde(default)]
-    pub pre_setup_commands: ProcessableOption<Vec<String>>,
+    pub pre_setup_commands: Vec<String>,
 
     #[serde(default)]
-    pub post_setup_commands: ProcessableOption<Vec<String>>,
+    pub post_setup_commands: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
@@ -50,9 +50,8 @@ pub struct AwsCluster {
     #[serde(default = "default_region")]
     pub region: String,
     pub ssh_user: ProcessableOption<String>,
-    pub ssh_private_key: ProcessableOption<Option<PathBuf>>,
-    pub iam_instance_profile_arn: ProcessableOption<Option<String>>,
-
+    pub ssh_private_key: ProcessableOption<PathBuf>,
+    pub iam_instance_profile_arn: Option<String>,
     pub template: Option<AwsTemplateType>,
     pub custom: Option<AwsCustom>,
 }
@@ -67,8 +66,8 @@ pub enum AwsTemplateType {
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 pub struct AwsCustom {
-    pub image_id: ProcessableOption<String>,
-    pub instance_type: ProcessableOption<String>,
+    pub image_id: Option<String>,
+    pub instance_type: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]

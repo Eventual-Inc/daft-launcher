@@ -141,8 +141,10 @@ mod tests {
 
     #[test]
     fn test_processing_simple_toml() {
-        let custom_config = read_toml!("assets" / "tests" / "light.toml");
-        let custom_config = process(custom_config).unwrap();
+        let custom_config = read_custom(&PathBuf::from(path_from_root!(
+            "assets" / "tests" / "light.toml"
+        )))
+        .unwrap();
         assert_eq!(
             custom_config,
             CustomConfig {

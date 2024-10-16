@@ -1,8 +1,8 @@
-use std::path;
+use std::path::PathBuf;
 
 use serde::Deserialize;
 
-use super::processable_option;
+use crate::config::processable_option::ProcessableOption;
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 pub struct CustomConfig {
@@ -32,10 +32,10 @@ pub struct Cluster {
     pub dependencies: Vec<String>,
 
     #[serde(default)]
-    pub pre_setup_commands: processable_option::ProcessableOption<Vec<String>>,
+    pub pre_setup_commands: ProcessableOption<Vec<String>>,
 
     #[serde(default)]
-    pub post_setup_commands: processable_option::ProcessableOption<Vec<String>>,
+    pub post_setup_commands: ProcessableOption<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
@@ -49,17 +49,9 @@ pub enum Provider {
 pub struct AwsCluster {
     #[serde(default = "default_region")]
     pub region: String,
-
-    #[serde(default = "processable_option::ProcessableOption::empty")]
-    pub ssh_user: processable_option::ProcessableOption<String>,
-
-    #[serde(default = "processable_option::ProcessableOption::empty")]
-    pub ssh_private_key:
-        processable_option::ProcessableOption<Option<path::PathBuf>>,
-
-    #[serde(default = "processable_option::ProcessableOption::empty")]
-    pub iam_instance_profile_arn:
-        processable_option::ProcessableOption<Option<String>>,
+    pub ssh_user: ProcessableOption<String>,
+    pub ssh_private_key: ProcessableOption<Option<PathBuf>>,
+    pub iam_instance_profile_arn: ProcessableOption<Option<String>>,
 
     pub template: Option<AwsTemplateType>,
     pub custom: Option<AwsCustom>,
@@ -75,17 +67,14 @@ pub enum AwsTemplateType {
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 pub struct AwsCustom {
-    #[serde(default = "processable_option::ProcessableOption::empty")]
-    pub image_id: processable_option::ProcessableOption<String>,
-
-    #[serde(default = "processable_option::ProcessableOption::empty")]
-    pub instance_type: processable_option::ProcessableOption<String>,
+    pub image_id: ProcessableOption<String>,
+    pub instance_type: ProcessableOption<String>,
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 pub struct Job {
     pub name: String,
-    pub working_dir: path::PathBuf,
+    pub working_dir: PathBuf,
     pub command: String,
 }
 

@@ -1,5 +1,3 @@
-use std::future::Future;
-
 use serde::{Deserialize, Deserializer};
 
 #[must_use]
@@ -26,8 +24,11 @@ impl<T> ProcessableOption<T> {
         }
     }
 
-    pub fn empty() -> Self {
-        Self::RawNone
+    pub fn new(t: Option<T>) -> Self {
+        match t {
+            Some(t) => Self::RawSome(Some(t)),
+            None => Self::RawNone,
+        }
     }
 
     pub fn try_process<F>(&mut self, f: F) -> anyhow::Result<()>
@@ -60,44 +61,6 @@ impl<T> ProcessableOption<T> {
         Ok(())
     }
 
-    pub async fn try_process_async<F, Fut>(
-        &mut self,
-        f: F,
-    ) -> anyhow::Result<()>
-    where
-        F: FnOnce(Option<T>) -> Fut,
-        Fut: Future<Output = anyhow::Result<T>>,
-    {
-        match self {
-            Self::RawNone => *self = Self::Processed(f(None).await?),
-            Self::RawSome(..) => {
-                let t = self.yank();
-                *self = Self::Processed(f(Some(t)).await?)
-            }
-            Self::Processed(..) => panic!(),
-        };
-        Ok(())
-    }
-
-    pub async fn or_else_try_process_async<F, Fut>(
-        &mut self,
-        f: F,
-    ) -> anyhow::Result<()>
-    where
-        F: FnOnce() -> Fut,
-        Fut: Future<Output = anyhow::Result<T>>,
-    {
-        match self {
-            Self::RawNone => *self = Self::Processed(f().await?),
-            Self::RawSome(..) => {
-                let t = self.yank();
-                *self = Self::Processed(t);
-            }
-            Self::Processed(..) => panic!(),
-        };
-        Ok(())
-    }
-
     pub fn as_processed(&self) -> &T {
         match self {
             Self::RawSome(..) | Self::RawNone => panic!(),
@@ -118,10 +81,8 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for ProcessableOption<T> {
     where
         D: Deserializer<'de>,
     {
-        Ok(match Option::deserialize(deserializer)? {
-            Some(inner) => Self::RawSome(inner),
-            None => Self::RawNone,
-        })
+        let t = Option::deserialize(deserializer)?;
+        Ok(Self::new(t))
     }
 }
 
@@ -137,7 +98,7 @@ mod tests {
     }
 
     #[test]
-    fn test_with_no_value() {
+    fn test_deser_with_no_value() {
         let result = toml::from_str("");
         assert_eq!(
             result,
@@ -148,7 +109,7 @@ mod tests {
     }
 
     #[test]
-    fn test_with_value() {
+    fn test_deser_with_value() {
         let result = toml::from_str("flag = true");
         assert_eq!(
             result,
@@ -164,7 +125,7 @@ mod tests {
     }
 
     #[test]
-    fn test_nested_option_with_no_value() {
+    fn test_deser_with_nested_option_with_no_value() {
         let result = toml::from_str("");
         assert_eq!(
             result,
@@ -175,7 +136,7 @@ mod tests {
     }
 
     #[test]
-    fn test_nested_option_with_value() {
+    fn test_deser_with_nested_option_with_value() {
         let result = toml::from_str("flag = true");
         assert_eq!(
             result,
@@ -183,5 +144,10 @@ mod tests {
                 flag: ProcessableOption::RawSome(Some(Some(true)))
             })
         );
+    }
+
+    #[test]
+    fn test() {
+        let mut x = ProcessableOption::new(Some(0u8));
     }
 }

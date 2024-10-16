@@ -1,0 +1,10 @@
+[package]
+name = "processable-option"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies.serde]
+workspace = true
+
+[dependencies.toml]
+workspace = true

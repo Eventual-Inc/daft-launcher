@@ -555,6 +555,7 @@ dependencies = [
  "clap",
  "hashbrown",
  "map-macro",
+ "processable-option",
  "semver",
  "serde",
  "serde_yaml",
@@ -1052,6 +1053,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b3e4daa0dcf6feba26f985457cdf104d4b4256fc5a09547140f3631bb076b19a"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "processable-option"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "toml",
 ]
 
 [[package]]

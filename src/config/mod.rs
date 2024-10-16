@@ -1,5 +1,4 @@
 pub mod custom;
-pub mod processable_option;
 pub mod ray;
 
 use std::{
@@ -9,7 +8,6 @@ use std::{
 };
 
 use anyhow::Context;
-use processable_option::ProcessableOption;
 use tempdir::TempDir;
 
 use crate::config::{
@@ -45,9 +43,8 @@ pub fn write_ray(ray: RayConfig) -> anyhow::Result<(TempDir, PathBuf)> {
 
 #[cfg(test)]
 mod tests {
+    use processable_option::ProcessableOption;
     use serde::Deserialize;
-
-    use crate::config::processable_option::ProcessableOption;
 
     #[test]
     fn test() {

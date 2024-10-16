@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use serde::Deserialize;
 
-use crate::config::processable_option::ProcessableOption;
+use processable_option::ProcessableOption;
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 pub struct CustomConfig {

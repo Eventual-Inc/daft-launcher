@@ -225,10 +225,12 @@ mod tests {
         }
     }
 
+    /// Test to see if [`super::process`] can correct fill in the missing fields in the parsed [`CustomConfig`] struct.
+    /// (Also includes testing of instance profile usage).
     #[rstest]
     #[case(read_toml!("assets" / "tests" / "light.toml"), light())]
     #[case(read_toml!("assets" / "tests" / "custom.toml"), custom())]
-    fn test_processing_simple_toml(
+    fn test_process(
         #[case] input: CustomConfig,
         #[case] expected: CustomConfig,
     ) {

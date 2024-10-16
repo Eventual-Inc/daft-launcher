@@ -3,7 +3,7 @@ pub mod ray;
 
 use std::{
     fs::OpenOptions,
-    io::Read,
+    io::{Read, Write},
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
@@ -14,9 +14,12 @@ use semver::{Version, VersionReq};
 use tempdir::TempDir;
 use which::which;
 
-use crate::config::{
-    custom::{CustomConfig, Provider},
-    ray::RayConfig,
+use crate::{
+    config::{
+        custom::{CustomConfig, Provider},
+        ray::RayConfig,
+    },
+    utils::create_new_file,
 };
 
 fn get_version(executable: &str, prefix: &str) -> anyhow::Result<Version> {
@@ -94,10 +97,10 @@ fn process(mut custom_config: CustomConfig) -> anyhow::Result<CustomConfig> {
                     | None => "ec2-user".into(),
                     Some(AwsTemplateType::Gpus) => "ubuntu".into(),
                 });
-            // aws_cluster.ssh_private_key = aws_cluster
-            //     .ssh_private_key
-            //     .map_or_else(get_ssh_private_key, Ok)
-            //     .transpose()?;
+            aws_cluster.ssh_private_key = aws_cluster
+                .ssh_private_key
+                .map_or_else(get_ssh_private_key, Ok)
+                .transpose()?;
             Provider::Aws(aws_cluster)
         }
     };
@@ -124,8 +127,18 @@ pub fn read_custom(path: &Path) -> anyhow::Result<CustomConfig> {
     Ok(custom_config)
 }
 
-pub fn write_ray(ray: RayConfig) -> anyhow::Result<(TempDir, PathBuf)> {
-    todo!()
+pub fn write_ray(ray_config: &RayConfig) -> anyhow::Result<(TempDir, PathBuf)> {
+    let temp_dir = TempDir::new("ray_config")
+        .expect("Creation of temporary directory should always succeed");
+    let path = temp_dir.path().join("ray.yaml");
+    let ray_config = serde_yaml::to_string(ray_config)
+        .expect("Serialization to yaml should always succeed");
+    create_new_file(&path)
+        .expect(
+            "Creating new file in temporary directory should always succeed",
+        )
+        .write_all(ray_config.as_bytes())?;
+    Ok((temp_dir, path))
 }
 
 #[cfg(test)]

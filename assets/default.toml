@@ -1,8 +1,12 @@
+# For a full schema of this configuration file, please visit:
+# https://eventual-inc.github.io/daft-launcher
+#
+# If you notice any bugs, please reach out to me (Raunak Bhagat) via our open Slack workspace, "Distributed Data Community":
+# https://join.slack.com/t/dist-data/shared_invite/zt-2ric3mssh-zX08IXaKNeyx8YtqXey41A
+
 [package]
 name = "hello-world"
 daft_launcher_version = "0.4.0-alpha0"
-python_version = "3.9"
-ray_version = "2.37"
 
 [cluster]
 provider = "aws"

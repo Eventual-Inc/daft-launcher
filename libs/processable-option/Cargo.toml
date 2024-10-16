@@ -1,0 +1,9 @@
+[package]
+name = "processable-option"
+edition = "2021"
+
+[dependencies]
+serde = { workspace = true }
+
+[dev-dependencies]
+rstest = { workspace = true }

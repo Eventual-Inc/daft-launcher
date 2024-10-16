@@ -1,3 +1,10 @@
+[workspace]
+members = ["libs/processable-option"]
+
+[workspace.dependencies]
+serde = { version = "1.0", features = ["derive"] }
+rstest = "0.23.0"
+
 [package]
 name = "daft"
 edition = "2021"
@@ -9,34 +16,14 @@ serde_yaml = "0.9.34"
 tempdir = "0.3.7"
 toml = "0.8.19"
 which = "6.0.3"
-
-[dependencies.map-macro]
-version = "0.3.0"
-features = ["hashbrown"]
-
-[dependencies.anyhow]
-version = "1.0.89"
-features = ["backtrace"]
-
-[dependencies.tokio]
-version = "1.40.0"
-features = ["full"]
-
-[dependencies.hashbrown]
-version = "0.15.0"
-features = ["serde"]
-
-[dependencies.clap]
-version = "4.5"
-features = ["derive"]
-
-[dependencies.semver]
-version = "1.0"
-features = ["serde"]
-
-[dependencies.serde]
-version = "1.0"
-features = ["derive"]
+map-macro = { version = "0.3.0", features = ["hashbrown"] }
+anyhow = { version = "1.0.89", features = ["backtrace"] }
+tokio = { version = "1.40.0", features = ["full"] }
+hashbrown = { version = "0.15.0", features = ["serde"] }
+clap = { version = "4.5", features = ["derive"] }
+semver = { version = "1.0", features = ["serde"] }
+serde = { workspace = true }
+processable-option = { path = "libs/processable-option" }
 
 [dev-dependencies]
-rstest = "0.23.0"
+rstest = { workspace = true }

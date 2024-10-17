@@ -1,11 +1,12 @@
-use std::{io::Write, process::Command};
+use std::{io::Write, path::PathBuf, process::Command};
 
 use clap::Parser;
+use tempdir::TempDir;
 
 use crate::{
     cli::{Cli, Connect, Dashboard, Down, InitConfig, Sql, Submit, Up},
-    config::{read_custom, write_ray},
-    utils::{assert_is_authenticated_with_aws, create_new_file},
+    config::{read_custom, write_ray, write_ray_cluster_name},
+    utils::{assert_is_authenticated_with_aws, create_new_file, path_to_str},
 };
 
 const DEFAULT_CONFIG: &str =
@@ -39,28 +40,47 @@ fn handle_init_config(init_config: InitConfig) -> anyhow::Result<()> {
     }
 }
 
-fn handle_up(up: Up) -> anyhow::Result<()> {
-    // let custom_config = read_custom(&up.config.config)?;
-    // let ray_config = custom_config.try_into()?;
-    // let (temp_dir, path) = write_ray(&ray_config)?;
-    // let _ = Command::new("ray")
-    //     .args([
-    //         "up",
-    //         path.to_str().expect("Invalid characters in file path"),
-    //     ])
-    //     .spawn()?
-    //     .wait()?;
+fn run_ray_command(
+    temp_dir: TempDir,
+    path: PathBuf,
+    sub_command: &str,
+    args: Option<&[&str]>,
+) -> anyhow::Result<()> {
+    let args = args.unwrap_or(&[]);
+    let _ = Command::new("ray")
+        .arg(sub_command)
+        .arg(path_to_str(path.as_os_str())?)
+        .args(args)
+        .spawn()?
+        .wait()?;
 
-    // // Explicitly deletes the entire temporary directory.
-    // // The config file that we wrote to inside of there will now be deleted.
-    // drop(temp_dir);
+    // Explicitly deletes the entire temporary directory.
+    // The config file that we wrote to inside of there will now be deleted.
+    drop(temp_dir);
 
-    // Ok(())
-    todo!()
+    Ok(())
 }
 
-fn handle_down(_: Down) -> anyhow::Result<()> {
-    todo!()
+fn handle_up(up: Up) -> anyhow::Result<()> {
+    let (_, ray_config) = read_custom(&up.config.config)?;
+    let (temp_dir, path) = write_ray(&ray_config)?;
+    run_ray_command(temp_dir, path, "up", None)
+}
+
+fn handle_down(down: Down) -> anyhow::Result<()> {
+    match (down.name, down.r#type, down.region) {
+        (Some(name), Some(r#type), Some(region)) => {
+            let (temp_dir, path) =
+                write_ray_cluster_name(&name, &r#type, &region)?;
+            run_ray_command(temp_dir, path, "down", None)
+        }
+        (None, None, None) => {
+            let (_, ray_config) = read_custom(&down.config.config)?;
+            let (temp_dir, path) = write_ray(&ray_config)?;
+            run_ray_command(temp_dir, path, "down", None)
+        }
+        _ => anyhow::bail!("You must provide all three arguments to spin down a cluster: name, type, and region"),
+    }
 }
 
 fn handle_submit(_: Submit) -> anyhow::Result<()> {

@@ -3,6 +3,8 @@ use std::path::{Path, PathBuf};
 use semver::{Version, VersionReq};
 use serde::{de::Error, Deserialize, Deserializer};
 
+use crate::utils::expand;
+
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 pub struct RawConfig {
     pub package: Package,
@@ -96,11 +98,24 @@ where
     }
 }
 
+fn expand_helper<'de, D>(path: PathBuf) -> Result<PathBuf, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    expand(path.clone()).map_err(|_| {
+        Error::custom(format!(
+            "Path expansion failed; could not expand the path '{}'",
+            path.display(),
+        ))
+    })
+}
+
 fn deserialize_dir<'de, D>(deserializer: D) -> Result<PathBuf, D::Error>
 where
     D: Deserializer<'de>,
 {
     let path = PathBuf::deserialize(deserializer)?;
+    let path = expand_helper::<D>(path)?;
     assert_path_exists::<D>(&path)?;
     if !path.is_dir() {
         return Err(Error::custom(format!(
@@ -122,6 +137,7 @@ where
         Some(path) => path,
         None => return Ok(None),
     };
+    let path = expand_helper::<D>(path)?;
     assert_path_exists::<D>(&path)?;
     if !path.is_file() {
         return Err(Error::custom(format!(

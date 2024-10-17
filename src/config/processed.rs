@@ -212,7 +212,7 @@ pub mod tests {
             },
             jobs: vec![Job {
                 name: "filter".into(),
-                working_dir: "jobs".into(),
+                working_dir: "assets".into(),
                 command: "python filter.py".into(),
             }],
         }

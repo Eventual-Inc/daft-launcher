@@ -36,9 +36,17 @@ pub struct Down {
     #[clap(flatten)]
     pub config: Config,
 
-    /// Name of the cluster
+    /// Name of the cluster to spin down
     #[arg(short, long, value_name = "NAME")]
-    pub name: String,
+    pub name: Option<String>,
+
+    /// Type of cloud provider which contains the cluster to spin down
+    #[arg(short, long, value_name = "TYPE")]
+    pub r#type: Option<String>,
+
+    /// Region of the cluster to spin down
+    #[arg(short, long, value_name = "REGION")]
+    pub region: Option<String>,
 }
 
 #[derive(Parser)]

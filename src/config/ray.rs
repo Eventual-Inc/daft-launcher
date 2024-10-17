@@ -4,7 +4,7 @@ use hashbrown::HashMap;
 use map_macro::hashbrown::hash_map;
 use serde::Serialize;
 
-use crate::config::processed;
+use crate::{config::processed, utils::path_to_str};
 
 #[derive(Debug, Serialize, Clone, PartialEq)]
 pub struct RayConfig {
@@ -33,8 +33,10 @@ pub struct Auth {
 #[derive(Debug, Serialize, Clone, PartialEq)]
 pub struct NodeType {
     pub node_config: NodeConfig,
-    pub min_workers: usize,
-    pub max_workers: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_workers: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_workers: Option<usize>,
     pub resources: Resources,
 }
 
@@ -73,15 +75,12 @@ pub struct Resources {
     pub gpu: usize,
 }
 
-fn to_key_name(path: Option<&Path>) -> anyhow::Result<Option<String>> {
-    //     let key_name = path
-    //         .map(|path| path.file_name().ok_or_else(|| anyhow::anyhow!("Invalid")))
-    //         .transpose()?
-    //         .map(|x| x.to_str().ok_or_else(|| anyhow::anyhow!("...")))
-    //         .transpose()?
-    //         .map(str::to_string);
-    //     Ok(key_name)
-    todo!()
+fn to_key_name(path: &Path) -> anyhow::Result<&str> {
+    let path = path.file_name().expect(
+        "File should exist, as checked by deserialzation logic in raw.rs",
+    );
+    let key_name = path_to_str(path)?;
+    Ok(key_name)
 }
 
 impl TryFrom<processed::ProcessedConfig> for RayConfig {
@@ -99,21 +98,33 @@ impl TryFrom<processed::ProcessedConfig> for RayConfig {
                     r#type: "aws".into(),
                     region: aws_cluster.region,
                 },
-                hash_map! {
-                    "ray.default.head".to_string() => NodeType {
+                {
+                    let generic_node_type = NodeType {
                         node_config: NodeConfig::Aws(AwsNodeConfig {
                             instance_type: aws_cluster.instance_type,
-                            iam_instance_profile: aws_cluster.iam_instance_profile_arn.map(|arn| IamInstanceProfile { arn }),
+                            iam_instance_profile: aws_cluster
+                                .iam_instance_profile_arn
+                                .map(|arn| IamInstanceProfile { arn }),
                             image_id: aws_cluster.image_id,
-                            key_name: to_key_name(aws_cluster.ssh_private_key.as_deref())?,
+                            key_name: aws_cluster
+                                .ssh_private_key
+                                .as_deref()
+                                .map(to_key_name)
+                                .transpose()?
+                                .map(str::to_string),
                         }),
-                        min_workers: config.cluster.number_of_workers,
-                        max_workers: config.cluster.number_of_workers,
-                        resources: Resources {
-                            cpu: 1,
-                            gpu: 0,
+                        min_workers: Some(config.cluster.number_of_workers),
+                        max_workers: Some(config.cluster.number_of_workers),
+                        resources: Resources { cpu: 1, gpu: 0 },
+                    };
+                    hash_map! {
+                        "ray.head.default".to_string() => NodeType {
+                            min_workers: None,
+                            max_workers: None,
+                            ..generic_node_type.clone()
                         },
-                    },
+                        "ray.worker.default".to_string() => generic_node_type,
+                    }
                 },
                 Auth {
                     ssh_user: aws_cluster.ssh_user,
@@ -153,29 +164,22 @@ mod tests {
                 ssh_user: "ec2-user".into(),
                 ssh_private_key: None,
             },
-            available_node_types: hash_map! {
-                "ray.default.head".to_string() => NodeType {
+            available_node_types: {
+                let generic_node_type = NodeType {
                     node_config: NodeConfig::Aws(AwsNodeConfig {
                         instance_type: "t2.nano".into(),
                         iam_instance_profile: None,
                         image_id: "ami-07c5ecd8498c59db5".into(),
                         key_name: None,
                     }),
-                    min_workers: 2,
-                    max_workers: 2,
+                    min_workers: Some(2),
+                    max_workers: Some(2),
                     resources: Resources { cpu: 1, gpu: 0 },
-                },
-                "ray.default.head".to_string() => NodeType {
-                    node_config: NodeConfig::Aws(AwsNodeConfig {
-                        instance_type: "t2.nano".into(),
-                        iam_instance_profile: None,
-                        image_id: "ami-07c5ecd8498c59db5".into(),
-                        key_name: None,
-                    }),
-                    min_workers: 2,
-                    max_workers: 2,
-                    resources: Resources { cpu: 1, gpu: 0 },
-                },
+                };
+                hash_map! {
+                    "ray.head.default".to_string() => NodeType { min_workers: None, max_workers: None, ..generic_node_type.clone() },
+                    "ray.worker.default".to_string() => generic_node_type,
+                }
             },
             initialization_commands: vec![],
             setup_commands: vec![],

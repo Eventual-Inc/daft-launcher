@@ -1,11 +1,3 @@
-[workspace]
-members = ["libs/processable-option"]
-
-[workspace.dependencies]
-serde = { version = "1.0", features = ["derive"] }
-rstest = "0.23.0"
-either = "1.13.0"
-
 [package]
 name = "daft"
 edition = "2021"
@@ -23,8 +15,7 @@ tokio = { version = "1.40.0", features = ["full"] }
 hashbrown = { version = "0.15.0", features = ["serde"] }
 clap = { version = "4.5", features = ["derive"] }
 semver = { version = "1.0", features = ["serde"] }
-serde = { workspace = true }
-processable-option = { path = "libs/processable-option" }
+serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]
-rstest = { workspace = true }
+rstest = "0.23.0"

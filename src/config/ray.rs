@@ -2,8 +2,6 @@ use std::path;
 
 use serde::Serialize;
 
-use crate::{config::custom, utils};
-
 #[derive(Debug, Serialize, Clone, PartialEq)]
 pub struct RayConfig {
     pub cluster_name: String,
@@ -76,10 +74,9 @@ pub struct Resources {
     pub gpu: usize,
 }
 
-impl TryFrom<custom::CustomConfig> for RayConfig {
-    type Error = anyhow::Error;
-
-    fn try_from(custom_config: custom::CustomConfig) -> anyhow::Result<Self> {
-        utils::custom_to_ray_config(custom_config)
-    }
-}
+// impl TryFrom<RawC> for RayConfig {
+//     type Error = anyhow::Error;
+//     fn try_from(custom_config: custom::CustomConfig) -> anyhow::Result<Self> {
+//         utils::custom_to_ray_config(custom_config)
+//     }
+// }

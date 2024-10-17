@@ -3,7 +3,10 @@ use std::{
     path::{self, PathBuf},
 };
 
-use crate::config::{custom, ray};
+use crate::config::{
+    raw::{AwsCluster, RawConfig},
+    ray::RayConfig,
+};
 
 pub async fn is_authenticated_with_aws() -> bool {
     // let sdk_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
@@ -49,7 +52,7 @@ pub struct AwsOverridden {
 
 impl AwsOverridden {
     fn new(
-        aws_cluster: custom::AwsCluster,
+        aws_cluster: AwsCluster,
         image_id: String,
         instance_type: String,
         pre_setup_commands: Vec<String>,
@@ -73,7 +76,7 @@ impl AwsOverridden {
 fn aws_template_light_overrides(
     pre_setup_commands: Vec<String>,
     post_setup_commands: Vec<String>,
-    aws_cluster: custom::AwsCluster,
+    aws_cluster: AwsCluster,
 ) -> AwsOverridden {
     // AwsOverridden::new(
     //     aws_cluster,
@@ -89,7 +92,7 @@ fn aws_template_light_overrides(
 fn aws_template_normal_overrides(
     pre_setup_commands: Vec<String>,
     post_setup_commands: Vec<String>,
-    aws_cluster: custom::AwsCluster,
+    aws_cluster: AwsCluster,
 ) -> AwsOverridden {
     // AwsOverridden::new(
     //     aws_cluster,
@@ -105,7 +108,7 @@ fn aws_template_normal_overrides(
 fn aws_template_gpus_overrides(
     pre_setup_commands: Vec<String>,
     post_setup_commands: Vec<String>,
-    aws_cluster: custom::AwsCluster,
+    aws_cluster: AwsCluster,
 ) -> AwsOverridden {
     todo!()
 }
@@ -137,7 +140,7 @@ pub fn default_number_of_workers() -> usize {
 fn override_aws(
     pre_setup_commands: Vec<String>,
     post_setup_commands: Vec<String>,
-    aws_cluster: custom::AwsCluster,
+    aws_cluster: AwsCluster,
 ) -> anyhow::Result<AwsOverridden> {
     todo!()
     // let overridden = match (aws_cluster.template, aws_cluster.custom.as_ref()) {
@@ -158,8 +161,8 @@ fn override_aws(
 }
 
 pub fn custom_to_ray_config(
-    custom_config: custom::CustomConfig,
-) -> anyhow::Result<ray::RayConfig> {
+    custom_config: RawConfig,
+) -> anyhow::Result<RayConfig> {
     // let ray_config = match custom_config.cluster.provider {
     //     custom::Provider::Aws(aws_cluster) => {
     //         let overridden = override_aws(

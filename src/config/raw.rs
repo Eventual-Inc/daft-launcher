@@ -1,11 +1,10 @@
 use std::path::PathBuf;
 
-use processable_option::{Processable, ProcessableOption};
 use semver::{Version, VersionReq};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
-pub struct CustomConfig {
+pub struct RawConfig {
     pub package: Package,
     pub cluster: Cluster,
     #[serde(default, rename = "job")]
@@ -16,8 +15,8 @@ pub struct CustomConfig {
 pub struct Package {
     pub daft_launcher_version: Version,
     pub name: String,
-    pub python_version: ProcessableOption<VersionReq>,
-    pub ray_version: ProcessableOption<VersionReq>,
+    pub python_version: Option<VersionReq>,
+    pub ray_version: Option<VersionReq>,
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
@@ -42,7 +41,7 @@ pub struct Cluster {
 #[serde(tag = "provider")]
 #[serde(rename_all = "snake_case")]
 pub enum Provider {
-    Aws(Processable<AwsCluster, AwsOverrides>),
+    Aws(AwsCluster),
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
@@ -102,23 +101,23 @@ mod tests {
     use super::*;
 
     #[fixture]
-    fn light_toml() -> CustomConfig {
-        CustomConfig {
+    fn light_toml() -> RawConfig {
+        RawConfig {
             package: Package {
                 name: "light".into(),
                 daft_launcher_version: "0.4.0-alpha0".parse().unwrap(),
-                python_version: ProcessableOption::new(None),
-                ray_version: ProcessableOption::new(None),
+                python_version: None,
+                ray_version: None,
             },
             cluster: Cluster {
-                provider: Provider::Aws(Processable::new(AwsCluster {
+                provider: Provider::Aws(AwsCluster {
                     region: "us-west-2".into(),
                     ssh_user: None,
                     ssh_private_key: None,
                     iam_instance_profile_arn: None,
                     template: Some(AwsTemplateType::Light),
                     custom: None,
-                })),
+                }),
                 number_of_workers: 2,
                 dependencies: vec![],
                 pre_setup_commands: vec![],
@@ -133,16 +132,16 @@ mod tests {
     }
 
     #[fixture]
-    fn custom_toml() -> CustomConfig {
-        CustomConfig {
+    fn custom_toml() -> RawConfig {
+        RawConfig {
             package: Package {
                 name: "custom".into(),
                 daft_launcher_version: "0.1.0".parse().unwrap(),
-                python_version: ProcessableOption::new(None),
-                ray_version: ProcessableOption::new(None),
+                python_version: None,
+                ray_version: None,
             },
             cluster: Cluster {
-                provider: Provider::Aws(Processable::new(AwsCluster {
+                provider: Provider::Aws(AwsCluster {
                     region: "us-east-2".into(),
                     ssh_user: None,
                     ssh_private_key: None,
@@ -152,7 +151,7 @@ mod tests {
                         image_id: Some("...".into()),
                         instance_type: Some("...".into()),
                     }),
-                })),
+                }),
                 number_of_workers: 4,
                 dependencies: vec![
                     "pytorch".into(),
@@ -180,10 +179,7 @@ mod tests {
     #[rstest]
     #[case(read_toml!("assets" / "tests" / "light.toml"), light_toml())]
     #[case(read_toml!("assets" / "tests" / "custom.toml"), custom_toml())]
-    fn test_deser(
-        #[case] actual: CustomConfig,
-        #[case] expected: CustomConfig,
-    ) {
+    fn test_deser(#[case] actual: RawConfig, #[case] expected: RawConfig) {
         assert_eq!(actual, expected);
     }
 }

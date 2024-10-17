@@ -1,4 +1,5 @@
-pub mod custom;
+pub mod processed;
+pub mod raw;
 pub mod ray;
 
 use std::{
@@ -15,9 +16,9 @@ use which::which;
 
 use crate::{
     config::{
-        custom::{
-            AwsOverrides, AwsTemplateType, Cluster, CustomConfig, Package,
-            Provider,
+        raw::{
+            AwsOverrides, AwsTemplateType, Cluster, Package, Provider,
+            RawConfig,
         },
         ray::RayConfig,
     },
@@ -88,103 +89,104 @@ fn medium_instance() -> String {
     todo!()
 }
 
-fn process(custom_config: CustomConfig) -> anyhow::Result<CustomConfig> {
-    let python_version = custom_config
-        .package
-        .python_version
-        .try_or_else(get_python_version)?;
-    let ray_version = custom_config
-        .package
-        .ray_version
-        .try_or_else(get_ray_version)?;
+// fn process(raw_config: RawConfig) -> anyhow::Result<RawConfig> {
+//     let python_version = raw_config
+//         .package
+//         .python_version
+//         .try_or_else(get_python_version)?;
+//     let ray_version = raw_config
+//         .package
+//         .ray_version
+//         .try_or_else(get_ray_version)?;
 
-    let provider = match custom_config.cluster.provider {
-        Provider::Aws(aws_cluster) => {
-            Provider::Aws(aws_cluster.try_process(
-                |aws_cluster| -> anyhow::Result<_> {
-                    // const EC2_USER_SSH: &str = "ec2-user";
-                    // const UBUNTU_SSH: &str = "ubuntu";
-                    let get_ssh_user = |default: fn() -> String| aws_cluster.ssh_user.unwrap_or_else(default);
-                    let (ssh_user, image_id, instance_type) = match (aws_cluster.template, aws_cluster.custom) {
-                        (Some(..), Some(..)) => anyhow::bail!("Cannot specify both the template type and custom configurations in the AWS cluster configuration"),
-                        (None, None) => anyhow::bail!("Please specify either the template type or some custom configurations in the AWS cluster configuration"),
+//     let provider = match raw_config.cluster.provider {
+//         Provider::Aws(aws_cluster) => {
+//             Provider::Aws(aws_cluster.try_process(
+//                 |aws_cluster| -> anyhow::Result<_> {
+//                     // const EC2_USER_SSH: &str = "ec2-user";
+//                     // const UBUNTU_SSH: &str = "ubuntu";
+//                     let get_ssh_user = |default: fn() -> String| aws_cluster.ssh_user.unwrap_or_else(default);
+//                     let (ssh_user, image_id, instance_type) = match (aws_cluster.template, aws_cluster.custom) {
+//                         (Some(..), Some(..)) => anyhow::bail!("Cannot specify both the template type and custom configurations in the AWS cluster configuration"),
+//                         (None, None) => anyhow::bail!("Please specify either the template type or some custom configurations in the AWS cluster configuration"),
 
-                        (Some(AwsTemplateType::Light), None) => (get_ssh_user(ec2_user_ssh), "".into(), "".into()),
-                        (Some(AwsTemplateType::Normal), None) => (get_ssh_user(ec2_user_ssh), "".into(), "".into()),
-                        (Some(AwsTemplateType::Gpus), None) => (get_ssh_user(ubuntu_ssh), "".into(), "".into()),
-                        (None, Some(custom)) => (ec2_user_ssh(), custom.image_id.unwrap_or_else(|| "ami-01c3c55948a949a52".into()), custom.instance_type.unwrap_or_else(|| "m7g.medium".into())),
-                    };
-                    Ok(AwsOverrides {
-                        region: aws_cluster.region,
-                        ssh_private_key: aws_cluster.ssh_private_key.map_or_else(get_ssh_private_key, Ok)?,
-                        ssh_user,
-                        iam_instance_profile_arn: aws_cluster.iam_instance_profile_arn,
-                        image_id,
-                        instance_type,
-                    })
-                },
-            )?)
-            //     let specified_template = aws_cluster.template.is_some();
-            //     let specified_custom = aws_cluster.custom.is_some();
-            //     if specified_template && specified_custom {
-            //         return Err(anyhow::anyhow!(
-            //             "Cannot specify both template and custom in the AWS cluster configuration"
-            //         ));
-            //     } else if !specified_template && !specified_custom {
-            //         return Err(anyhow::anyhow!(
-            //             "Must specify either template or custom in the AWS cluster configuration"
-            //         ));
-            //     }
+//                         (Some(AwsTemplateType::Light), None) => (get_ssh_user(ec2_user_ssh), "".into(), "".into()),
+//                         (Some(AwsTemplateType::Normal), None) => (get_ssh_user(ec2_user_ssh), "".into(), "".into()),
+//                         (Some(AwsTemplateType::Gpus), None) => (get_ssh_user(ubuntu_ssh), "".into(), "".into()),
+//                         (None, Some(custom)) => (ec2_user_ssh(), custom.image_id.unwrap_or_else(|| "ami-01c3c55948a949a52".into()), custom.instance_type.unwrap_or_else(|| "m7g.medium".into())),
+//                     };
+//                     Ok(AwsOverrides {
+//                         region: aws_cluster.region,
+//                         ssh_private_key: aws_cluster.ssh_private_key.map_or_else(get_ssh_private_key, Ok)?,
+//                         ssh_user,
+//                         iam_instance_profile_arn: aws_cluster.iam_instance_profile_arn,
+//                         image_id,
+//                         instance_type,
+//                     })
+//                 },
+//             )?)
+//             //     let specified_template = aws_cluster.template.is_some();
+//             //     let specified_custom = aws_cluster.custom.is_some();
+//             //     if specified_template && specified_custom {
+//             //         return Err(anyhow::anyhow!(
+//             //             "Cannot specify both template and custom in the AWS cluster configuration"
+//             //         ));
+//             //     } else if !specified_template && !specified_custom {
+//             //         return Err(anyhow::anyhow!(
+//             //             "Must specify either template or custom in the AWS cluster configuration"
+//             //         ));
+//             //     }
 
-            //     custom_config.package.python_version = custom_config
-            //         .package
-            //         .python_version
-            //         .map_or_else(get_python_version, Ok)
-            //         .transpose()?;
-            //     custom_config.package.ray_version = custom_config
-            //         .package
-            //         .ray_version
-            //         .map_or_else(get_ray_version, Ok)
-            //         .transpose()?;
-            //     aws_cluster.ssh_user =
-            //         aws_cluster.ssh_user.or_else(|| match aws_cluster.template {
-            //             Some(AwsTemplateType::Light | AwsTemplateType::Normal)
-            //             | None => "ec2-user".into(),
-            //             Some(AwsTemplateType::Gpus) => "ubuntu".into(),
-            //         });
-            //     aws_cluster.ssh_private_key = aws_cluster
-            //         .ssh_private_key
-            //         .map_or_else(get_ssh_private_key, Ok)
-            //         .transpose()?;
-            //     Provider::Aws(aws_cluster)
-        }
-    };
-    Ok(CustomConfig {
-        package: Package {
-            python_version,
-            ray_version,
-            ..custom_config.package
-        },
-        cluster: Cluster {
-            provider,
-            ..custom_config.cluster
-        },
-        ..custom_config
-    })
-}
+//             //     custom_config.package.python_version = custom_config
+//             //         .package
+//             //         .python_version
+//             //         .map_or_else(get_python_version, Ok)
+//             //         .transpose()?;
+//             //     custom_config.package.ray_version = custom_config
+//             //         .package
+//             //         .ray_version
+//             //         .map_or_else(get_ray_version, Ok)
+//             //         .transpose()?;
+//             //     aws_cluster.ssh_user =
+//             //         aws_cluster.ssh_user.or_else(|| match aws_cluster.template {
+//             //             Some(AwsTemplateType::Light | AwsTemplateType::Normal)
+//             //             | None => "ec2-user".into(),
+//             //             Some(AwsTemplateType::Gpus) => "ubuntu".into(),
+//             //         });
+//             //     aws_cluster.ssh_private_key = aws_cluster
+//             //         .ssh_private_key
+//             //         .map_or_else(get_ssh_private_key, Ok)
+//             //         .transpose()?;
+//             //     Provider::Aws(aws_cluster)
+//         }
+//     };
+//     Ok(CustomConfig {
+//         package: Package {
+//             python_version,
+//             ray_version,
+//             ..raw_config.package
+//         },
+//         cluster: Cluster {
+//             provider,
+//             ..raw_config.cluster
+//         },
+//         ..raw_config
+//     })
+// }
 
-pub fn read_custom(path: &Path) -> anyhow::Result<CustomConfig> {
-    let mut file =
-        OpenOptions::new().read(true).open(path).with_context(|| {
-            format!("No configuration file found at the path {path:?}")
-        })?;
-    let mut buf = String::new();
-    let _ = file
-        .read_to_string(&mut buf)
-        .with_context(|| format!("Failed to read file {path:?}"))?;
-    let custom_config = toml::from_str(&buf)?;
-    let custom_config = process(custom_config)?;
-    Ok(custom_config)
+pub fn read_custom(path: &Path) -> anyhow::Result<RawConfig> {
+    // let mut file =
+    //     OpenOptions::new().read(true).open(path).with_context(|| {
+    //         format!("No configuration file found at the path {path:?}")
+    //     })?;
+    // let mut buf = String::new();
+    // let _ = file
+    //     .read_to_string(&mut buf)
+    //     .with_context(|| format!("Failed to read file {path:?}"))?;
+    // let custom_config = toml::from_str(&buf)?;
+    // let custom_config = process(custom_config)?;
+    // Ok(custom_config)
+    todo!()
 }
 
 pub fn write_ray(ray_config: &RayConfig) -> anyhow::Result<(TempDir, PathBuf)> {

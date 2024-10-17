@@ -40,22 +40,23 @@ fn handle_init_config(init_config: InitConfig) -> anyhow::Result<()> {
 }
 
 fn handle_up(up: Up) -> anyhow::Result<()> {
-    let custom_config = read_custom(&up.config.config)?;
-    let ray_config = custom_config.try_into()?;
-    let (temp_dir, path) = write_ray(&ray_config)?;
-    let _ = Command::new("ray")
-        .args([
-            "up",
-            path.to_str().expect("Invalid characters in file path"),
-        ])
-        .spawn()?
-        .wait()?;
+    // let custom_config = read_custom(&up.config.config)?;
+    // let ray_config = custom_config.try_into()?;
+    // let (temp_dir, path) = write_ray(&ray_config)?;
+    // let _ = Command::new("ray")
+    //     .args([
+    //         "up",
+    //         path.to_str().expect("Invalid characters in file path"),
+    //     ])
+    //     .spawn()?
+    //     .wait()?;
 
-    // Explicitly deletes the entire temporary directory.
-    // The config file that we wrote to inside of there will now be deleted.
-    drop(temp_dir);
+    // // Explicitly deletes the entire temporary directory.
+    // // The config file that we wrote to inside of there will now be deleted.
+    // drop(temp_dir);
 
-    Ok(())
+    // Ok(())
+    todo!()
 }
 
 fn handle_down(_: Down) -> anyhow::Result<()> {

@@ -1,7 +1,7 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use semver::{Version, VersionReq};
-use serde::Deserialize;
+use serde::{de::Error, Deserialize, Deserializer};
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 pub struct RawConfig {
@@ -23,16 +23,12 @@ pub struct Package {
 pub struct Cluster {
     #[serde(flatten)]
     pub provider: Provider,
-
     #[serde(default = "default_number_of_workers")]
     pub number_of_workers: usize,
-
     #[serde(default)]
     pub dependencies: Vec<String>,
-
     #[serde(default)]
     pub pre_setup_commands: Vec<String>,
-
     #[serde(default)]
     pub post_setup_commands: Vec<String>,
 }
@@ -49,10 +45,11 @@ pub struct AwsCluster {
     #[serde(default = "default_region")]
     pub region: String,
     pub ssh_user: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_optional_path")]
     pub ssh_private_key: Option<PathBuf>,
     pub iam_instance_profile_arn: Option<String>,
     pub template: Option<AwsTemplateType>,
-    pub custom: Option<AwsCustom>,
+    pub custom: Option<AwsCustomType>,
 }
 
 #[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq)]
@@ -64,24 +61,15 @@ pub enum AwsTemplateType {
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
-pub struct AwsCustom {
+pub struct AwsCustomType {
     pub image_id: Option<String>,
     pub instance_type: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AwsOverrides {
-    pub region: String,
-    pub ssh_user: String,
-    pub ssh_private_key: PathBuf,
-    pub iam_instance_profile_arn: Option<String>,
-    pub image_id: String,
-    pub instance_type: String,
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 pub struct Job {
     pub name: String,
+    #[serde(deserialize_with = "deserialize_dir")]
     pub working_dir: PathBuf,
     pub command: String,
 }
@@ -94,14 +82,64 @@ fn default_region() -> String {
     "us-west-2".into()
 }
 
+fn assert_path_exists<'de, D>(path: &Path) -> Result<(), D::Error>
+where
+    D: Deserializer<'de>,
+{
+    if path.exists() {
+        Ok(())
+    } else {
+        Err(Error::custom(format!(
+            "The path '{}' does not exist.",
+            path.display(),
+        )))
+    }
+}
+
+fn deserialize_dir<'de, D>(deserializer: D) -> Result<PathBuf, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let path = PathBuf::deserialize(deserializer)?;
+    assert_path_exists::<D>(&path)?;
+    if !path.is_dir() {
+        return Err(Error::custom(format!(
+            "The path '{}' is not a directory.",
+            path.display(),
+        )));
+    }
+    Ok(path)
+}
+
+fn deserialize_optional_path<'de, D>(
+    deserializer: D,
+) -> Result<Option<PathBuf>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let path = match Option::<PathBuf>::deserialize(deserializer).expect("asdf")
+    {
+        Some(path) => path,
+        None => return Ok(None),
+    };
+    assert_path_exists::<D>(&path)?;
+    if !path.is_file() {
+        return Err(Error::custom(format!(
+            "The path '{}' is not a file.",
+            path.display(),
+        )));
+    }
+    Ok(Some(path))
+}
+
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use rstest::{fixture, rstest};
 
     use super::*;
 
     #[fixture]
-    fn light_toml() -> RawConfig {
+    pub fn light_raw_config() -> RawConfig {
         RawConfig {
             package: Package {
                 name: "light".into(),
@@ -125,14 +163,14 @@ mod tests {
             },
             jobs: vec![Job {
                 name: "filter".into(),
-                working_dir: "jobs".into(),
+                working_dir: "assets".into(),
                 command: "python filter.py".into(),
             }],
         }
     }
 
     #[fixture]
-    fn custom_toml() -> RawConfig {
+    pub fn custom_raw_config() -> RawConfig {
         RawConfig {
             package: Package {
                 name: "custom".into(),
@@ -147,7 +185,7 @@ mod tests {
                     ssh_private_key: None,
                     iam_instance_profile_arn: None,
                     template: None,
-                    custom: Some(AwsCustom {
+                    custom: Some(AwsCustomType {
                         image_id: Some("...".into()),
                         instance_type: Some("...".into()),
                     }),
@@ -164,12 +202,12 @@ mod tests {
             jobs: vec![
                 Job {
                     name: "filter".into(),
-                    working_dir: "jobs".into(),
+                    working_dir: "assets".into(),
                     command: "python filter.py".into(),
                 },
                 Job {
                     name: "dedupe".into(),
-                    working_dir: "jobs".into(),
+                    working_dir: "assets".into(),
                     command: "python dedupe.py".into(),
                 },
             ],
@@ -177,9 +215,13 @@ mod tests {
     }
 
     #[rstest]
-    #[case(read_toml!("assets" / "tests" / "light.toml"), light_toml())]
-    #[case(read_toml!("assets" / "tests" / "custom.toml"), custom_toml())]
-    fn test_deser(#[case] actual: RawConfig, #[case] expected: RawConfig) {
+    #[case(include_str!(path_from_root!("assets" / "tests" / "light.toml")), light_raw_config())]
+    #[case(include_str!(path_from_root!("assets" / "tests" / "custom.toml")), custom_raw_config())]
+    fn test_str_to_raw_config(
+        #[case] input: &str,
+        #[case] expected: RawConfig,
+    ) {
+        let actual: RawConfig = toml::from_str(input).unwrap();
         assert_eq!(actual, expected);
     }
 }

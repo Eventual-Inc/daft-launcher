@@ -8,5 +8,5 @@ template = "light"
 
 [[job]]
 name = "filter"
-working_dir = "jobs"
+working_dir = "assets"
 command = "python filter.py"

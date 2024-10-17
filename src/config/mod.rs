@@ -16,54 +16,11 @@ use which::which;
 
 use crate::{
     config::{
-        raw::{
-            AwsOverrides, AwsTemplateType, Cluster, Package, Provider,
-            RawConfig,
-        },
+        raw::{AwsTemplateType, Cluster, Package, Provider, RawConfig},
         ray::RayConfig,
     },
     utils::create_new_file,
 };
-
-fn get_version(executable: &str, prefix: &str) -> anyhow::Result<Version> {
-    if which(executable).is_err() {
-        anyhow::bail!("Cannot find a(n) {executable} executable in your $PATH; failed to autodetect {executable} version")
-    };
-    let output = Command::new(executable)
-        .arg("--version")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()?
-        .wait_with_output()?;
-    if output.status.success() {
-        let version_req = String::from_utf8(output.stdout)?;
-        let version_req = version_req
-            .strip_prefix(prefix)
-            .unwrap()
-            .strip_suffix("\n")
-            .unwrap()
-            .parse()
-            .unwrap();
-        Ok(version_req)
-    } else {
-        anyhow::bail!("Failed to run `{executable} --version`")
-    }
-}
-
-fn get_python_version() -> anyhow::Result<VersionReq> {
-    let version = get_version("python", "Python ")?;
-    let minimum_python_version = "3.9".parse::<VersionReq>().unwrap();
-    if minimum_python_version.matches(&version) {
-        Ok(format!("={version}").parse().unwrap())
-    } else {
-        anyhow::bail!("Python version {version} is not supported; must be >= {minimum_python_version}")
-    }
-}
-
-fn get_ray_version() -> anyhow::Result<VersionReq> {
-    let version = get_version("ray", "ray, version ")?;
-    Ok(format!("={version}").parse().unwrap())
-}
 
 fn get_ssh_private_key() -> anyhow::Result<PathBuf> {
     todo!()

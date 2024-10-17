@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
+use processable_option::{Processable, ProcessableOption};
+use semver::{Version, VersionReq};
 use serde::Deserialize;
-
-use crate::processable_option::ProcessableOption;
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 pub struct CustomConfig {
@@ -14,10 +14,10 @@ pub struct CustomConfig {
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 pub struct Package {
-    pub daft_launcher_version: semver::Version,
+    pub daft_launcher_version: Version,
     pub name: String,
-    pub python_version: ProcessableOption<semver::VersionReq>,
-    pub ray_version: ProcessableOption<semver::VersionReq>,
+    pub python_version: ProcessableOption<VersionReq>,
+    pub ray_version: ProcessableOption<VersionReq>,
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
@@ -42,15 +42,15 @@ pub struct Cluster {
 #[serde(tag = "provider")]
 #[serde(rename_all = "snake_case")]
 pub enum Provider {
-    Aws(AwsCluster),
+    Aws(Processable<AwsCluster, AwsOverrides>),
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 pub struct AwsCluster {
     #[serde(default = "default_region")]
     pub region: String,
-    pub ssh_user: ProcessableOption<String>,
-    pub ssh_private_key: ProcessableOption<PathBuf>,
+    pub ssh_user: Option<String>,
+    pub ssh_private_key: Option<PathBuf>,
     pub iam_instance_profile_arn: Option<String>,
     pub template: Option<AwsTemplateType>,
     pub custom: Option<AwsCustom>,
@@ -70,6 +70,16 @@ pub struct AwsCustom {
     pub instance_type: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AwsOverrides {
+    pub region: String,
+    pub ssh_user: String,
+    pub ssh_private_key: PathBuf,
+    pub iam_instance_profile_arn: Option<String>,
+    pub image_id: String,
+    pub instance_type: String,
+}
+
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 pub struct Job {
     pub name: String,
@@ -83,4 +93,97 @@ fn default_number_of_workers() -> usize {
 
 fn default_region() -> String {
     "us-west-2".into()
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::{fixture, rstest};
+
+    use super::*;
+
+    #[fixture]
+    fn light_toml() -> CustomConfig {
+        CustomConfig {
+            package: Package {
+                name: "light".into(),
+                daft_launcher_version: "0.4.0-alpha0".parse().unwrap(),
+                python_version: ProcessableOption::new(None),
+                ray_version: ProcessableOption::new(None),
+            },
+            cluster: Cluster {
+                provider: Provider::Aws(Processable::new(AwsCluster {
+                    region: "us-west-2".into(),
+                    ssh_user: None,
+                    ssh_private_key: None,
+                    iam_instance_profile_arn: None,
+                    template: Some(AwsTemplateType::Light),
+                    custom: None,
+                })),
+                number_of_workers: 2,
+                dependencies: vec![],
+                pre_setup_commands: vec![],
+                post_setup_commands: vec![],
+            },
+            jobs: vec![Job {
+                name: "filter".into(),
+                working_dir: "jobs".into(),
+                command: "python filter.py".into(),
+            }],
+        }
+    }
+
+    #[fixture]
+    fn custom_toml() -> CustomConfig {
+        CustomConfig {
+            package: Package {
+                name: "custom".into(),
+                daft_launcher_version: "0.1.0".parse().unwrap(),
+                python_version: ProcessableOption::new(None),
+                ray_version: ProcessableOption::new(None),
+            },
+            cluster: Cluster {
+                provider: Provider::Aws(Processable::new(AwsCluster {
+                    region: "us-east-2".into(),
+                    ssh_user: None,
+                    ssh_private_key: None,
+                    iam_instance_profile_arn: None,
+                    template: None,
+                    custom: Some(AwsCustom {
+                        image_id: Some("...".into()),
+                        instance_type: Some("...".into()),
+                    }),
+                })),
+                number_of_workers: 4,
+                dependencies: vec![
+                    "pytorch".into(),
+                    "pandas".into(),
+                    "numpy".into(),
+                ],
+                pre_setup_commands: vec!["echo 'Hello, world!'".into()],
+                post_setup_commands: vec!["echo 'Finished!'".into()],
+            },
+            jobs: vec![
+                Job {
+                    name: "filter".into(),
+                    working_dir: "jobs".into(),
+                    command: "python filter.py".into(),
+                },
+                Job {
+                    name: "dedupe".into(),
+                    working_dir: "jobs".into(),
+                    command: "python dedupe.py".into(),
+                },
+            ],
+        }
+    }
+
+    #[rstest]
+    #[case(read_toml!("assets" / "tests" / "light.toml"), light_toml())]
+    #[case(read_toml!("assets" / "tests" / "custom.toml"), custom_toml())]
+    fn test_deser(
+        #[case] actual: CustomConfig,
+        #[case] expected: CustomConfig,
+    ) {
+        assert_eq!(actual, expected);
+    }
 }

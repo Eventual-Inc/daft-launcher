@@ -20,7 +20,6 @@ macro_rules! read_toml {
 mod cli;
 mod config;
 mod handlers;
-mod processable_option;
 mod utils;
 
 use clap::CommandFactory;

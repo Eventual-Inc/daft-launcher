@@ -1166,6 +1166,7 @@ dependencies = [
 name = "processable-option"
 version = "0.0.0"
 dependencies = [
+ "either",
  "rstest",
  "serde",
 ]

@@ -3,9 +3,7 @@ use std::path::Path;
 use semver::{Version, VersionReq};
 use serde::{de::Error, Deserialize, Deserializer};
 
-use crate::{utils::expand, StrRef};
-
-use crate::config::PathRef;
+use crate::{config::PathRef, utils::expand, StrRef};
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -160,9 +158,8 @@ where
 pub mod tests {
     use rstest::{fixture, rstest};
 
-    use crate::path_ref;
-
     use super::*;
+    use crate::path_ref;
 
     #[fixture]
     pub fn light_raw_config() -> RawConfig {

@@ -3,10 +3,10 @@ use std::process::{Command, Stdio};
 use semver::{Version, VersionReq};
 use which::which;
 
-use crate::config::{raw, raw::Job};
-
-use crate::config::PathRef;
-use crate::StrRef;
+use crate::{
+    config::{raw, raw::Job, PathRef},
+    StrRef,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProcessedConfig {
@@ -182,10 +182,10 @@ fn get_ray_version() -> anyhow::Result<VersionReq> {
 
 #[cfg(test)]
 pub mod tests {
-    use crate::path_ref;
     use rstest::{fixture, rstest};
 
     use super::*;
+    use crate::path_ref;
 
     #[fixture]
     pub fn light_processed_config() -> ProcessedConfig {

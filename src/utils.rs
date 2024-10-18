@@ -9,8 +9,7 @@ use anyhow::Context;
 use dirs::home_dir;
 use tempdir::TempDir;
 
-use crate::path_ref;
-use crate::PathRef;
+use crate::{path_ref, PathRef};
 
 pub fn expand(path: PathRef) -> anyhow::Result<PathRef> {
     if path.starts_with("~") {
@@ -78,10 +77,8 @@ pub fn create_new_temp_file() -> anyhow::Result<(TempDir, PathRef, File)> {
 mod tests {
     use rstest::rstest;
 
-    use crate::path_ref;
-    use crate::StrRef;
-
     use super::*;
+    use crate::{path_ref, StrRef};
 
     #[rstest]
     #[case("target", "target".into())]

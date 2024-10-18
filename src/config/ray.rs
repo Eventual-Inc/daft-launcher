@@ -4,9 +4,7 @@ use hashbrown::HashMap;
 use map_macro::hashbrown::hash_map;
 use serde::Serialize;
 
-use crate::{config::processed, utils::path_to_str, StrRef};
-
-use crate::PathRef;
+use crate::{config::processed, utils::path_to_str, PathRef, StrRef};
 
 #[derive(Debug, Serialize, Clone, PartialEq)]
 pub struct RayConfig {

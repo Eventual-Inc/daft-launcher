@@ -1,17 +1,24 @@
-use std::{io::Write, process::Command};
+use std::{
+    borrow::Cow, io::Write, path::Path, process::Command, sync::LazyLock,
+};
 
 use clap::Parser;
+use semver::Version;
 use tempdir::TempDir;
 
 use crate::{
     cli::{Cli, Connect, Dashboard, Down, InitConfig, Sql, Submit, Up},
-    config::{read_custom, write_ray, write_ray_cluster_name},
+    config::{
+        processed::ProcessedConfig, read_custom, write_ray, write_ray_adhoc,
+    },
     utils::{assert_is_authenticated_with_aws, create_new_file, path_to_str},
     PathRef,
 };
 
 const DEFAULT_CONFIG: &str =
     include_str!(path_from_root!("assets" / "default.toml"));
+static DAFT_LAUNCHER_VERSION: LazyLock<Version> =
+    LazyLock::new(|| env!("CARGO_PKG_VERSION").parse().unwrap());
 
 pub async fn handle() -> anyhow::Result<()> {
     match Cli::parse() {
@@ -35,8 +42,20 @@ fn handle_init_config(init_config: InitConfig) -> anyhow::Result<()> {
     if init_config.interactive {
         todo!()
     } else {
-        create_new_file(&init_config.name)?
-            .write_all(DEFAULT_CONFIG.as_bytes())?;
+        let mut file = create_new_file(&init_config.name)?;
+        for line in DEFAULT_CONFIG.lines() {
+            let line: Cow<str> = if line.starts_with("daft_launcher_version") {
+                format!(
+                    r#"daft_launcher_version = "={}""#,
+                    env!("CARGO_PKG_VERSION")
+                )
+                .into()
+            } else {
+                line.into()
+            };
+            file.write_all(line.as_bytes())?;
+            let _ = file.write(b"\n")?;
+        }
         Ok(())
     }
 }
@@ -62,21 +81,46 @@ fn run_ray_command(
     Ok(())
 }
 
+fn assert_matching_daft_launcher_versions(
+    config_path: &Path,
+    processed_config: &ProcessedConfig,
+) -> anyhow::Result<()> {
+    if processed_config
+        .package
+        .daft_launcher_version
+        .matches(&DAFT_LAUNCHER_VERSION)
+    {
+        Ok(())
+    } else {
+        anyhow::bail!("The version requirement in the config file located at {:?} (version-requirement {}) is not satisfied by this binary's version (version {})", config_path, processed_config.package.daft_launcher_version, &*DAFT_LAUNCHER_VERSION)
+    }
+}
+
 fn handle_up(up: Up) -> anyhow::Result<()> {
-    let (_, ray_config) = read_custom(&up.config.config)?;
+    let (processed_config, ray_config) = read_custom(&up.config.config)?;
+    assert_matching_daft_launcher_versions(
+        &up.config.config,
+        &processed_config,
+    )?;
+
     let (temp_dir, path) = write_ray(&ray_config)?;
     run_ray_command(temp_dir, path, "up", None)
 }
 
 fn handle_down(down: Down) -> anyhow::Result<()> {
+    let (processed_config, ray_config) = read_custom(&down.config.config)?;
+    assert_matching_daft_launcher_versions(
+        &down.config.config,
+        &processed_config,
+    )?;
+
     match (down.name, down.r#type, down.region) {
         (Some(name), Some(r#type), Some(region)) => {
             let (temp_dir, path) =
-                write_ray_cluster_name(&name, &r#type, &region)?;
+                write_ray_adhoc(&name, &r#type, &region)?;
             run_ray_command(temp_dir, path, "down", None)
         }
         (None, None, None) => {
-            let (_, ray_config) = read_custom(&down.config.config)?;
             let (temp_dir, path) = write_ray(&ray_config)?;
             run_ray_command(temp_dir, path, "down", None)
         }

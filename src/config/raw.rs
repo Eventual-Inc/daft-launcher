@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use semver::{Version, VersionReq};
+use semver::VersionReq;
 use serde::{de::Error, Deserialize, Deserializer};
 
 use crate::{config::PathRef, utils::expand, StrRef};
@@ -17,7 +17,7 @@ pub struct RawConfig {
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct Package {
-    pub daft_launcher_version: Version,
+    pub daft_launcher_version: VersionReq,
     pub name: StrRef,
     pub python_version: Option<VersionReq>,
     pub ray_version: Option<VersionReq>,

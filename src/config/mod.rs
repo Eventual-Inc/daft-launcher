@@ -44,7 +44,7 @@ pub fn write_ray(ray_config: &RayConfig) -> anyhow::Result<(TempDir, PathRef)> {
     Ok((temp_dir, path))
 }
 
-pub fn write_ray_cluster_name(
+pub fn write_ray_adhoc(
     name: &str,
     r#type: &str,
     region: &str,

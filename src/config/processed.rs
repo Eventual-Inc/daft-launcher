@@ -23,7 +23,7 @@ pub struct ProcessedConfig {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Package {
-    pub daft_launcher_version: Version,
+    pub daft_launcher_version: VersionReq,
     pub name: StrRef,
     pub python_version: VersionReq,
     pub ray_version: VersionReq,

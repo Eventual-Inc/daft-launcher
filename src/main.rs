@@ -29,7 +29,7 @@ pub fn path_ref<'a>(x: impl AsRef<Path>) -> PathRef {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     env_logger::try_init().ok();
-    log::info!("Starting daft launcher");
+    log::info!("daft launcher - {}", env!("CARGO_PKG_VERSION"));
     if let Err(error) = handlers::handle().await {
         log::error!("Error: {}", error);
         log::error!("Backtrace: {}", error.backtrace());

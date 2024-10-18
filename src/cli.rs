@@ -16,7 +16,7 @@ pub enum Cli {
     Sql(Sql),
 }
 
-#[derive(Parser)]
+#[derive(Debug, Parser, Clone, PartialEq, Eq)]
 pub struct InitConfig {
     /// Name of the configuration file (can be specified as a path)
     #[arg(short, long, value_name = "NAME", default_value = ".daft.toml")]
@@ -27,13 +27,13 @@ pub struct InitConfig {
     pub interactive: bool,
 }
 
-#[derive(Parser)]
+#[derive(Debug, Parser, Clone, PartialEq, Eq)]
 pub struct Up {
     #[clap(flatten)]
     pub config: Config,
 }
 
-#[derive(Parser)]
+#[derive(Debug, Parser, Clone, PartialEq, Eq)]
 pub struct Down {
     #[clap(flatten)]
     pub config: Config,
@@ -51,31 +51,31 @@ pub struct Down {
     pub region: Option<ArcStrRef>,
 }
 
-#[derive(Parser)]
+#[derive(Debug, Parser, Clone, PartialEq, Eq)]
 pub struct Submit {
     #[clap(flatten)]
     pub config: Config,
 }
 
-#[derive(Parser)]
+#[derive(Debug, Parser, Clone, PartialEq, Eq)]
 pub struct Connect {
     #[clap(flatten)]
     pub config: Config,
 }
 
-#[derive(Parser)]
+#[derive(Debug, Parser, Clone, PartialEq, Eq)]
 pub struct Dashboard {
     #[clap(flatten)]
     pub config: Config,
 }
 
-#[derive(Parser)]
+#[derive(Debug, Parser, Clone, PartialEq, Eq)]
 pub struct Sql {
     #[clap(flatten)]
     pub config: Config,
 }
 
-#[derive(Parser, Clone)]
+#[derive(Debug, Parser, Clone, PartialEq, Eq)]
 pub struct Config {
     /// Path to configuration file
     #[arg(short, long, value_name = "FILE", default_value = ".daft.toml")]

@@ -1,4 +1,7 @@
-use std::process::{Command, Stdio};
+use std::{
+    process::{Command, Stdio},
+    sync::LazyLock,
+};
 
 use semver::{Version, VersionReq};
 use which::which;
@@ -7,6 +10,9 @@ use crate::{
     config::{raw, raw::Job, PathRef},
     StrRef,
 };
+
+static MIN_PYTHON_VERSION: LazyLock<VersionReq> =
+    LazyLock::new(|| "3.9".parse().unwrap());
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProcessedConfig {
@@ -167,16 +173,17 @@ fn get_version(executable: &str, prefix: &str) -> anyhow::Result<Version> {
 
 fn get_python_version() -> anyhow::Result<VersionReq> {
     let version = get_version("python", "Python ")?;
-    let minimum_python_version = "3.9".parse::<VersionReq>().unwrap();
-    if minimum_python_version.matches(&version) {
+    if MIN_PYTHON_VERSION.matches(&version) {
+        log::info!("Python version determined to be: {version}");
         Ok(format!("={version}").parse().unwrap())
     } else {
-        anyhow::bail!("Python version {version} is not supported; must be >= {minimum_python_version}")
+        anyhow::bail!("Python version {version} is not supported; must be >= {MIN_PYTHON_VERSION:?}")
     }
 }
 
 fn get_ray_version() -> anyhow::Result<VersionReq> {
     let version = get_version("ray", "ray, version ")?;
+    log::info!("Ray version determined to be: {version}");
     Ok(format!("={version}").parse().unwrap())
 }
 

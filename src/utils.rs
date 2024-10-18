@@ -41,7 +41,7 @@ pub async fn assert_is_authenticated_with_aws() -> anyhow::Result<()> {
 }
 
 pub fn create_new_file(path: &Path) -> anyhow::Result<File> {
-    OpenOptions::new()
+    let file = OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(path)
@@ -50,7 +50,9 @@ pub fn create_new_file(path: &Path) -> anyhow::Result<File> {
                 anyhow::anyhow!("The file {:?} already exists", path)
             }
             _ => error.into(),
-        })
+        })?;
+    log::info!("Created new file: {path:?}");
+    Ok(file)
 }
 
 pub fn path_to_str<'a, I>(path: I) -> anyhow::Result<&'a str>
@@ -63,10 +65,11 @@ where
         .with_context(|| anyhow::anyhow!("Invalid characters in path"))
 }
 
-pub fn create_new_temp_file() -> anyhow::Result<(TempDir, PathRef, File)> {
+pub fn create_ray_temporary_file() -> anyhow::Result<(TempDir, PathRef, File)> {
     let temp_dir = TempDir::new("ray_config")
         .expect("Creation of temporary directory should always succeed");
     let path = path_ref(temp_dir.path().join("ray.yaml"));
+    log::info!("Created new temporary dir {temp_dir:?} and new temporary ray config file at path {path:?}");
     let file = create_new_file(&path).expect(
         "Creating new file in temporary directory should always succeed",
     );

@@ -3,9 +3,10 @@ use std::path::{Path, PathBuf};
 use semver::{Version, VersionReq};
 use serde::{de::Error, Deserialize, Deserializer};
 
-use crate::utils::expand;
+use crate::{config::StrRef, utils::expand};
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct RawConfig {
     pub package: Package,
     pub cluster: Cluster,
@@ -14,9 +15,10 @@ pub struct RawConfig {
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct Package {
     pub daft_launcher_version: Version,
-    pub name: String,
+    pub name: StrRef,
     pub python_version: Option<VersionReq>,
     pub ray_version: Option<VersionReq>,
 }
@@ -28,34 +30,37 @@ pub struct Cluster {
     #[serde(default = "default_number_of_workers")]
     pub number_of_workers: usize,
     #[serde(default)]
-    pub dependencies: Vec<String>,
+    pub dependencies: Vec<StrRef>,
     #[serde(default)]
-    pub pre_setup_commands: Vec<String>,
+    pub pre_setup_commands: Vec<StrRef>,
     #[serde(default)]
-    pub post_setup_commands: Vec<String>,
+    pub post_setup_commands: Vec<StrRef>,
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 #[serde(tag = "provider")]
 #[serde(rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
 pub enum Provider {
     Aws(AwsCluster),
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct AwsCluster {
     #[serde(default = "default_region")]
-    pub region: String,
-    pub ssh_user: Option<String>,
+    pub region: StrRef,
+    pub ssh_user: Option<StrRef>,
     #[serde(default, deserialize_with = "deserialize_optional_path")]
     pub ssh_private_key: Option<PathBuf>,
-    pub iam_instance_profile_arn: Option<String>,
+    pub iam_instance_profile_arn: Option<StrRef>,
     pub template: Option<AwsTemplateType>,
     pub custom: Option<AwsCustomType>,
 }
 
 #[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
 pub enum AwsTemplateType {
     Light,
     Normal,
@@ -63,24 +68,26 @@ pub enum AwsTemplateType {
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct AwsCustomType {
-    pub image_id: Option<String>,
-    pub instance_type: Option<String>,
+    pub image_id: Option<StrRef>,
+    pub instance_type: Option<StrRef>,
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct Job {
-    pub name: String,
+    pub name: StrRef,
     #[serde(deserialize_with = "deserialize_dir")]
     pub working_dir: PathBuf,
-    pub command: String,
+    pub command: StrRef,
 }
 
 fn default_number_of_workers() -> usize {
     2
 }
 
-fn default_region() -> String {
+fn default_region() -> StrRef {
     "us-west-2".into()
 }
 

@@ -6,7 +6,7 @@ use std::{
 use semver::{Version, VersionReq};
 use which::which;
 
-use crate::config::{raw, raw::Job};
+use crate::config::{raw, raw::Job, StrRef};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProcessedConfig {
@@ -18,7 +18,7 @@ pub struct ProcessedConfig {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Package {
     pub daft_launcher_version: Version,
-    pub name: String,
+    pub name: StrRef,
     pub python_version: VersionReq,
     pub ray_version: VersionReq,
 }
@@ -43,9 +43,9 @@ impl TryFrom<raw::Package> for Package {
 pub struct Cluster {
     pub provider: Provider,
     pub number_of_workers: usize,
-    pub dependencies: Vec<String>,
-    pub pre_setup_commands: Vec<String>,
-    pub post_setup_commands: Vec<String>,
+    pub dependencies: Vec<StrRef>,
+    pub pre_setup_commands: Vec<StrRef>,
+    pub post_setup_commands: Vec<StrRef>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -56,7 +56,7 @@ pub enum Provider {
 impl Provider {
     pub fn process(
         provider: raw::Provider,
-    ) -> anyhow::Result<(Self, Vec<String>, Vec<String>)> {
+    ) -> anyhow::Result<(Self, Vec<StrRef>, Vec<StrRef>)> {
         let (provider, pre_setup_commands, post_setup_commands) = match provider
         {
             raw::Provider::Aws(aws_cluster) => {
@@ -110,12 +110,12 @@ impl Provider {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AwsCluster {
-    pub region: String,
-    pub ssh_user: String,
+    pub region: StrRef,
+    pub ssh_user: StrRef,
     pub ssh_private_key: Option<PathBuf>,
-    pub iam_instance_profile_arn: Option<String>,
-    pub image_id: String,
-    pub instance_type: String,
+    pub iam_instance_profile_arn: Option<StrRef>,
+    pub image_id: StrRef,
+    pub instance_type: StrRef,
 }
 
 impl TryFrom<raw::RawConfig> for ProcessedConfig {

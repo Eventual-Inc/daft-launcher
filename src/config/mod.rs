@@ -6,6 +6,7 @@ use std::{
     fs::OpenOptions,
     io::{Read, Write},
     path::{Path, PathBuf},
+    rc::Rc,
 };
 
 use anyhow::Context;
@@ -16,6 +17,8 @@ use crate::{
     config::{raw::RawConfig, ray::RayConfig},
     utils::create_new_temp_file,
 };
+
+pub type StrRef = Rc<str>;
 
 pub fn read_custom(
     path: &Path,

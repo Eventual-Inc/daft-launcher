@@ -4,28 +4,31 @@ use hashbrown::HashMap;
 use map_macro::hashbrown::hash_map;
 use serde::Serialize;
 
-use crate::{config::processed, utils::path_to_str};
+use crate::{
+    config::{processed, StrRef},
+    utils::path_to_str,
+};
 
 #[derive(Debug, Serialize, Clone, PartialEq)]
 pub struct RayConfig {
-    pub cluster_name: String,
+    pub cluster_name: StrRef,
     pub max_workers: usize,
     pub provider: Provider,
     pub auth: Auth,
-    pub available_node_types: HashMap<String, NodeType>,
-    pub initialization_commands: Vec<String>,
-    pub setup_commands: Vec<String>,
+    pub available_node_types: HashMap<StrRef, NodeType>,
+    pub initialization_commands: Vec<StrRef>,
+    pub setup_commands: Vec<StrRef>,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq)]
 pub struct Provider {
-    pub r#type: String,
-    pub region: String,
+    pub r#type: StrRef,
+    pub region: StrRef,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq)]
 pub struct Auth {
-    pub ssh_user: String,
+    pub ssh_user: StrRef,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ssh_private_key: Option<PathBuf>,
 }
@@ -49,22 +52,22 @@ pub enum NodeConfig {
 #[derive(Debug, Serialize, Clone, PartialEq)]
 pub struct AwsNodeConfig {
     #[serde(rename = "InstanceType")]
-    pub instance_type: String,
+    pub instance_type: StrRef,
     #[serde(
         rename = "IamInstanceProfile",
         skip_serializing_if = "Option::is_none"
     )]
     pub iam_instance_profile: Option<IamInstanceProfile>,
     #[serde(rename = "ImageId")]
-    pub image_id: String,
+    pub image_id: StrRef,
     #[serde(rename = "KeyName")]
-    pub key_name: Option<String>,
+    pub key_name: Option<StrRef>,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq)]
 pub struct IamInstanceProfile {
     #[serde(rename = "Arn")]
-    pub arn: String,
+    pub arn: StrRef,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq)]
@@ -89,49 +92,47 @@ impl TryFrom<processed::ProcessedConfig> for RayConfig {
     fn try_from(
         config: processed::ProcessedConfig,
     ) -> Result<Self, Self::Error> {
-        let (provider, available_node_types, auth) = match config
-            .cluster
-            .provider
-        {
-            processed::Provider::Aws(aws_cluster) => (
-                Provider {
-                    r#type: "aws".into(),
-                    region: aws_cluster.region,
-                },
-                {
-                    let generic_node_type = NodeType {
-                        node_config: NodeConfig::Aws(AwsNodeConfig {
-                            instance_type: aws_cluster.instance_type,
-                            iam_instance_profile: aws_cluster
-                                .iam_instance_profile_arn
-                                .map(|arn| IamInstanceProfile { arn }),
-                            image_id: aws_cluster.image_id,
-                            key_name: aws_cluster
-                                .ssh_private_key
-                                .as_deref()
-                                .map(to_key_name)
-                                .transpose()?
-                                .map(str::to_string),
-                        }),
-                        min_workers: Some(config.cluster.number_of_workers),
-                        max_workers: Some(config.cluster.number_of_workers),
-                        resources: Resources { cpu: 1, gpu: 0 },
-                    };
-                    hash_map! {
-                        "ray.head.default".to_string() => NodeType {
-                            min_workers: None,
-                            max_workers: None,
-                            ..generic_node_type.clone()
-                        },
-                        "ray.worker.default".to_string() => generic_node_type,
-                    }
-                },
-                Auth {
-                    ssh_user: aws_cluster.ssh_user,
-                    ssh_private_key: aws_cluster.ssh_private_key,
-                },
-            ),
-        };
+        let (provider, available_node_types, auth) =
+            match config.cluster.provider {
+                processed::Provider::Aws(aws_cluster) => (
+                    Provider {
+                        r#type: "aws".into(),
+                        region: aws_cluster.region,
+                    },
+                    {
+                        let generic_node_type = NodeType {
+                            node_config: NodeConfig::Aws(AwsNodeConfig {
+                                instance_type: aws_cluster.instance_type,
+                                iam_instance_profile: aws_cluster
+                                    .iam_instance_profile_arn
+                                    .map(|arn| IamInstanceProfile { arn }),
+                                image_id: aws_cluster.image_id,
+                                key_name: aws_cluster
+                                    .ssh_private_key
+                                    .as_deref()
+                                    .map(to_key_name)
+                                    .transpose()?
+                                    .map(Into::into),
+                            }),
+                            min_workers: Some(config.cluster.number_of_workers),
+                            max_workers: Some(config.cluster.number_of_workers),
+                            resources: Resources { cpu: 1, gpu: 0 },
+                        };
+                        hash_map! {
+                            "ray.head.default".into() => NodeType {
+                                min_workers: None,
+                                max_workers: None,
+                                ..generic_node_type.clone()
+                            },
+                            "ray.worker.default".into() => generic_node_type,
+                        }
+                    },
+                    Auth {
+                        ssh_user: aws_cluster.ssh_user,
+                        ssh_private_key: aws_cluster.ssh_private_key,
+                    },
+                ),
+            };
         Ok(Self {
             cluster_name: config.package.name,
             max_workers: config.cluster.number_of_workers,
@@ -177,8 +178,8 @@ mod tests {
                     resources: Resources { cpu: 1, gpu: 0 },
                 };
                 hash_map! {
-                    "ray.head.default".to_string() => NodeType { min_workers: None, max_workers: None, ..generic_node_type.clone() },
-                    "ray.worker.default".to_string() => generic_node_type,
+                    "ray.head.default".into() => NodeType { min_workers: None, max_workers: None, ..generic_node_type.clone() },
+                    "ray.worker.default".into() => generic_node_type,
                 }
             },
             initialization_commands: vec![],

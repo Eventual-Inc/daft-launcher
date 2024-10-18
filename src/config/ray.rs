@@ -1,13 +1,12 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use hashbrown::HashMap;
 use map_macro::hashbrown::hash_map;
 use serde::Serialize;
 
-use crate::{
-    config::{processed, StrRef},
-    utils::path_to_str,
-};
+use crate::{config::processed, utils::path_to_str, StrRef};
+
+use crate::PathRef;
 
 #[derive(Debug, Serialize, Clone, PartialEq)]
 pub struct RayConfig {
@@ -30,7 +29,7 @@ pub struct Provider {
 pub struct Auth {
     pub ssh_user: StrRef,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub ssh_private_key: Option<PathBuf>,
+    pub ssh_private_key: Option<PathRef>,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq)]

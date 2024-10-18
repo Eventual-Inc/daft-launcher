@@ -1,12 +1,12 @@
-use std::{
-    path::PathBuf,
-    process::{Command, Stdio},
-};
+use std::process::{Command, Stdio};
 
 use semver::{Version, VersionReq};
 use which::which;
 
-use crate::config::{raw, raw::Job, StrRef};
+use crate::config::{raw, raw::Job};
+
+use crate::config::PathRef;
+use crate::StrRef;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProcessedConfig {
@@ -112,7 +112,7 @@ impl Provider {
 pub struct AwsCluster {
     pub region: StrRef,
     pub ssh_user: StrRef,
-    pub ssh_private_key: Option<PathBuf>,
+    pub ssh_private_key: Option<PathRef>,
     pub iam_instance_profile_arn: Option<StrRef>,
     pub image_id: StrRef,
     pub instance_type: StrRef,
@@ -152,8 +152,7 @@ fn get_version(executable: &str, prefix: &str) -> anyhow::Result<Version> {
         .spawn()?
         .wait_with_output()?;
     if output.status.success() {
-        let version_req = String::from_utf8(output.stdout)?;
-        let version_req = version_req
+        let version_req = String::from_utf8(output.stdout)?
             .strip_prefix(prefix)
             .unwrap()
             .strip_suffix("\n")
@@ -183,6 +182,7 @@ fn get_ray_version() -> anyhow::Result<VersionReq> {
 
 #[cfg(test)]
 pub mod tests {
+    use crate::path_ref;
     use rstest::{fixture, rstest};
 
     use super::*;
@@ -212,7 +212,7 @@ pub mod tests {
             },
             jobs: vec![Job {
                 name: "filter".into(),
-                working_dir: "assets".into(),
+                working_dir: path_ref("assets"),
                 command: "python filter.py".into(),
             }],
         }
@@ -248,12 +248,12 @@ pub mod tests {
             jobs: vec![
                 Job {
                     name: "filter".into(),
-                    working_dir: "assets".into(),
+                    working_dir: path_ref("assets"),
                     command: "python filter.py".into(),
                 },
                 Job {
                     name: "dedupe".into(),
-                    working_dir: "assets".into(),
+                    working_dir: path_ref("assets"),
                     command: "python dedupe.py".into(),
                 },
             ],

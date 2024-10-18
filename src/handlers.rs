@@ -1,4 +1,4 @@
-use std::{io::Write, path::PathBuf, process::Command};
+use std::{io::Write, process::Command};
 
 use clap::Parser;
 use tempdir::TempDir;
@@ -7,6 +7,7 @@ use crate::{
     cli::{Cli, Connect, Dashboard, Down, InitConfig, Sql, Submit, Up},
     config::{read_custom, write_ray, write_ray_cluster_name},
     utils::{assert_is_authenticated_with_aws, create_new_file, path_to_str},
+    PathRef,
 };
 
 const DEFAULT_CONFIG: &str =
@@ -42,7 +43,7 @@ fn handle_init_config(init_config: InitConfig) -> anyhow::Result<()> {
 
 fn run_ray_command(
     temp_dir: TempDir,
-    path: PathBuf,
+    path: PathRef,
     sub_command: &str,
     args: Option<&[&str]>,
 ) -> anyhow::Result<()> {

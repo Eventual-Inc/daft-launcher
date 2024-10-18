@@ -2,19 +2,22 @@ use std::{
     ffi::OsStr,
     fs::{File, OpenOptions},
     io::ErrorKind,
-    path::{Path, PathBuf},
+    path::Path,
 };
 
 use anyhow::Context;
 use dirs::home_dir;
 use tempdir::TempDir;
 
-pub fn expand(path: PathBuf) -> anyhow::Result<PathBuf> {
+use crate::path_ref;
+use crate::PathRef;
+
+pub fn expand(path: PathRef) -> anyhow::Result<PathRef> {
     if path.starts_with("~") {
         let home = home_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
         let suffix = path.strip_prefix("~").unwrap();
-        Ok(home.join(suffix))
+        Ok(path_ref(home.join(suffix)))
     } else {
         Ok(path)
     }
@@ -61,10 +64,10 @@ where
         .with_context(|| anyhow::anyhow!("Invalid characters in path"))
 }
 
-pub fn create_new_temp_file() -> anyhow::Result<(TempDir, PathBuf, File)> {
+pub fn create_new_temp_file() -> anyhow::Result<(TempDir, PathRef, File)> {
     let temp_dir = TempDir::new("ray_config")
         .expect("Creation of temporary directory should always succeed");
-    let path = temp_dir.path().join("ray.yaml");
+    let path = path_ref(temp_dir.path().join("ray.yaml"));
     let file = create_new_file(&path).expect(
         "Creating new file in temporary directory should always succeed",
     );
@@ -75,15 +78,18 @@ pub fn create_new_temp_file() -> anyhow::Result<(TempDir, PathBuf, File)> {
 mod tests {
     use rstest::rstest;
 
+    use crate::path_ref;
+    use crate::StrRef;
+
     use super::*;
 
     #[rstest]
     #[case("target", "target".into())]
     #[case(".ssh", ".ssh".into())]
-    #[case("~/.ssh", format!("{}/.ssh", env!("HOME")))]
-    fn test_expansion(#[case] path: &str, #[case] expected: String) {
-        let path = PathBuf::from(path);
-        let expected = PathBuf::from(expected);
+    #[case("~/.ssh", format!("{}/.ssh", env!("HOME")).into())]
+    fn test_expansion(#[case] path: &str, #[case] expected: StrRef) {
+        let path = path_ref(path);
+        let expected = path_ref(&*expected);
         let actual = expand(path).unwrap();
         assert_eq!(actual, expected);
     }

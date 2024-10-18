@@ -1,9 +1,11 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use semver::{Version, VersionReq};
 use serde::{de::Error, Deserialize, Deserializer};
 
-use crate::{config::StrRef, utils::expand};
+use crate::{utils::expand, StrRef};
+
+use crate::config::PathRef;
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -52,7 +54,7 @@ pub struct AwsCluster {
     pub region: StrRef,
     pub ssh_user: Option<StrRef>,
     #[serde(default, deserialize_with = "deserialize_optional_path")]
-    pub ssh_private_key: Option<PathBuf>,
+    pub ssh_private_key: Option<PathRef>,
     pub iam_instance_profile_arn: Option<StrRef>,
     pub template: Option<AwsTemplateType>,
     pub custom: Option<AwsCustomType>,
@@ -79,7 +81,7 @@ pub struct AwsCustomType {
 pub struct Job {
     pub name: StrRef,
     #[serde(deserialize_with = "deserialize_dir")]
-    pub working_dir: PathBuf,
+    pub working_dir: PathRef,
     pub command: StrRef,
 }
 
@@ -105,7 +107,7 @@ where
     }
 }
 
-fn expand_helper<'de, D>(path: PathBuf) -> Result<PathBuf, D::Error>
+fn expand_helper<'de, D>(path: PathRef) -> Result<PathRef, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -117,11 +119,11 @@ where
     })
 }
 
-fn deserialize_dir<'de, D>(deserializer: D) -> Result<PathBuf, D::Error>
+fn deserialize_dir<'de, D>(deserializer: D) -> Result<PathRef, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let path = PathBuf::deserialize(deserializer)?;
+    let path = PathRef::deserialize(deserializer)?;
     let path = expand_helper::<D>(path)?;
     assert_path_exists::<D>(&path)?;
     if !path.is_dir() {
@@ -135,12 +137,11 @@ where
 
 fn deserialize_optional_path<'de, D>(
     deserializer: D,
-) -> Result<Option<PathBuf>, D::Error>
+) -> Result<Option<PathRef>, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let path = match Option::<PathBuf>::deserialize(deserializer).expect("asdf")
-    {
+    let path = match Option::deserialize(deserializer)? {
         Some(path) => path,
         None => return Ok(None),
     };
@@ -158,6 +159,8 @@ where
 #[cfg(test)]
 pub mod tests {
     use rstest::{fixture, rstest};
+
+    use crate::path_ref;
 
     use super::*;
 
@@ -186,7 +189,7 @@ pub mod tests {
             },
             jobs: vec![Job {
                 name: "filter".into(),
-                working_dir: "assets".into(),
+                working_dir: path_ref("assets"),
                 command: "python filter.py".into(),
             }],
         }
@@ -225,12 +228,12 @@ pub mod tests {
             jobs: vec![
                 Job {
                     name: "filter".into(),
-                    working_dir: "assets".into(),
+                    working_dir: path_ref("assets"),
                     command: "python filter.py".into(),
                 },
                 Job {
                     name: "dedupe".into(),
-                    working_dir: "assets".into(),
+                    working_dir: path_ref("assets"),
                     command: "python dedupe.py".into(),
                 },
             ],

@@ -1,6 +1,8 @@
-use std::path;
+use std::path::PathBuf;
 
 use clap::Parser;
+
+use crate::ArcStrRef;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -18,7 +20,7 @@ pub enum Cli {
 pub struct InitConfig {
     /// Name of the configuration file (can be specified as a path)
     #[arg(short, long, value_name = "NAME", default_value = ".daft.toml")]
-    pub name: path::PathBuf,
+    pub name: PathBuf,
 
     /// Run in interactive mode
     #[arg(short, long, default_value = "false")]
@@ -38,15 +40,15 @@ pub struct Down {
 
     /// Name of the cluster to spin down
     #[arg(short, long, value_name = "NAME")]
-    pub name: Option<String>,
+    pub name: Option<ArcStrRef>,
 
     /// Type of cloud provider which contains the cluster to spin down
     #[arg(short, long, value_name = "TYPE")]
-    pub r#type: Option<String>,
+    pub r#type: Option<ArcStrRef>,
 
     /// Region of the cluster to spin down
     #[arg(short, long, value_name = "REGION")]
-    pub region: Option<String>,
+    pub region: Option<ArcStrRef>,
 }
 
 #[derive(Parser)]
@@ -77,5 +79,5 @@ pub struct Sql {
 pub struct Config {
     /// Path to configuration file
     #[arg(short, long, value_name = "FILE", default_value = ".daft.toml")]
-    pub config: path::PathBuf,
+    pub config: PathBuf,
 }

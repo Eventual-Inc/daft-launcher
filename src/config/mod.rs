@@ -5,8 +5,7 @@ pub mod ray;
 use std::{
     fs::OpenOptions,
     io::{Read, Write},
-    path::{Path, PathBuf},
-    rc::Rc,
+    path::Path,
 };
 
 use anyhow::Context;
@@ -16,9 +15,8 @@ use tempdir::TempDir;
 use crate::{
     config::{raw::RawConfig, ray::RayConfig},
     utils::create_new_temp_file,
+    PathRef,
 };
-
-pub type StrRef = Rc<str>;
 
 pub fn read_custom(
     path: &Path,
@@ -37,7 +35,7 @@ pub fn read_custom(
     Ok((processed_config, ray_config))
 }
 
-pub fn write_ray(ray_config: &RayConfig) -> anyhow::Result<(TempDir, PathBuf)> {
+pub fn write_ray(ray_config: &RayConfig) -> anyhow::Result<(TempDir, PathRef)> {
     let (temp_dir, path, mut file) = create_new_temp_file()?;
     let ray_config = serde_yaml::to_string(ray_config)
         .expect("Serialization to yaml should always succeed");
@@ -49,7 +47,7 @@ pub fn write_ray_cluster_name(
     name: &str,
     r#type: &str,
     region: &str,
-) -> anyhow::Result<(TempDir, PathBuf)> {
+) -> anyhow::Result<(TempDir, PathRef)> {
     let contents = format!(
         r#"cluster_name: {}
 provider:

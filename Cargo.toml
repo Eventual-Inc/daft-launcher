@@ -1,5 +1,6 @@
 [package]
 name = "daft"
+version = "0.4.1-alpha0"
 edition = "2021"
 
 [dependencies]

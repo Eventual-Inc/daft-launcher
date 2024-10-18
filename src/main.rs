@@ -31,7 +31,8 @@ async fn main() -> anyhow::Result<()> {
     env_logger::try_init().ok();
     log::info!("Starting daft launcher");
     if let Err(error) = handlers::handle().await {
-        log::error!("Error: {}", error.backtrace());
+        log::error!("Error: {}", error);
+        log::error!("Backtrace: {}", error.backtrace());
         cli::Cli::command()
             .error(clap::error::ErrorKind::ArgumentConflict, error)
             .exit();

@@ -1,3 +1,4 @@
+#[cfg(test)]
 macro_rules! path_from_root {
     ($($segment:literal) / *) => {
         concat!(
@@ -11,7 +12,6 @@ macro_rules! path_from_root {
 
 mod cli;
 mod config;
-mod handlers;
 mod utils;
 
 use std::{path::Path, rc::Rc, sync::Arc};
@@ -29,8 +29,8 @@ pub fn path_ref<'a>(x: impl AsRef<Path>) -> PathRef {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     env_logger::try_init().ok();
-    log::info!("daft launcher - {}", env!("CARGO_PKG_VERSION"));
-    if let Err(error) = handlers::handle().await {
+    log::debug!("daft launcher - {}", env!("CARGO_PKG_VERSION"));
+    if let Err(error) = cli::handle().await {
         log::error!("Error: {}", error);
         log::error!("Backtrace: {}", error.backtrace());
         cli::Cli::command()

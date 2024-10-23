@@ -18,6 +18,10 @@ use crate::{
     PathRef,
 };
 
+pub trait OptionsAsStrs {
+    fn options_as_strs() -> &'static [&'static str];
+}
+
 pub fn read_custom(
     path: &Path,
 ) -> anyhow::Result<(ProcessedConfig, RayConfig)> {
@@ -37,7 +41,7 @@ pub fn read_custom(
 
 pub fn write_ray(ray_config: &RayConfig) -> anyhow::Result<(TempDir, PathRef)> {
     let (temp_dir, path, mut file) = create_ray_temporary_file()?;
-    log::info!("Writing ray config {ray_config:?} to temporary file {path:?}");
+    log::debug!("Writing ray config {ray_config:?} to temporary file {path:?}");
     let ray_config = serde_yaml::to_string(ray_config)
         .expect("Serialization to yaml should always succeed");
     file.write_all(ray_config.as_bytes())?;
@@ -58,7 +62,7 @@ provider:
         name, r#type, region,
     );
     let (temp_dir, path, mut file) = create_ray_temporary_file()?;
-    log::info!("Writing ray config {contents:?} to temporary file {path:?}");
+    log::debug!("Writing ray config {contents:?} to temporary file {path:?}");
     file.write_all(contents.as_bytes())?;
     Ok((temp_dir, path))
 }

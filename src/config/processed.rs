@@ -174,7 +174,7 @@ fn get_version(executable: &str, prefix: &str) -> anyhow::Result<Version> {
 fn get_python_version() -> anyhow::Result<VersionReq> {
     let version = get_version("python", "Python ")?;
     if MIN_PYTHON_VERSION.matches(&version) {
-        log::info!("Python version determined to be: {version}");
+        log::debug!("Python version determined to be: {version}");
         Ok(format!("={version}").parse().unwrap())
     } else {
         anyhow::bail!("Python version {version} is not supported; must be >= {MIN_PYTHON_VERSION:?}")
@@ -183,7 +183,7 @@ fn get_python_version() -> anyhow::Result<VersionReq> {
 
 fn get_ray_version() -> anyhow::Result<VersionReq> {
     let version = get_version("ray", "ray, version ")?;
-    log::info!("Ray version determined to be: {version}");
+    log::debug!("Ray version determined to be: {version}");
     Ok(format!("={version}").parse().unwrap())
 }
 
@@ -219,7 +219,7 @@ pub mod tests {
             },
             jobs: vec![Job {
                 name: "filter".into(),
-                working_dir: path_ref("assets"),
+                working_dir: path_ref("tests"),
                 command: "python filter.py".into(),
             }],
         }
@@ -255,12 +255,12 @@ pub mod tests {
             jobs: vec![
                 Job {
                     name: "filter".into(),
-                    working_dir: path_ref("assets"),
+                    working_dir: path_ref("tests"),
                     command: "python filter.py".into(),
                 },
                 Job {
                     name: "dedupe".into(),
-                    working_dir: path_ref("assets"),
+                    working_dir: path_ref("tests"),
                     command: "python dedupe.py".into(),
                 },
             ],

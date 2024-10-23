@@ -1,11 +1,15 @@
 use std::path::Path;
 
 use semver::VersionReq;
-use serde::{de::Error, Deserialize, Deserializer};
+use serde::{de::Error, Deserialize, Deserializer, Serialize};
 
-use crate::{config::PathRef, utils::expand, StrRef};
+use crate::{
+    config::{OptionsAsStrs, PathRef},
+    utils::expand,
+    StrRef,
+};
 
-#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct RawConfig {
     pub package: Package,
@@ -14,7 +18,37 @@ pub struct RawConfig {
     pub jobs: Vec<Job>,
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
+impl Default for RawConfig {
+    fn default() -> Self {
+        Self {
+            package: Package {
+                name: "hello-world".into(),
+                daft_launcher_version: env!("CARGO_PKG_VERSION")
+                    .parse()
+                    .unwrap(),
+                python_version: None,
+                ray_version: None,
+            },
+            cluster: Cluster {
+                number_of_workers: default_number_of_workers(),
+                provider: Provider::Aws(AwsCluster {
+                    region: default_region(),
+                    ssh_user: None,
+                    ssh_private_key: None,
+                    iam_instance_profile_arn: None,
+                    template: Some(AwsTemplateType::Light),
+                    custom: None,
+                }),
+                dependencies: vec![],
+                pre_setup_commands: vec![],
+                post_setup_commands: vec![],
+            },
+            jobs: vec![],
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct Package {
     pub daft_launcher_version: VersionReq,
@@ -23,7 +57,7 @@ pub struct Package {
     pub ray_version: Option<VersionReq>,
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 pub struct Cluster {
     #[serde(flatten)]
     pub provider: Provider,
@@ -37,7 +71,7 @@ pub struct Cluster {
     pub post_setup_commands: Vec<StrRef>,
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(tag = "provider")]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
@@ -45,7 +79,13 @@ pub enum Provider {
     Aws(AwsCluster),
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
+impl OptionsAsStrs for Provider {
+    fn options_as_strs() -> &'static [&'static str] {
+        &["aws"]
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct AwsCluster {
     #[serde(default = "default_region")]
@@ -58,7 +98,7 @@ pub struct AwsCluster {
     pub custom: Option<AwsCustomType>,
 }
 
-#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
 pub enum AwsTemplateType {
@@ -67,14 +107,20 @@ pub enum AwsTemplateType {
     Gpus,
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
+impl OptionsAsStrs for AwsTemplateType {
+    fn options_as_strs() -> &'static [&'static str] {
+        &["light", "normal", "gpus"]
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct AwsCustomType {
     pub image_id: Option<StrRef>,
     pub instance_type: Option<StrRef>,
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct Job {
     pub name: StrRef,
@@ -83,11 +129,11 @@ pub struct Job {
     pub command: StrRef,
 }
 
-fn default_number_of_workers() -> usize {
+pub fn default_number_of_workers() -> usize {
     2
 }
 
-fn default_region() -> StrRef {
+pub fn default_region() -> StrRef {
     "us-west-2".into()
 }
 
@@ -186,7 +232,7 @@ pub mod tests {
             },
             jobs: vec![Job {
                 name: "filter".into(),
-                working_dir: path_ref("assets"),
+                working_dir: path_ref("tests"),
                 command: "python filter.py".into(),
             }],
         }
@@ -225,12 +271,12 @@ pub mod tests {
             jobs: vec![
                 Job {
                     name: "filter".into(),
-                    working_dir: path_ref("assets"),
+                    working_dir: path_ref("tests"),
                     command: "python filter.py".into(),
                 },
                 Job {
                     name: "dedupe".into(),
-                    working_dir: path_ref("assets"),
+                    working_dir: path_ref("tests"),
                     command: "python dedupe.py".into(),
                 },
             ],
@@ -238,8 +284,8 @@ pub mod tests {
     }
 
     #[rstest]
-    #[case(include_str!(path_from_root!("assets" / "tests" / "light.toml")), light_raw_config())]
-    #[case(include_str!(path_from_root!("assets" / "tests" / "custom.toml")), custom_raw_config())]
+    #[case(include_str!(path_from_root!("tests" / "fixtures" / "light.toml")), light_raw_config())]
+    #[case(include_str!(path_from_root!("tests" / "fixtures" / "custom.toml")), custom_raw_config())]
     fn test_str_to_raw_config(
         #[case] input: &str,
         #[case] expected: RawConfig,

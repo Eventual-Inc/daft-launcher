@@ -23,13 +23,16 @@ pub fn expand(path: PathRef) -> anyhow::Result<PathRef> {
 }
 
 pub async fn is_authenticated_with_aws() -> bool {
-    // let sdk_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
-    //     .region(aws_config::meta::region::RegionProviderChain::default_provider())
-    //     .load()
-    //     .await;
-    // let client = aws_sdk_sts::Client::new(&sdk_config);
-    // client.get_caller_identity().send().await.is_ok()
-    true
+    let sdk_config =
+        aws_config::defaults(aws_config::BehaviorVersion::latest())
+            .region(
+                aws_config::meta::region::RegionProviderChain::default_provider(
+                ),
+            )
+            .load()
+            .await;
+    let client = aws_sdk_sts::Client::new(&sdk_config);
+    client.get_caller_identity().send().await.is_ok()
 }
 
 pub async fn assert_is_authenticated_with_aws() -> anyhow::Result<()> {
@@ -51,7 +54,7 @@ pub fn create_new_file(path: &Path) -> anyhow::Result<File> {
             }
             _ => error.into(),
         })?;
-    log::info!("Created new file: {path:?}");
+    log::debug!("Created new file: {path:?}");
     Ok(file)
 }
 
@@ -69,7 +72,7 @@ pub fn create_ray_temporary_file() -> anyhow::Result<(TempDir, PathRef, File)> {
     let temp_dir = TempDir::new("ray_config")
         .expect("Creation of temporary directory should always succeed");
     let path = path_ref(temp_dir.path().join("ray.yaml"));
-    log::info!("Created new temporary dir {temp_dir:?} and new temporary ray config file at path {path:?}");
+    log::debug!("Created new temporary dir {temp_dir:?} and new temporary ray config file at path {path:?}");
     let file = create_new_file(&path).expect(
         "Creating new file in temporary directory should always succeed",
     );
@@ -92,5 +95,13 @@ mod tests {
         let expected = path_ref(&*expected);
         let actual = expand(path).unwrap();
         assert_eq!(actual, expected);
+    }
+
+    #[cfg(test)]
+    #[tokio::test]
+    #[ignore = "Depends upon global state of AWS authentication; if you want to run this test, run it manually after you've authenticated with AWS"]
+    async fn test_is_authenticated_with_aws() {
+        let is_authenticated = is_authenticated_with_aws().await;
+        dbg!(is_authenticated);
     }
 }

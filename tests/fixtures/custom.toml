@@ -16,10 +16,10 @@ instance_type = "..."
 
 [[job]]
 name = "filter"
-working_dir = "assets"
+working_dir = "tests"
 command = "python filter.py"
 
 [[job]]
 name = "dedupe"
-working_dir = "assets"
+working_dir = "tests"
 command = "python dedupe.py"

@@ -59,6 +59,16 @@ pub enum Provider {
     Aws(AwsCluster),
 }
 
+fn default_region() -> StrRef {
+    "us-west-2".into()
+}
+
+fn default_ssh_user() -> StrRef {
+    "ec2-user".into()
+}
+
+const DEFAULT_NUMBER_OF_WORKERS: usize = 2;
+
 impl Provider {
     pub fn process(
         provider: raw::Provider,
@@ -72,8 +82,8 @@ impl Provider {
 
                     (None, Some(custom)) => (
                         Provider::Aws(AwsCluster {
-                            region: aws_cluster.region,
-                            ssh_user: aws_cluster.ssh_user.unwrap_or_else(|| "ec2-user".into()),
+                            region: aws_cluster.region.unwrap_or_else(default_region),
+                            ssh_user: aws_cluster.ssh_user.unwrap_or_else(default_ssh_user),
                             ssh_private_key: aws_cluster.ssh_private_key,
                             iam_instance_profile_arn: aws_cluster.iam_instance_profile_arn,
                             image_id: custom.image_id.unwrap_or_else(|| "ami-07c5ecd8498c59db5".into()),
@@ -84,8 +94,8 @@ impl Provider {
                     ),
                     (Some(raw::AwsTemplateType::Light), None) => (
                         Provider::Aws(AwsCluster {
-                            region: aws_cluster.region,
-                            ssh_user: aws_cluster.ssh_user.unwrap_or_else(|| "ec2-user".into()),
+                            region: aws_cluster.region.unwrap_or_else(default_region),
+                            ssh_user: aws_cluster.ssh_user.unwrap_or_else(default_ssh_user),
                             ssh_private_key: aws_cluster.ssh_private_key,
                             iam_instance_profile_arn: aws_cluster.iam_instance_profile_arn,
                             image_id: "ami-07c5ecd8498c59db5".into(),
@@ -96,7 +106,7 @@ impl Provider {
                     ),
                     (Some(raw::AwsTemplateType::Normal), None) => (
                         Provider::Aws(AwsCluster {
-                            region: aws_cluster.region,
+                            region: aws_cluster.region.unwrap_or_else(default_region),
                             ssh_user: aws_cluster.ssh_user.unwrap_or_else(|| "ec2-user".into()),
                             ssh_private_key: aws_cluster.ssh_private_key,
                             iam_instance_profile_arn: aws_cluster.iam_instance_profile_arn,
@@ -137,7 +147,10 @@ impl TryFrom<raw::RawConfig> for ProcessedConfig {
             package,
             cluster: Cluster {
                 provider,
-                number_of_workers: raw.cluster.number_of_workers,
+                number_of_workers: raw
+                    .cluster
+                    .number_of_workers
+                    .unwrap_or(DEFAULT_NUMBER_OF_WORKERS),
                 dependencies: raw.cluster.dependencies,
                 pre_setup_commands: raw.cluster.pre_setup_commands,
                 post_setup_commands: raw.cluster.post_setup_commands,

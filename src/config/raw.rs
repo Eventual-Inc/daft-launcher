@@ -14,7 +14,7 @@ use crate::{
 pub struct RawConfig {
     pub package: Package,
     pub cluster: Cluster,
-    #[serde(default, rename = "job")]
+    #[serde(default, rename = "job", skip_serializing_if = "Vec::is_empty")]
     pub jobs: Vec<Job>,
 }
 
@@ -30,9 +30,9 @@ impl Default for RawConfig {
                 ray_version: None,
             },
             cluster: Cluster {
-                number_of_workers: default_number_of_workers(),
+                number_of_workers: None,
                 provider: Provider::Aws(AwsCluster {
-                    region: default_region(),
+                    region: None,
                     ssh_user: None,
                     ssh_private_key: None,
                     iam_instance_profile_arn: None,
@@ -61,13 +61,13 @@ pub struct Package {
 pub struct Cluster {
     #[serde(flatten)]
     pub provider: Provider,
-    #[serde(default = "default_number_of_workers")]
-    pub number_of_workers: usize,
     #[serde(default)]
+    pub number_of_workers: Option<usize>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dependencies: Vec<StrRef>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pre_setup_commands: Vec<StrRef>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub post_setup_commands: Vec<StrRef>,
 }
 
@@ -88,8 +88,8 @@ impl OptionsAsStrs for Provider {
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct AwsCluster {
-    #[serde(default = "default_region")]
-    pub region: StrRef,
+    #[serde(default)]
+    pub region: Option<StrRef>,
     pub ssh_user: Option<StrRef>,
     #[serde(default, deserialize_with = "deserialize_optional_path")]
     pub ssh_private_key: Option<PathRef>,
@@ -127,14 +127,6 @@ pub struct Job {
     #[serde(deserialize_with = "deserialize_dir")]
     pub working_dir: PathRef,
     pub command: StrRef,
-}
-
-pub fn default_number_of_workers() -> usize {
-    2
-}
-
-pub fn default_region() -> StrRef {
-    "us-west-2".into()
 }
 
 fn assert_path_exists<'de, D>(path: &Path) -> Result<(), D::Error>
@@ -218,14 +210,14 @@ pub mod tests {
             },
             cluster: Cluster {
                 provider: Provider::Aws(AwsCluster {
-                    region: "us-west-2".into(),
+                    region: None,
                     ssh_user: None,
                     ssh_private_key: None,
                     iam_instance_profile_arn: None,
                     template: Some(AwsTemplateType::Light),
                     custom: None,
                 }),
-                number_of_workers: 2,
+                number_of_workers: None,
                 dependencies: vec![],
                 pre_setup_commands: vec![],
                 post_setup_commands: vec![],
@@ -249,7 +241,7 @@ pub mod tests {
             },
             cluster: Cluster {
                 provider: Provider::Aws(AwsCluster {
-                    region: "us-east-2".into(),
+                    region: Some("us-east-2".into()),
                     ssh_user: None,
                     ssh_private_key: None,
                     iam_instance_profile_arn: None,
@@ -259,7 +251,7 @@ pub mod tests {
                         instance_type: Some("...".into()),
                     }),
                 }),
-                number_of_workers: 4,
+                number_of_workers: Some(4),
                 dependencies: vec![
                     "pytorch".into(),
                     "pandas".into(),

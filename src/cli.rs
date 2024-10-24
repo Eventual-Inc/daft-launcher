@@ -200,6 +200,10 @@ fn handle_init_config(init_config: InitConfig) -> anyhow::Result<()> {
         config
     );
     file.write_all(config.as_bytes())?;
+    println!(
+        "Created file at: {}",
+        style(format!("`{}`", init_config.name.display())).cyan(),
+    );
     Ok(())
 }
 

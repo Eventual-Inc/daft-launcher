@@ -7,7 +7,16 @@ use semver::{Version, VersionReq};
 use which::which;
 
 use crate::{
-    config::{raw, raw::Job, PathRef},
+    config::{
+        defaults::{
+            default_region, default_ssh_user, light_image_id,
+            light_instance_type, normal_image_id, normal_instance_type,
+            DEFAULT_NUMBER_OF_WORKERS,
+        },
+        raw,
+        raw::Job,
+        PathRef,
+    },
     StrRef,
 };
 
@@ -59,16 +68,6 @@ pub enum Provider {
     Aws(AwsCluster),
 }
 
-fn default_region() -> StrRef {
-    "us-west-2".into()
-}
-
-fn default_ssh_user() -> StrRef {
-    "ec2-user".into()
-}
-
-const DEFAULT_NUMBER_OF_WORKERS: usize = 2;
-
 impl Provider {
     pub fn process(
         provider: raw::Provider,
@@ -86,8 +85,8 @@ impl Provider {
                             ssh_user: aws_cluster.ssh_user.unwrap_or_else(default_ssh_user),
                             ssh_private_key: aws_cluster.ssh_private_key,
                             iam_instance_profile_arn: aws_cluster.iam_instance_profile_arn,
-                            image_id: custom.image_id.unwrap_or_else(|| "ami-07c5ecd8498c59db5".into()),
-                            instance_type: custom.instance_type.unwrap_or_else(|| "t2.nano".into()),
+                            image_id: custom.image_id,
+                            instance_type: custom.instance_type,
                         }),
                         vec![],
                         vec![],
@@ -98,8 +97,8 @@ impl Provider {
                             ssh_user: aws_cluster.ssh_user.unwrap_or_else(default_ssh_user),
                             ssh_private_key: aws_cluster.ssh_private_key,
                             iam_instance_profile_arn: aws_cluster.iam_instance_profile_arn,
-                            image_id: "ami-07c5ecd8498c59db5".into(),
-                            instance_type: "t2.nano".into(),
+                            image_id: light_image_id(),
+                            instance_type: light_instance_type(),
                         }),
                         vec![],
                         vec![],
@@ -110,8 +109,8 @@ impl Provider {
                             ssh_user: aws_cluster.ssh_user.unwrap_or_else(|| "ec2-user".into()),
                             ssh_private_key: aws_cluster.ssh_private_key,
                             iam_instance_profile_arn: aws_cluster.iam_instance_profile_arn,
-                            image_id: "ami-07dcfc8123b5479a8".into(),
-                            instance_type: "m7g.medium".into(),
+                            image_id: normal_image_id(),
+                            instance_type: normal_instance_type(),
                         }),
                         vec![],
                         vec![],

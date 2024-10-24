@@ -1,3 +1,4 @@
+pub mod defaults;
 pub mod processed;
 pub mod raw;
 pub mod ray;
@@ -6,7 +7,6 @@ use std::{
     fs::OpenOptions,
     io::{Read, Write},
     path::Path,
-    str::FromStr,
 };
 
 use anyhow::Context;
@@ -19,8 +19,11 @@ use crate::{
     PathRef,
 };
 
-pub trait Selectable: FromStr<Err = anyhow::Error> {
+pub trait Selectable {
+    type Parsed;
+
     fn to_options() -> &'static [&'static str];
+    fn parse(s: &str) -> anyhow::Result<Self::Parsed>;
 }
 
 pub fn read_custom(

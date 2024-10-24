@@ -13,15 +13,16 @@ use tempdir::TempDir;
 
 use crate::{
     config::{
+        defaults::{normal_image_id, normal_instance_type},
         processed::ProcessedConfig,
         raw::{
-            default_name, AwsCluster, AwsTemplateType, Cluster, Package,
-            Provider, RawConfig,
+            default_name, AwsCluster, AwsCustomType, AwsTemplateType, Cluster,
+            Package, Provider, RawConfig,
         },
         read_custom, write_ray, write_ray_adhoc, Selectable,
     },
     utils::{
-        assert_file_doesnt_exist, assert_is_authenticated_with_aws,
+        assert_file_existence_status, assert_is_authenticated_with_aws,
         create_new_file, path_to_str,
     },
     ArcStrRef, PathRef, StrRef,
@@ -115,11 +116,6 @@ pub struct Config {
 static DAFT_LAUNCHER_VERSION: LazyLock<Version> =
     LazyLock::new(|| env!("CARGO_PKG_VERSION").parse().unwrap());
 
-// static THEME: LazyLock<ColorfulTheme> = LazyLock::new(|| ColorfulTheme {
-//     prompt_prefix: style(":)".into()),
-//     ..Default::default()
-// });
-
 pub async fn handle() -> anyhow::Result<()> {
     match Cli::parse() {
         Cli::InitConfig(init_config) => handle_init_config(init_config),
@@ -145,31 +141,48 @@ fn prefix(prefix: &str) -> ColorfulTheme {
     }
 }
 
-const NAME_EMOJI: &str = "📝";
-const CLOUD_PROVIDER_EMOJI: &str = "🌥️";
-const TEMPLATE_EMOJI: &str = "🔨";
+const NOTEPAD_EMOJI: &str = "📝";
+const CLOUD_EMOJI: &str = "🌥️";
+const HAMMER_EMOJI: &str = "🔨";
+const COMPUTER_EMOJI: &str = "💻";
 
 fn handle_init_config(init_config: InitConfig) -> anyhow::Result<()> {
-    assert_file_doesnt_exist(&init_config.name)?;
+    assert_file_existence_status(&init_config.name, false)?;
     let raw_config = if init_config.default {
         RawConfig::default()
     } else {
-        let name: StrRef = Input::<String>::with_theme(&prefix(NAME_EMOJI))
-            .with_prompt("Cluster name")
-            .default(default_name())
-            .interact_text()?
-            .into();
-        let provider = match get_selections::<Provider>(
+        let name =
+            with_input("Cluster name", &prefix(NOTEPAD_EMOJI), default_name())?;
+        let provider = match with_selections::<Provider>(
             "Cloud provider",
-            &prefix(CLOUD_PROVIDER_EMOJI),
+            &prefix(CLOUD_EMOJI),
         )? {
             Provider::Aws(aws_cluster) => {
-                let template = get_selections::<AwsTemplateType>(
+                let template = with_selections::<AwsTemplateType>(
                     "Template",
-                    &prefix(TEMPLATE_EMOJI),
+                    &prefix(HAMMER_EMOJI),
                 )?;
+                let custom = if template.is_none() {
+                    let instance_type = with_input(
+                        "Instance type",
+                        &prefix(COMPUTER_EMOJI),
+                        &*normal_instance_type(),
+                    )?;
+                    let image_id = with_input(
+                        "Image ID",
+                        &prefix(COMPUTER_EMOJI),
+                        &*normal_image_id(),
+                    )?;
+                    Some(AwsCustomType {
+                        instance_type,
+                        image_id,
+                    })
+                } else {
+                    None
+                };
                 Provider::Aws(AwsCluster {
-                    template: Some(template),
+                    template,
+                    custom,
                     ..aws_cluster
                 })
             }
@@ -207,21 +220,33 @@ fn handle_init_config(init_config: InitConfig) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn get_selections<T: Selectable>(
+fn with_input<S: Into<String>>(
     prompt: &str,
     theme: &ColorfulTheme,
-) -> anyhow::Result<T> {
+    default: S,
+) -> anyhow::Result<StrRef> {
+    let value = Input::<String>::with_theme(theme)
+        .with_prompt(prompt)
+        .default(default.into())
+        .interact_text()?
+        .into();
+    Ok(value)
+}
+
+fn with_selections<T: Selectable>(
+    prompt: &str,
+    theme: &ColorfulTheme,
+) -> anyhow::Result<T::Parsed> {
     let options = T::to_options();
     let selection = Select::with_theme(theme)
         .with_prompt(prompt)
         .default(0)
         .items(&options)
         .interact()?;
-    let selection = options
+    let &selection = options
         .get(selection)
-        .expect("Index should always be in bounds")
-        .parse()?;
-    Ok(selection)
+        .expect("Index should always be in bounds");
+    T::parse(selection)
 }
 
 fn handle_up(up: Up) -> anyhow::Result<()> {

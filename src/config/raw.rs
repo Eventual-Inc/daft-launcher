@@ -1,4 +1,4 @@
-use std::{path::Path, str::FromStr};
+use std::path::Path;
 
 use semver::VersionReq;
 use serde::{de::Error, Deserialize, Deserializer, Serialize};
@@ -6,7 +6,7 @@ use serde::{de::Error, Deserialize, Deserializer, Serialize};
 use crate::{
     config::{PathRef, Selectable},
     path_ref,
-    utils::expand,
+    utils::{assert_file_existence_status, expand},
     StrRef,
 };
 
@@ -84,18 +84,13 @@ impl Default for Provider {
 }
 
 impl Selectable for Provider {
+    type Parsed = Self;
+
     fn to_options() -> &'static [&'static str] {
         &["aws"]
     }
-}
 
-impl FromStr for Provider {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err>
-    where
-        Self: Sized,
-    {
+    fn parse(s: &str) -> anyhow::Result<Self::Parsed> {
         match s {
             "aws" => Ok(Self::Aws(AwsCluster::default())),
             _ => Err(anyhow::anyhow!("Unknown provider: {}", s)),
@@ -142,19 +137,18 @@ pub enum AwsTemplateType {
 }
 
 impl Selectable for AwsTemplateType {
+    type Parsed = Option<Self>;
+
     fn to_options() -> &'static [&'static str] {
-        &["light", "normal", "gpus"]
+        &["light", "normal", "gpus", "(custom)"]
     }
-}
 
-impl FromStr for AwsTemplateType {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn parse(s: &str) -> anyhow::Result<Self::Parsed> {
         match s {
-            "light" => Ok(Self::Light),
-            "normal" => Ok(Self::Normal),
-            "gpus" => Ok(Self::Gpus),
+            "light" => Ok(Some(AwsTemplateType::Light)),
+            "normal" => Ok(Some(AwsTemplateType::Normal)),
+            "gpus" => Ok(Some(AwsTemplateType::Gpus)),
+            "(custom)" => Ok(None),
             _ => Err(anyhow::anyhow!("Unknown AWS template type: {}", s)),
         }
     }
@@ -163,8 +157,8 @@ impl FromStr for AwsTemplateType {
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct AwsCustomType {
-    pub image_id: Option<StrRef>,
-    pub instance_type: Option<StrRef>,
+    pub image_id: StrRef,
+    pub instance_type: StrRef,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
@@ -176,18 +170,13 @@ pub struct Job {
     pub command: StrRef,
 }
 
-fn assert_path_exists<'de, D>(path: &Path) -> Result<(), D::Error>
+fn assert_path_exists_helper<'de, D>(path: &Path) -> Result<(), D::Error>
 where
     D: Deserializer<'de>,
 {
-    if path.exists() {
-        Ok(())
-    } else {
-        Err(Error::custom(format!(
-            "The path '{}' does not exist.",
-            path.display(),
-        )))
-    }
+    assert_file_existence_status(path, true).map_err(|_| {
+        Error::custom(format!("The path '{}' does not exist.", path.display(),))
+    })
 }
 
 fn expand_helper<'de, D>(path: PathRef) -> Result<PathRef, D::Error>
@@ -209,7 +198,7 @@ where
 {
     let path = PathRef::deserialize(deserializer)?;
     let path = expand_helper::<D>(path)?;
-    assert_path_exists::<D>(&path)?;
+    assert_path_exists_helper::<D>(&path)?;
     if !path.is_dir() {
         return Err(Error::custom(format!(
             "The path '{}' is not a directory.",
@@ -230,7 +219,7 @@ where
         None => return Ok(None),
     };
     let path = expand_helper::<D>(path)?;
-    assert_path_exists::<D>(&path)?;
+    assert_path_exists_helper::<D>(&path)?;
     if !path.is_file() {
         return Err(Error::custom(format!(
             "The path '{}' is not a file.",
@@ -295,8 +284,8 @@ pub mod tests {
                     iam_instance_profile_arn: None,
                     template: None,
                     custom: Some(AwsCustomType {
-                        image_id: Some("...".into()),
-                        instance_type: Some("...".into()),
+                        image_id: "...".into(),
+                        instance_type: "...".into(),
                     }),
                 }),
                 number_of_workers: Some(4),

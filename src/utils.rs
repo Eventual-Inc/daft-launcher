@@ -44,15 +44,15 @@ pub async fn assert_is_authenticated_with_aws() -> anyhow::Result<()> {
     }
 }
 
-pub fn check_if_file_exists(path: &Path) -> bool {
-    path.exists()
-}
-
-pub fn assert_file_doesnt_exist(path: &Path) -> anyhow::Result<()> {
-    if check_if_file_exists(path) {
-        anyhow::bail!("The file {:?} already exists", path)
-    } else {
-        Ok(())
+pub fn assert_file_existence_status(
+    path: &Path,
+    should_exist: bool,
+) -> anyhow::Result<()> {
+    let exists = path.exists();
+    match (exists, should_exist) {
+        (true, true) | (false, false) => Ok(()),
+        (true, false) => anyhow::bail!("The file {:?} already exists", path),
+        (false, true) => anyhow::bail!("The file {:?} does not exist", path),
     }
 }
 

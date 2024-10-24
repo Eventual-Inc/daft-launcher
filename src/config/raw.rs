@@ -28,11 +28,15 @@ pub struct Package {
     pub ray_version: Option<VersionReq>,
 }
 
+pub fn default_name() -> String {
+    "my-cluster".into()
+}
+
 impl Default for Package {
     fn default() -> Self {
         Self {
             daft_launcher_version: env!("CARGO_PKG_VERSION").parse().unwrap(),
-            name: "hello-world".into(),
+            name: default_name().into(),
             python_version: None,
             ray_version: None,
         }

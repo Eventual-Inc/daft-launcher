@@ -6,6 +6,7 @@ use std::{
 };
 
 use clap::Parser;
+use console::style;
 use dialoguer::{theme::ColorfulTheme, Input, Select};
 use semver::Version;
 use tempdir::TempDir;
@@ -14,7 +15,8 @@ use crate::{
     config::{
         processed::ProcessedConfig,
         raw::{
-            AwsCluster, AwsTemplateType, Cluster, Package, Provider, RawConfig,
+            default_name, AwsCluster, AwsTemplateType, Cluster, Package,
+            Provider, RawConfig,
         },
         read_custom, write_ray, write_ray_adhoc, Selectable,
     },
@@ -113,7 +115,10 @@ pub struct Config {
 static DAFT_LAUNCHER_VERSION: LazyLock<Version> =
     LazyLock::new(|| env!("CARGO_PKG_VERSION").parse().unwrap());
 
-static THEME: LazyLock<ColorfulTheme> = LazyLock::new(ColorfulTheme::default);
+// static THEME: LazyLock<ColorfulTheme> = LazyLock::new(|| ColorfulTheme {
+//     prompt_prefix: style(":)".into()),
+//     ..Default::default()
+// });
 
 pub async fn handle() -> anyhow::Result<()> {
     match Cli::parse() {
@@ -133,19 +138,36 @@ pub async fn handle() -> anyhow::Result<()> {
     }
 }
 
+fn prefix(prefix: &str) -> ColorfulTheme {
+    ColorfulTheme {
+        prompt_prefix: style(prefix.into()),
+        ..Default::default()
+    }
+}
+
+const NAME_EMOJI: &str = "📝";
+const CLOUD_PROVIDER_EMOJI: &str = "🌥️";
+const TEMPLATE_EMOJI: &str = "🔨";
+
 fn handle_init_config(init_config: InitConfig) -> anyhow::Result<()> {
     assert_file_doesnt_exist(&init_config.name)?;
     let raw_config = if init_config.default {
         RawConfig::default()
     } else {
-        let name: StrRef = Input::<String>::with_theme(&*THEME)
+        let name: StrRef = Input::<String>::with_theme(&prefix(NAME_EMOJI))
             .with_prompt("Cluster name")
+            .default(default_name())
             .interact_text()?
             .into();
-        let provider = match get_selections::<Provider>("Cloud provider")? {
+        let provider = match get_selections::<Provider>(
+            "Cloud provider",
+            &prefix(CLOUD_PROVIDER_EMOJI),
+        )? {
             Provider::Aws(aws_cluster) => {
-                let template =
-                    get_selections::<AwsTemplateType>("Cloud provider")?;
+                let template = get_selections::<AwsTemplateType>(
+                    "Template",
+                    &prefix(TEMPLATE_EMOJI),
+                )?;
                 Provider::Aws(AwsCluster {
                     template: Some(template),
                     ..aws_cluster
@@ -181,9 +203,12 @@ fn handle_init_config(init_config: InitConfig) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn get_selections<T: Selectable>(prompt: &str) -> anyhow::Result<T> {
+fn get_selections<T: Selectable>(
+    prompt: &str,
+    theme: &ColorfulTheme,
+) -> anyhow::Result<T> {
     let options = T::to_options();
-    let selection = Select::with_theme(&*THEME)
+    let selection = Select::with_theme(theme)
         .with_prompt(prompt)
         .default(0)
         .items(&options)

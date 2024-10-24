@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     ffi::OsStr,
     fs::{File, OpenOptions},
     io::ErrorKind,
@@ -11,14 +12,14 @@ use tempdir::TempDir;
 
 use crate::{path_ref, PathRef};
 
-pub fn expand(path: PathRef) -> anyhow::Result<PathRef> {
+pub fn expand(path: &Path) -> anyhow::Result<Cow<Path>> {
     if path.starts_with("~") {
         let home = home_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
         let suffix = path.strip_prefix("~").unwrap();
-        Ok(path_ref(home.join(suffix)))
+        Ok(home.join(suffix).into())
     } else {
-        Ok(path)
+        Ok(path.into())
     }
 }
 
@@ -40,6 +41,18 @@ pub async fn assert_is_authenticated_with_aws() -> anyhow::Result<()> {
         Ok(())
     } else {
         anyhow::bail!("You are not signed in to AWS; please sign in first")
+    }
+}
+
+pub fn check_if_file_exists(path: &Path) -> bool {
+    path.exists()
+}
+
+pub fn assert_file_doesnt_exist(path: &Path) -> anyhow::Result<()> {
+    if check_if_file_exists(path) {
+        anyhow::bail!("The file {:?} already exists", path)
+    } else {
+        Ok(())
     }
 }
 
@@ -93,8 +106,8 @@ mod tests {
     fn test_expansion(#[case] path: &str, #[case] expected: StrRef) {
         let path = path_ref(path);
         let expected = path_ref(&*expected);
-        let actual = expand(path).unwrap();
-        assert_eq!(actual, expected);
+        let actual = expand(&path).unwrap();
+        assert_eq!(&*actual, &*expected);
     }
 
     #[cfg(test)]

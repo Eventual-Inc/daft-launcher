@@ -6,6 +6,7 @@ use std::{
     fs::OpenOptions,
     io::{Read, Write},
     path::Path,
+    str::FromStr,
 };
 
 use anyhow::Context;
@@ -18,8 +19,8 @@ use crate::{
     PathRef,
 };
 
-pub trait OptionsAsStrs {
-    fn options_as_strs() -> &'static [&'static str];
+pub trait Selectable: FromStr<Err = anyhow::Error> {
+    fn to_options() -> &'static [&'static str];
 }
 
 pub fn read_custom(

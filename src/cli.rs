@@ -12,11 +12,17 @@ use tempdir::TempDir;
 
 use crate::{
     config::{
-        processed::ProcessedConfig, raw::RawConfig, read_custom, write_ray,
-        write_ray_adhoc,
+        processed::ProcessedConfig,
+        raw::{
+            AwsCluster, AwsTemplateType, Cluster, Package, Provider, RawConfig,
+        },
+        read_custom, write_ray, write_ray_adhoc, Selectable,
     },
-    utils::{assert_is_authenticated_with_aws, create_new_file, path_to_str},
-    ArcStrRef, PathRef,
+    utils::{
+        assert_file_doesnt_exist, assert_is_authenticated_with_aws,
+        create_new_file, path_to_str,
+    },
+    ArcStrRef, PathRef, StrRef,
 };
 
 #[derive(Parser)]
@@ -42,7 +48,7 @@ pub struct InitConfig {
     #[arg(short, long, value_name = "NAME", default_value = ".daft.toml")]
     pub name: PathBuf,
     /// Skip interactive mode and generate a default configuration file.
-    #[arg(short, long, default_value = "true")]
+    #[arg(short, long, default_value = "false")]
     pub default: bool,
 }
 
@@ -128,48 +134,65 @@ pub async fn handle() -> anyhow::Result<()> {
 }
 
 fn handle_init_config(init_config: InitConfig) -> anyhow::Result<()> {
-    if init_config.default {
-        let processed_config = RawConfig::default();
-        let config = toml::to_string_pretty(&processed_config)
-            .expect("Serialization should always succeed");
-        let config = format!(
-            r#"# For a full schema of this configuration file, please visit:
+    assert_file_doesnt_exist(&init_config.name)?;
+    let raw_config = if init_config.default {
+        RawConfig::default()
+    } else {
+        let name: StrRef = Input::<String>::with_theme(&*THEME)
+            .with_prompt("Cluster name")
+            .interact_text()?
+            .into();
+        let provider = match get_selections::<Provider>("Cloud provider")? {
+            Provider::Aws(aws_cluster) => {
+                let template =
+                    get_selections::<AwsTemplateType>("Cloud provider")?;
+                Provider::Aws(AwsCluster {
+                    template: Some(template),
+                    ..aws_cluster
+                })
+            }
+        };
+        RawConfig {
+            package: Package {
+                name,
+                ..Default::default()
+            },
+            cluster: Cluster {
+                provider,
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    };
+    let mut file = create_new_file(&init_config.name)?;
+    let config = toml::to_string_pretty(&raw_config)
+        .expect("Serialization should always succeed");
+    let config = format!(
+        r#"# For a full schema of this configuration file, please visit:
 # https://eventual-inc.github.io/daft-launcher
 #
 # If you notice any bugs, please reach out to me (Raunak Bhagat) via our open Slack workspace, "Distributed Data Community":
 # https://join.slack.com/t/dist-data/shared_invite/zt-2ric3mssh-zX08IXaKNeyx8YtqXey41A
 
 {}"#,
-            config
-        );
-        let mut file = create_new_file(&init_config.name)?;
-        file.write_all(config.as_bytes())?;
-        Ok(())
-    } else {
-        let name = Input::<String>::with_theme(&*THEME)
-            .with_prompt("Cluster name:")
-            .interact_text()?;
+        config
+    );
+    file.write_all(config.as_bytes())?;
+    Ok(())
+}
 
-        let providers = ["aws", "gcp"];
-        let provider_selection = Select::with_theme(&*THEME)
-            .with_prompt("Cloud provider:")
-            .default(0)
-            .items(&providers)
-            .interact()?;
-        let provider = providers.get(provider_selection);
-
-        let templates = ["light", "normal", "gpus", "[custom]"];
-        let template_selection = Select::with_theme(&*THEME)
-            .with_prompt("Template:")
-            .default(0)
-            .items(&templates)
-            .interact()?;
-        let template = templates.get(template_selection);
-
-        dbg!(name, provider, template);
-
-        Ok(())
-    }
+fn get_selections<T: Selectable>(prompt: &str) -> anyhow::Result<T> {
+    let options = T::to_options();
+    let selection = Select::with_theme(&*THEME)
+        .with_prompt(prompt)
+        .default(0)
+        .items(&options)
+        .interact()?;
+    let selection = options
+        .get(selection)
+        .expect("Index should always be in bounds")
+        .parse()?;
+    Ok(selection)
 }
 
 fn handle_up(up: Up) -> anyhow::Result<()> {

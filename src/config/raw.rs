@@ -1,51 +1,22 @@
-use std::path::Path;
+use std::{path::Path, str::FromStr};
 
 use semver::VersionReq;
 use serde::{de::Error, Deserialize, Deserializer, Serialize};
 
 use crate::{
-    config::{OptionsAsStrs, PathRef},
+    config::{PathRef, Selectable},
+    path_ref,
     utils::expand,
     StrRef,
 };
 
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct RawConfig {
     pub package: Package,
     pub cluster: Cluster,
     #[serde(default, rename = "job", skip_serializing_if = "Vec::is_empty")]
     pub jobs: Vec<Job>,
-}
-
-impl Default for RawConfig {
-    fn default() -> Self {
-        Self {
-            package: Package {
-                name: "hello-world".into(),
-                daft_launcher_version: env!("CARGO_PKG_VERSION")
-                    .parse()
-                    .unwrap(),
-                python_version: None,
-                ray_version: None,
-            },
-            cluster: Cluster {
-                number_of_workers: None,
-                provider: Provider::Aws(AwsCluster {
-                    region: None,
-                    ssh_user: None,
-                    ssh_private_key: None,
-                    iam_instance_profile_arn: None,
-                    template: Some(AwsTemplateType::Light),
-                    custom: None,
-                }),
-                dependencies: vec![],
-                pre_setup_commands: vec![],
-                post_setup_commands: vec![],
-            },
-            jobs: vec![],
-        }
-    }
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
@@ -55,6 +26,17 @@ pub struct Package {
     pub name: StrRef,
     pub python_version: Option<VersionReq>,
     pub ray_version: Option<VersionReq>,
+}
+
+impl Default for Package {
+    fn default() -> Self {
+        Self {
+            daft_launcher_version: env!("CARGO_PKG_VERSION").parse().unwrap(),
+            name: "hello-world".into(),
+            python_version: None,
+            ray_version: None,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
@@ -71,6 +53,18 @@ pub struct Cluster {
     pub post_setup_commands: Vec<StrRef>,
 }
 
+impl Default for Cluster {
+    fn default() -> Self {
+        Self {
+            number_of_workers: None,
+            provider: Provider::default(),
+            dependencies: vec![],
+            pre_setup_commands: vec![],
+            post_setup_commands: vec![],
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(tag = "provider")]
 #[serde(rename_all = "snake_case")]
@@ -79,9 +73,29 @@ pub enum Provider {
     Aws(AwsCluster),
 }
 
-impl OptionsAsStrs for Provider {
-    fn options_as_strs() -> &'static [&'static str] {
+impl Default for Provider {
+    fn default() -> Self {
+        Self::Aws(AwsCluster::default())
+    }
+}
+
+impl Selectable for Provider {
+    fn to_options() -> &'static [&'static str] {
         &["aws"]
+    }
+}
+
+impl FromStr for Provider {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err>
+    where
+        Self: Sized,
+    {
+        match s {
+            "aws" => Ok(Self::Aws(AwsCluster::default())),
+            _ => Err(anyhow::anyhow!("Unknown provider: {}", s)),
+        }
     }
 }
 
@@ -98,18 +112,47 @@ pub struct AwsCluster {
     pub custom: Option<AwsCustomType>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
+impl Default for AwsCluster {
+    fn default() -> Self {
+        Self {
+            region: None,
+            ssh_user: None,
+            ssh_private_key: None,
+            iam_instance_profile_arn: None,
+            template: Some(AwsTemplateType::default()),
+            custom: None,
+        }
+    }
+}
+
+#[derive(
+    Default, Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq,
+)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
 pub enum AwsTemplateType {
+    #[default]
     Light,
     Normal,
     Gpus,
 }
 
-impl OptionsAsStrs for AwsTemplateType {
-    fn options_as_strs() -> &'static [&'static str] {
+impl Selectable for AwsTemplateType {
+    fn to_options() -> &'static [&'static str] {
         &["light", "normal", "gpus"]
+    }
+}
+
+impl FromStr for AwsTemplateType {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "light" => Ok(Self::Light),
+            "normal" => Ok(Self::Normal),
+            "gpus" => Ok(Self::Gpus),
+            _ => Err(anyhow::anyhow!("Unknown AWS template type: {}", s)),
+        }
     }
 }
 
@@ -147,12 +190,13 @@ fn expand_helper<'de, D>(path: PathRef) -> Result<PathRef, D::Error>
 where
     D: Deserializer<'de>,
 {
-    expand(path.clone()).map_err(|_| {
+    let path = expand(&path).map_err(|_| {
         Error::custom(format!(
             "Path expansion failed; could not expand the path '{}'",
             path.display(),
         ))
-    })
+    })?;
+    Ok(path_ref(path))
 }
 
 fn deserialize_dir<'de, D>(deserializer: D) -> Result<PathRef, D::Error>

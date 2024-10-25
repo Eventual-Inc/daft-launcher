@@ -1,5 +1,18 @@
 use crate::StrRef;
 
+fn base_setup_commands() -> Vec<String> {
+    [
+    "curl -LsSf https://astral.sh/uv/install.sh | sh",
+    "uv python install {config.setup.python_version}",
+    "uv python pin {config.setup.python_version}",
+    "uv venv",
+    r#"echo "alias pip='uv pip'" >> $HOME/.bashrc"#,
+    r#"echo "source $HOME/.venv/bin/activate" >> $HOME/.bashrc"#,
+    "source $HOME/.bashrc",
+    r#"uv pip install "ray[default]=={config.setup.ray_version}" "getdaft" "deltalake""#,
+].into_iter().map(ToString::to_string).collect()
+}
+
 pub fn default_region() -> StrRef {
     "us-west-2".into()
 }

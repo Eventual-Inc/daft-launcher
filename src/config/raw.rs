@@ -117,7 +117,9 @@ impl Default for AwsCluster {
             region: None,
             ssh_user: None,
             // This is a placeholder value that will be serialized into the generated config-file.
-            ssh_private_key: path_ref("<fill in path to ssh-private-key here>"),
+            ssh_private_key: path_ref(
+                "<fill in path to your ssh-private-key here>",
+            ),
             iam_instance_profile_arn: None,
             template: Some(AwsTemplateType::default()),
             custom: None,

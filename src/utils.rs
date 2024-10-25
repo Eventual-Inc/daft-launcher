@@ -9,7 +9,7 @@ use anyhow::Context;
 use dirs::home_dir;
 use tempdir::TempDir;
 
-use crate::{path_ref, widgets::Spinner, PathRef};
+use crate::{path_ref, PathRef};
 
 pub fn expand(path: PathRef) -> anyhow::Result<PathRef> {
     let path = if path.starts_with("~") {
@@ -21,31 +21,6 @@ pub fn expand(path: PathRef) -> anyhow::Result<PathRef> {
         path
     };
     Ok(path)
-}
-
-pub async fn is_authenticated_with_aws() -> bool {
-    let sdk_config =
-        aws_config::defaults(aws_config::BehaviorVersion::latest())
-            .region(
-                aws_config::meta::region::RegionProviderChain::default_provider(
-                ),
-            )
-            .load()
-            .await;
-    let client = aws_sdk_sts::Client::new(&sdk_config);
-    client.get_caller_identity().send().await.is_ok()
-}
-
-pub async fn assert_is_authenticated_with_aws() -> anyhow::Result<()> {
-    let spinner = Spinner::new("Authenticating with AWS");
-    let is_authenticated = is_authenticated_with_aws().await;
-    if is_authenticated {
-        spinner.success();
-        Ok(())
-    } else {
-        spinner.fail();
-        anyhow::bail!("You are not signed in to AWS; please sign in first")
-    }
 }
 
 pub fn assert_file_existence_status(
@@ -112,12 +87,5 @@ mod tests {
         let expected = path_ref(&*expected);
         let actual = expand(path).unwrap();
         assert_eq!(&*actual, &*expected);
-    }
-
-    #[cfg(test)]
-    #[tokio::test]
-    #[ignore = "Depends upon global state of AWS authentication; if you want to run this test, run it manually after you've authenticated with AWS"]
-    async fn test_is_authenticated_with_aws() {
-        assert!(is_authenticated_with_aws().await);
     }
 }

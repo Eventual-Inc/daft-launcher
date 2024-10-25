@@ -14,7 +14,7 @@ use semver::Version;
 use tempdir::TempDir;
 
 use crate::{
-    aws::list_instance_names,
+    aws::{assert_is_authenticated_with_aws, instance_name_already_exists},
     config::{
         defaults::{normal_image_id, normal_instance_type},
         processed::{self, ProcessedConfig},
@@ -25,10 +25,7 @@ use crate::{
         ray::RayConfig,
         read_custom, write_ray, write_ray_adhoc, Selectable,
     },
-    utils::{
-        assert_file_existence_status, assert_is_authenticated_with_aws,
-        create_new_file, path_to_str,
-    },
+    utils::{assert_file_existence_status, create_new_file, path_to_str},
     widgets::Spinner,
     ArcStrRef, PathRef, StrRef,
 };
@@ -276,11 +273,11 @@ async fn handle_up(
     let cloud_name = match processed_config.cluster.provider {
         processed::Provider::Aws(ref aws_cluster) => {
             let spinner = Spinner::new("Validating cluster specs");
-            let names = list_instance_names(aws_cluster).await?;
-            if names.contains(&processed_config.package.name.to_string()) {
-                spinner.fail();
-                anyhow::bail!("A cluster with that name already exists in that region; please change the name and try again");
-            }
+            if instance_name_already_exists(processed_config, aws_cluster)
+                .await?
+            {
+                anyhow::bail!("An instance with the name {} already exists in that specified region; please choose a different name", processed_config.package.name);
+            };
             spinner.success();
             if aws_cluster.iam_instance_profile_arn.is_none() {
                 log::warn!("You specified no IAM instance profile ARN; this may cause limit your cluster's abilities to interface with auxiliary AWS services");

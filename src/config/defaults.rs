@@ -1,18 +1,26 @@
+use std::borrow::Cow;
+
 use crate::StrRef;
 
-fn base_setup_commands() -> Vec<String> {
+use crate::config::processed::Package;
+
+pub fn base_setup_commands(package: &Package) -> Vec<StrRef> {
     [
-        "curl -LsSf https://astral.sh/uv/install.sh | sh",
-        "uv python install {config.setup.python_version}",
-        "uv python pin {config.setup.python_version}",
-        "uv venv",
-        r#"echo "alias pip='uv pip'" >> $HOME/.bashrc"#,
-        r#"echo "source $HOME/.venv/bin/activate" >> $HOME/.bashrc"#,
-        "source $HOME/.bashrc",
-        r#"uv pip install "ray[default]=={config.setup.ray_version}" "getdaft" "deltalake""#,
+        "curl -LsSf https://astral.sh/uv/install.sh | sh".into(),
+        format!("uv python install {}", package.python_version).into(),
+        format!("uv python pin {}", package.python_version).into(),
+        "uv v".into(),
+        r#"echo "alias pip='uv pip'" >> $HOME/.bashrc"#.into(),
+        r#"echo "source $HOME/.venv/bin/activate" >> $HOME/.bashrc"#.into(),
+        "source $HOME/.bashrc".into(),
+        format!(
+            r#"uv pip install "ray[default]=={}" "getdaft" "deltalake""#,
+            package.ray_version
+        )
+        .into(),
     ]
     .into_iter()
-    .map(ToString::to_string)
+    .map(|command: Cow<_>| command.as_ref().into())
     .collect()
 }
 

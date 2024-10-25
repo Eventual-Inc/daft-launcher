@@ -20,6 +20,8 @@ use crate::{
     StrRef,
 };
 
+use crate::config::defaults::base_setup_commands;
+
 static MIN_PYTHON_VERSION: LazyLock<VersionReq> =
     LazyLock::new(|| "3.9".parse().unwrap());
 
@@ -69,28 +71,17 @@ pub enum Provider {
 }
 
 impl Provider {
-    pub fn process(
-        provider: raw::Provider,
+    fn process(
+        raw_provider: raw::Provider,
+        package: &Package,
     ) -> anyhow::Result<(Self, Vec<StrRef>, Vec<StrRef>)> {
-        let (provider, pre_setup_commands, post_setup_commands) = match provider
-        {
-            raw::Provider::Aws(aws_cluster) => {
-                match (aws_cluster.template, aws_cluster.custom) {
+        let (provider, pre_setup_commands, post_setup_commands) =
+            match raw_provider {
+                raw::Provider::Aws(aws_cluster) => {
+                    match (aws_cluster.template, aws_cluster.custom) {
                     (Some(..), Some(..)) => anyhow::bail!("Cannot specify both a template type and custom configurations in the configuration file"),
                     (None, None) => anyhow::bail!("Please specify either a template type or some custom configurations in the configuration file"),
 
-                    (None, Some(custom)) => (
-                        Provider::Aws(AwsCluster {
-                            region: aws_cluster.region.unwrap_or_else(default_region),
-                            ssh_user: aws_cluster.ssh_user.unwrap_or_else(default_ssh_user),
-                            ssh_private_key: aws_cluster.ssh_private_key,
-                            iam_instance_profile_arn: aws_cluster.iam_instance_profile_arn,
-                            image_id: custom.image_id,
-                            instance_type: custom.instance_type,
-                        }),
-                        vec![],
-                        vec![],
-                    ),
                     (Some(raw::AwsTemplateType::Light), None) => (
                         Provider::Aws(AwsCluster {
                             region: aws_cluster.region.unwrap_or_else(default_region),
@@ -101,24 +92,36 @@ impl Provider {
                             instance_type: light_instance_type(),
                         }),
                         vec![],
-                        vec![],
+                        base_setup_commands(package),
                     ),
                     (Some(raw::AwsTemplateType::Normal), None) => (
                         Provider::Aws(AwsCluster {
                             region: aws_cluster.region.unwrap_or_else(default_region),
-                            ssh_user: aws_cluster.ssh_user.unwrap_or_else(|| "ec2-user".into()),
+                            ssh_user: aws_cluster.ssh_user.unwrap_or_else(default_ssh_user),
                             ssh_private_key: aws_cluster.ssh_private_key,
                             iam_instance_profile_arn: aws_cluster.iam_instance_profile_arn,
                             image_id: normal_image_id(),
                             instance_type: normal_instance_type(),
                         }),
                         vec![],
-                        vec![],
+                        base_setup_commands(package),
                     ),
                     (Some(raw::AwsTemplateType::Gpus), None) => todo!(),
+                    (None, Some(custom)) => (
+                        Provider::Aws(AwsCluster {
+                            region: aws_cluster.region.unwrap_or_else(default_region),
+                            ssh_user: aws_cluster.ssh_user.unwrap_or_else(default_ssh_user),
+                            ssh_private_key: aws_cluster.ssh_private_key,
+                            iam_instance_profile_arn: aws_cluster.iam_instance_profile_arn,
+                            image_id: custom.image_id,
+                            instance_type: custom.instance_type,
+                        }),
+                        vec![],
+                        base_setup_commands(package),
+                    ),
                 }
-            }
-        };
+                }
+            };
         Ok((provider, pre_setup_commands, post_setup_commands))
     }
 }
@@ -139,7 +142,7 @@ impl TryFrom<raw::RawConfig> for ProcessedConfig {
     fn try_from(mut raw: raw::RawConfig) -> Result<Self, Self::Error> {
         let package = raw.package.try_into()?;
         let (provider, pre_setup_commands, post_setup_commands) =
-            Provider::process(raw.cluster.provider)?;
+            Provider::process(raw.cluster.provider, &package)?;
         raw.cluster.pre_setup_commands.extend(pre_setup_commands);
         raw.cluster.post_setup_commands.extend(post_setup_commands);
         Ok(ProcessedConfig {

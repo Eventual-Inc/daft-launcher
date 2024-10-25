@@ -429,6 +429,11 @@ fn assert_matching_daft_launcher_versions(
     {
         Ok(())
     } else {
-        anyhow::bail!("The version requirement in the config file located at {:?} (version-requirement {}) is not satisfied by this binary's version (version {})", config_path, processed_config.package.daft_launcher_version, &*DAFT_LAUNCHER_VERSION)
+        anyhow::bail!(
+            "The version requirement in the config file located at {:?} (version-requirement {}) is not satisfied by this binary's version (version {})",
+            config_path,
+            processed_config.package.daft_launcher_version,
+            &*DAFT_LAUNCHER_VERSION,
+        )
     }
 }

@@ -276,6 +276,7 @@ async fn handle_up(
             if instance_name_already_exists(processed_config, aws_cluster)
                 .await?
             {
+                spinner.fail();
                 anyhow::bail!("An instance with the name {} already exists in that specified region; please choose a different name", processed_config.package.name);
             };
             spinner.success();

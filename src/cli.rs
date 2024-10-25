@@ -71,9 +71,9 @@ pub struct Down {
     /// Name of the cluster to spin down
     #[arg(short, long, value_name = "NAME")]
     pub name: Option<ArcStrRef>,
-    /// Type of cloud provider which contains the cluster to spin down
+    /// The cloud provider which contains the cluster to spin down
     #[arg(short, long, value_name = "TYPE")]
-    pub r#type: Option<ArcStrRef>,
+    pub provider: Option<ArcStrRef>,
     /// Region of the cluster to spin down
     #[arg(short, long, value_name = "REGION")]
     pub region: Option<ArcStrRef>,
@@ -308,11 +308,11 @@ Instance names: {}
 }
 
 fn handle_down(down: &Down, ray_config: &RayConfig) -> anyhow::Result<()> {
-    let (temp_dir, path) = match (&down.name, &down.r#type, &down.region) {
-        (Some(name), Some(r#type), Some(region)) => write_ray_adhoc(&name, &r#type, &region),
+    let (temp_dir, path) = match (&down.name, &down.provider, &down.region) {
+        (Some(name), Some(provider), Some(region)) => write_ray_adhoc(&name, &provider, &region),
         (None, None, None) => write_ray(&ray_config),
         _ => anyhow::bail!(
-            "You must provide all three arguments to spin down a cluster: name, type, and region"
+            "You must provide all three arguments to spin down a cluster: name, provider, and region"
         ),
     }?;
     run_ray_command(

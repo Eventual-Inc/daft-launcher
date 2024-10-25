@@ -49,7 +49,7 @@ pub fn write_ray(ray_config: &RayConfig) -> anyhow::Result<(TempDir, PathRef)> {
 
 pub fn write_ray_adhoc(
     name: &str,
-    r#type: &str,
+    provider: &str,
     region: &str,
 ) -> anyhow::Result<(TempDir, PathRef)> {
     let contents = format!(
@@ -58,7 +58,7 @@ provider:
     type: {}
     region: {}
 "#,
-        name, r#type, region,
+        name, provider, region,
     );
     write_ray_inner(&contents)
 }

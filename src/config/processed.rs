@@ -137,12 +137,12 @@ pub struct AwsCluster {
 impl TryFrom<raw::RawConfig> for ProcessedConfig {
     type Error = anyhow::Error;
 
-    fn try_from(mut raw: raw::RawConfig) -> Result<Self, Self::Error> {
+    fn try_from(raw: raw::RawConfig) -> Result<Self, Self::Error> {
         let package = raw.package.try_into()?;
-        let (provider, pre_setup_commands, post_setup_commands) =
+        let (provider, mut pre_setup_commands, mut post_setup_commands) =
             Provider::process(raw.cluster.provider, &package)?;
-        raw.cluster.pre_setup_commands.extend(pre_setup_commands);
-        raw.cluster.post_setup_commands.extend(post_setup_commands);
+        pre_setup_commands.extend(raw.cluster.pre_setup_commands);
+        post_setup_commands.extend(raw.cluster.post_setup_commands);
         Ok(ProcessedConfig {
             package,
             cluster: Cluster {
@@ -152,8 +152,8 @@ impl TryFrom<raw::RawConfig> for ProcessedConfig {
                     .number_of_workers
                     .unwrap_or(DEFAULT_NUMBER_OF_WORKERS),
                 dependencies: raw.cluster.dependencies,
-                pre_setup_commands: raw.cluster.pre_setup_commands,
-                post_setup_commands: raw.cluster.post_setup_commands,
+                pre_setup_commands,
+                post_setup_commands,
             },
             jobs: raw.jobs,
         })
@@ -209,13 +209,15 @@ pub mod tests {
 
     #[fixture]
     pub fn light_processed_config() -> ProcessedConfig {
+        let package = Package {
+            name: "light".into(),
+            daft_launcher_version: "0.4.0-alpha0".parse().unwrap(),
+            python_version: get_python_version().unwrap(),
+            ray_version: get_ray_version().unwrap(),
+        };
+        let post_setup_commands = base_setup_commands(&package);
         ProcessedConfig {
-            package: Package {
-                name: "light".into(),
-                daft_launcher_version: "0.4.0-alpha0".parse().unwrap(),
-                python_version: get_python_version().unwrap(),
-                ray_version: get_ray_version().unwrap(),
-            },
+            package,
             cluster: Cluster {
                 provider: Provider::Aws(AwsCluster {
                     region: "us-west-2".into(),
@@ -228,7 +230,7 @@ pub mod tests {
                 number_of_workers: 2,
                 dependencies: vec![],
                 pre_setup_commands: vec![],
-                post_setup_commands: vec![],
+                post_setup_commands,
             },
             jobs: vec![Job {
                 name: "filter".into(),
@@ -240,13 +242,17 @@ pub mod tests {
 
     #[fixture]
     pub fn custom_processed_config() -> ProcessedConfig {
+        let package = Package {
+            name: "custom".into(),
+            daft_launcher_version: "0.1.0".parse().unwrap(),
+            python_version: get_python_version().unwrap(),
+            ray_version: get_ray_version().unwrap(),
+        };
+        let mut post_setup_commands = base_setup_commands(&package);
+        post_setup_commands.extend(["echo 'Finished!'".into()]);
+
         ProcessedConfig {
-            package: Package {
-                name: "custom".into(),
-                daft_launcher_version: "0.1.0".parse().unwrap(),
-                python_version: get_python_version().unwrap(),
-                ray_version: get_ray_version().unwrap(),
-            },
+            package,
             cluster: Cluster {
                 provider: Provider::Aws(AwsCluster {
                     region: "us-east-2".into(),
@@ -263,7 +269,7 @@ pub mod tests {
                     "numpy".into(),
                 ],
                 pre_setup_commands: vec!["echo 'Hello, world!'".into()],
-                post_setup_commands: vec!["echo 'Finished!'".into()],
+                post_setup_commands,
             },
             jobs: vec![
                 Job {

@@ -75,11 +75,11 @@ pub async fn list_instance_names(
 pub async fn instance_name_already_exists(
     processed_config: &ProcessedConfig,
     aws_cluster: &AwsCluster,
-) -> anyhow::Result<bool> {
+) -> anyhow::Result<(bool, Vec<String>)> {
     let instance_names = list_instance_names(aws_cluster).await?;
     let is_contained = instance_names
         .contains(&format!("ray-{}-head", processed_config.package.name));
-    Ok(is_contained)
+    Ok((is_contained, instance_names))
 }
 
 #[cfg(test)]

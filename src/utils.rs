@@ -7,9 +7,14 @@ use std::{
 
 use anyhow::Context;
 use dirs::home_dir;
+use log::Level;
 use tempdir::TempDir;
 
 use crate::{path_ref, PathRef};
+
+pub fn is_debug() -> bool {
+    log::log_enabled!(Level::Debug)
+}
 
 pub fn expand(path: PathRef) -> anyhow::Result<PathRef> {
     let path = if path.starts_with("~") {

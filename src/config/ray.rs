@@ -74,7 +74,7 @@ pub struct Resources {
     pub gpu: usize,
 }
 
-fn to_key_name(path: &Path) -> anyhow::Result<&str> {
+fn to_key_stem(path: &Path) -> anyhow::Result<&str> {
     let path = path.file_stem().expect(
         "File should exist, as checked by deserialzation logic in raw.rs",
     );
@@ -103,13 +103,7 @@ impl TryFrom<processed::ProcessedConfig> for RayConfig {
                                     .iam_instance_profile_arn
                                     .map(|arn| IamInstanceProfile { arn }),
                                 image_id: aws_cluster.image_id,
-                                // key_name: aws_cluster
-                                //     .ssh_private_key
-                                //     .as_deref()
-                                //     .map(to_key_name)
-                                //     .transpose()?
-                                //     .map(Into::into),
-                                key_name: to_key_name(
+                                key_name: to_key_stem(
                                     &*aws_cluster.ssh_private_key,
                                 )?
                                 .into(),
@@ -139,8 +133,8 @@ impl TryFrom<processed::ProcessedConfig> for RayConfig {
             provider,
             auth,
             available_node_types,
-            initialization_commands: vec![],
-            setup_commands: vec![],
+            initialization_commands: config.cluster.pre_setup_commands,
+            setup_commands: config.cluster.post_setup_commands,
         })
     }
 }
@@ -155,6 +149,8 @@ mod tests {
 
     #[fixture]
     pub fn light_ray_config() -> RayConfig {
+        let processed_config =
+            super::processed::tests::light_processed_config();
         RayConfig {
             cluster_name: "light".into(),
             max_workers: 2,
@@ -183,13 +179,18 @@ mod tests {
                     "ray.worker.default".into() => generic_node_type,
                 }
             },
-            initialization_commands: vec![],
-            setup_commands: vec![],
+            initialization_commands: processed_config
+                .cluster
+                .pre_setup_commands,
+            setup_commands: processed_config.cluster.post_setup_commands,
         }
     }
 
     #[fixture]
     pub fn custom_ray_config() -> RayConfig {
+        let processed_config =
+            super::processed::tests::custom_processed_config();
+
         RayConfig {
             cluster_name: "custom".into(),
             max_workers: 4,
@@ -218,8 +219,10 @@ mod tests {
                     "ray.worker.default".into() => generic_node_type,
                 }
             },
-            initialization_commands: vec![],
-            setup_commands: vec![],
+            initialization_commands: processed_config
+                .cluster
+                .pre_setup_commands,
+            setup_commands: processed_config.cluster.post_setup_commands,
         }
     }
 

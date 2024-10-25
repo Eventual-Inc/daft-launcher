@@ -9,7 +9,6 @@ use std::{
 use clap::Parser;
 use console::style;
 use dialoguer::{theme::ColorfulTheme, Input, Select};
-use log::Level;
 use semver::Version;
 use tempdir::TempDir;
 
@@ -25,7 +24,9 @@ use crate::{
         ray::RayConfig,
         read_custom, write_ray, write_ray_adhoc, Selectable,
     },
-    utils::{assert_file_existence_status, create_new_file, path_to_str},
+    utils::{
+        assert_file_existence_status, create_new_file, is_debug, path_to_str,
+    },
     widgets::Spinner,
     ArcStrRef, PathRef, StrRef,
 };
@@ -273,11 +274,41 @@ async fn handle_up(
     let cloud_name = match processed_config.cluster.provider {
         processed::Provider::Aws(ref aws_cluster) => {
             let spinner = Spinner::new("Validating cluster specs");
-            if instance_name_already_exists(processed_config, aws_cluster)
-                .await?
-            {
+            let (instance_name_already_exists, names) =
+                instance_name_already_exists(processed_config, aws_cluster)
+                    .await?;
+            if instance_name_already_exists {
                 spinner.fail();
-                anyhow::bail!("An instance with the name {} already exists in that specified region; please choose a different name", processed_config.package.name);
+                let names = names.into_iter().enumerate().fold(
+                    String::default(),
+                    |mut joined_names, (index, name)| {
+                        if index != 0 {
+                            let styled_comma = style(", ").green().to_string();
+                            joined_names.push_str(&styled_comma);
+                        }
+                        let name = if name
+                            == format!(
+                                "ray-{}-head",
+                                processed_config.package.name
+                            ) {
+                            style(name).bold()
+                        } else {
+                            style(name)
+                        }
+                        .green()
+                        .to_string();
+                        joined_names.push_str(&name);
+                        joined_names
+                    },
+                );
+                anyhow::bail!(
+                    r#"An instance with the name "{}" already exists in that specified region; please choose a different name
+Instance names: {}
+{}"#,
+                    processed_config.package.name,
+                    names,
+                    style("*Note that Ray prepends `ray-` before and appends `-head` after the name of your cluster").red(),
+                );
             };
             spinner.success();
             if aws_cluster.iam_instance_profile_arn.is_none() {
@@ -378,7 +409,7 @@ fn run_ray_command(
             child.stderr.take().expect("Stderr should always exist"),
         );
 
-        if log::log_enabled!(Level::Debug) {
+        if is_debug() {
             let full_child_backtrace = child_stderr
                 .lines()
                 .flatten()

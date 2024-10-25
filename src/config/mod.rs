@@ -44,12 +44,9 @@ pub fn read_custom(
 }
 
 pub fn write_ray(ray_config: &RayConfig) -> anyhow::Result<(TempDir, PathRef)> {
-    let (temp_dir, path, mut file) = create_ray_temporary_file()?;
-    log::debug!("Writing ray config {ray_config:?} to temporary file {path:?}");
     let ray_config = serde_yaml::to_string(ray_config)
         .expect("Serialization to yaml should always succeed");
-    file.write_all(ray_config.as_bytes())?;
-    Ok((temp_dir, path))
+    write_ray_inner(&ray_config)
 }
 
 pub fn write_ray_adhoc(
@@ -65,8 +62,13 @@ provider:
 "#,
         name, r#type, region,
     );
+    write_ray_inner(&contents)
+}
+
+fn write_ray_inner(contents: &str) -> anyhow::Result<(TempDir, PathRef)> {
     let (temp_dir, path, mut file) = create_ray_temporary_file()?;
-    log::debug!("Writing ray config {contents:?} to temporary file {path:?}");
+    log::debug!("Writing ray config to temporary file {}", path.display());
+    log::debug!("{}", contents);
     file.write_all(contents.as_bytes())?;
     Ok((temp_dir, path))
 }

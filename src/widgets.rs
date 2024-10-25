@@ -16,7 +16,7 @@ impl Spinner {
     pub fn new(message: impl Into<Cow<'static, str>>) -> Self {
         let message = message.into();
         let spinner = ProgressBar::new_spinner();
-        spinner.enable_steady_tick(Duration::from_millis(50));
+        spinner.enable_steady_tick(Duration::from_millis(10));
         spinner.set_style(
             ProgressStyle::default_spinner()
                 .template("{spinner:.yellow}\t {msg}")

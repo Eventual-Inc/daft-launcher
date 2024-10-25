@@ -18,8 +18,7 @@ pub fn is_debug() -> bool {
 
 pub fn expand(path: PathRef) -> anyhow::Result<PathRef> {
     let path = if path.starts_with("~") {
-        let home = home_dir()
-            .ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
+        let home = home_dir().ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
         let suffix = path.strip_prefix("~").unwrap();
         path_ref(home.join(suffix))
     } else {
@@ -28,10 +27,7 @@ pub fn expand(path: PathRef) -> anyhow::Result<PathRef> {
     Ok(path)
 }
 
-pub fn assert_file_existence_status(
-    path: &Path,
-    should_exist: bool,
-) -> anyhow::Result<()> {
+pub fn assert_file_existence_status(path: &Path, should_exist: bool) -> anyhow::Result<()> {
     let exists = path.exists();
     match (exists, should_exist) {
         (true, true) | (false, false) => Ok(()),
@@ -66,13 +62,14 @@ where
 }
 
 pub fn create_ray_temporary_file() -> anyhow::Result<(TempDir, PathRef, File)> {
-    let temp_dir = TempDir::new("ray_config")
-        .expect("Creation of temporary directory should always succeed");
+    let temp_dir =
+        TempDir::new("ray_config").expect("Creation of temporary directory should always succeed");
     let path = path_ref(temp_dir.path().join("ray.yaml"));
-    log::debug!("Created new temporary dir {temp_dir:?} and new temporary ray config file at path {path:?}");
-    let file = create_new_file(&path).expect(
-        "Creating new file in temporary directory should always succeed",
+    log::debug!(
+        "Created new temporary dir {temp_dir:?} and new temporary ray config file at path {path:?}"
     );
+    let file = create_new_file(&path)
+        .expect("Creating new file in temporary directory should always succeed");
     Ok((temp_dir, path, file))
 }
 

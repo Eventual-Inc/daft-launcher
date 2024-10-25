@@ -9,9 +9,8 @@ use which::which;
 use crate::{
     config::{
         defaults::{
-            base_setup_commands, default_region, default_ssh_user,
-            light_image_id, light_instance_type, normal_image_id,
-            normal_instance_type, DEFAULT_NUMBER_OF_WORKERS,
+            base_setup_commands, default_region, default_ssh_user, light_image_id,
+            light_instance_type, normal_image_id, normal_instance_type, DEFAULT_NUMBER_OF_WORKERS,
         },
         raw,
         raw::Job,
@@ -20,8 +19,7 @@ use crate::{
     StrRef,
 };
 
-static MIN_PYTHON_VERSION: LazyLock<VersionReq> =
-    LazyLock::new(|| "3.9".parse().unwrap());
+static MIN_PYTHON_VERSION: LazyLock<VersionReq> = LazyLock::new(|| "3.9".parse().unwrap());
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProcessedConfig {
@@ -42,8 +40,7 @@ impl TryFrom<raw::Package> for Package {
     type Error = anyhow::Error;
 
     fn try_from(value: raw::Package) -> Result<Self, Self::Error> {
-        let python_version =
-            value.python_version.map_or_else(get_python_version, Ok)?;
+        let python_version = value.python_version.map_or_else(get_python_version, Ok)?;
         let ray_version = value.ray_version.map_or_else(get_ray_version, Ok)?;
         Ok(Self {
             daft_launcher_version: value.daft_launcher_version,
@@ -190,7 +187,9 @@ fn get_python_version() -> anyhow::Result<VersionReq> {
         log::debug!("Python version determined to be: {version}");
         Ok(format!("={version}").parse().unwrap())
     } else {
-        anyhow::bail!("Python version {version} is not supported; must be >= {MIN_PYTHON_VERSION:?}")
+        anyhow::bail!(
+            "Python version {version} is not supported; must be >= {MIN_PYTHON_VERSION:?}"
+        )
     }
 }
 
@@ -263,11 +262,7 @@ pub mod tests {
                     instance_type: "...".into(),
                 }),
                 number_of_workers: 4,
-                dependencies: vec![
-                    "pytorch".into(),
-                    "pandas".into(),
-                    "numpy".into(),
-                ],
+                dependencies: vec!["pytorch".into(), "pandas".into(), "numpy".into()],
                 pre_setup_commands: vec!["echo 'Hello, world!'".into()],
                 post_setup_commands,
             },

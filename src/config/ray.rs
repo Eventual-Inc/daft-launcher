@@ -49,10 +49,7 @@ pub enum NodeConfig {
 pub struct AwsNodeConfig {
     #[serde(rename = "InstanceType")]
     pub instance_type: StrRef,
-    #[serde(
-        rename = "IamInstanceProfile",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "IamInstanceProfile", skip_serializing_if = "Option::is_none")]
     pub iam_instance_profile: Option<IamInstanceProfile>,
     #[serde(rename = "ImageId")]
     pub image_id: StrRef,
@@ -75,9 +72,9 @@ pub struct Resources {
 }
 
 fn to_key_stem(path: &Path) -> anyhow::Result<&str> {
-    let path = path.file_stem().expect(
-        "File should exist, as checked by deserialzation logic in raw.rs",
-    );
+    let path = path
+        .file_stem()
+        .expect("File should exist, as checked by deserialzation logic in raw.rs");
     let key_name = path_to_str(path)?;
     Ok(key_name)
 }
@@ -85,48 +82,42 @@ fn to_key_stem(path: &Path) -> anyhow::Result<&str> {
 impl TryFrom<processed::ProcessedConfig> for RayConfig {
     type Error = anyhow::Error;
 
-    fn try_from(
-        config: processed::ProcessedConfig,
-    ) -> Result<Self, Self::Error> {
-        let (provider, available_node_types, auth) =
-            match config.cluster.provider {
-                processed::Provider::Aws(aws_cluster) => (
-                    Provider {
-                        r#type: "aws".into(),
-                        region: aws_cluster.region,
-                    },
-                    {
-                        let generic_node_type = NodeType {
-                            node_config: NodeConfig::Aws(AwsNodeConfig {
-                                instance_type: aws_cluster.instance_type,
-                                iam_instance_profile: aws_cluster
-                                    .iam_instance_profile_arn
-                                    .map(|arn| IamInstanceProfile { arn }),
-                                image_id: aws_cluster.image_id,
-                                key_name: to_key_stem(
-                                    &*aws_cluster.ssh_private_key,
-                                )?
-                                .into(),
-                            }),
-                            min_workers: Some(config.cluster.number_of_workers),
-                            max_workers: Some(config.cluster.number_of_workers),
-                            resources: Resources { cpu: 1, gpu: 0 },
-                        };
-                        hash_map! {
-                            "ray.head.default".into() => NodeType {
-                                min_workers: None,
-                                max_workers: None,
-                                ..generic_node_type.clone()
-                            },
-                            "ray.worker.default".into() => generic_node_type,
-                        }
-                    },
-                    Auth {
-                        ssh_user: aws_cluster.ssh_user,
-                        ssh_private_key: aws_cluster.ssh_private_key,
-                    },
-                ),
-            };
+    fn try_from(config: processed::ProcessedConfig) -> Result<Self, Self::Error> {
+        let (provider, available_node_types, auth) = match config.cluster.provider {
+            processed::Provider::Aws(aws_cluster) => (
+                Provider {
+                    r#type: "aws".into(),
+                    region: aws_cluster.region,
+                },
+                {
+                    let generic_node_type = NodeType {
+                        node_config: NodeConfig::Aws(AwsNodeConfig {
+                            instance_type: aws_cluster.instance_type,
+                            iam_instance_profile: aws_cluster
+                                .iam_instance_profile_arn
+                                .map(|arn| IamInstanceProfile { arn }),
+                            image_id: aws_cluster.image_id,
+                            key_name: to_key_stem(&*aws_cluster.ssh_private_key)?.into(),
+                        }),
+                        min_workers: Some(config.cluster.number_of_workers),
+                        max_workers: Some(config.cluster.number_of_workers),
+                        resources: Resources { cpu: 1, gpu: 0 },
+                    };
+                    hash_map! {
+                        "ray.head.default".into() => NodeType {
+                            min_workers: None,
+                            max_workers: None,
+                            ..generic_node_type.clone()
+                        },
+                        "ray.worker.default".into() => generic_node_type,
+                    }
+                },
+                Auth {
+                    ssh_user: aws_cluster.ssh_user,
+                    ssh_private_key: aws_cluster.ssh_private_key,
+                },
+            ),
+        };
         Ok(Self {
             cluster_name: config.package.name,
             max_workers: config.cluster.number_of_workers,
@@ -149,8 +140,7 @@ mod tests {
 
     #[fixture]
     pub fn light_ray_config() -> RayConfig {
-        let processed_config =
-            super::processed::tests::light_processed_config();
+        let processed_config = super::processed::tests::light_processed_config();
         RayConfig {
             cluster_name: "light".into(),
             max_workers: 2,
@@ -179,17 +169,14 @@ mod tests {
                     "ray.worker.default".into() => generic_node_type,
                 }
             },
-            initialization_commands: processed_config
-                .cluster
-                .pre_setup_commands,
+            initialization_commands: processed_config.cluster.pre_setup_commands,
             setup_commands: processed_config.cluster.post_setup_commands,
         }
     }
 
     #[fixture]
     pub fn custom_ray_config() -> RayConfig {
-        let processed_config =
-            super::processed::tests::custom_processed_config();
+        let processed_config = super::processed::tests::custom_processed_config();
 
         RayConfig {
             cluster_name: "custom".into(),
@@ -219,9 +206,7 @@ mod tests {
                     "ray.worker.default".into() => generic_node_type,
                 }
             },
-            initialization_commands: processed_config
-                .cluster
-                .pre_setup_commands,
+            initialization_commands: processed_config.cluster.pre_setup_commands,
             setup_commands: processed_config.cluster.post_setup_commands,
         }
     }

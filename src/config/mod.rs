@@ -26,9 +26,7 @@ pub trait Selectable {
     fn parse(s: &str) -> anyhow::Result<Self::Parsed>;
 }
 
-pub fn read_custom(
-    path: &Path,
-) -> anyhow::Result<(ProcessedConfig, RayConfig)> {
+pub fn read_custom(path: &Path) -> anyhow::Result<(ProcessedConfig, RayConfig)> {
     let mut file =
         OpenOptions::new().read(true).open(path).with_context(|| {
             format!("No configuration file found at the path `{}`; please run `daft init-config` to generate a configuration file", path.display())
@@ -44,8 +42,8 @@ pub fn read_custom(
 }
 
 pub fn write_ray(ray_config: &RayConfig) -> anyhow::Result<(TempDir, PathRef)> {
-    let ray_config = serde_yaml::to_string(ray_config)
-        .expect("Serialization to yaml should always succeed");
+    let ray_config =
+        serde_yaml::to_string(ray_config).expect("Serialization to yaml should always succeed");
     write_ray_inner(&ray_config)
 }
 

@@ -1,7 +1,5 @@
 use aws_config::{BehaviorVersion, Region};
-use aws_sdk_ec2::{
-    operation::describe_instances::DescribeInstancesOutput, Client,
-};
+use aws_sdk_ec2::{operation::describe_instances::DescribeInstancesOutput, Client};
 
 use crate::{
     config::processed::{AwsCluster, ProcessedConfig},
@@ -9,14 +7,10 @@ use crate::{
 };
 
 async fn is_authenticated_with_aws() -> bool {
-    let sdk_config =
-        aws_config::defaults(aws_config::BehaviorVersion::latest())
-            .region(
-                aws_config::meta::region::RegionProviderChain::default_provider(
-                ),
-            )
-            .load()
-            .await;
+    let sdk_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
+        .region(aws_config::meta::region::RegionProviderChain::default_provider())
+        .load()
+        .await;
     let client = aws_sdk_sts::Client::new(&sdk_config);
     client.get_caller_identity().send().await.is_ok()
 }
@@ -33,9 +27,7 @@ pub async fn assert_is_authenticated_with_aws() -> anyhow::Result<()> {
     }
 }
 
-pub async fn list_instances(
-    aws_cluster: &AwsCluster,
-) -> anyhow::Result<DescribeInstancesOutput> {
+pub async fn list_instances(aws_cluster: &AwsCluster) -> anyhow::Result<DescribeInstancesOutput> {
     let region = Region::new(aws_cluster.region.to_string());
     let sdk_config = aws_config::defaults(BehaviorVersion::latest())
         .region(region)
@@ -46,9 +38,7 @@ pub async fn list_instances(
     Ok(output)
 }
 
-pub async fn list_instance_names(
-    aws_cluster: &AwsCluster,
-) -> anyhow::Result<Vec<String>> {
+pub async fn list_instance_names(aws_cluster: &AwsCluster) -> anyhow::Result<Vec<String>> {
     let instances = list_instances(aws_cluster).await?;
     let reservations = instances.reservations.unwrap_or_default();
     let mut instance_names = Vec::new();
@@ -60,9 +50,7 @@ pub async fn list_instance_names(
             .iter()
             .filter_map(|instance| instance.tags.as_ref())
         {
-            for (key, value) in
-                tags.iter().filter_map(|tag| tag.key().zip(tag.value()))
-            {
+            for (key, value) in tags.iter().filter_map(|tag| tag.key().zip(tag.value())) {
                 if key == "Name" {
                     instance_names.push(value.to_string());
                 }
@@ -77,8 +65,8 @@ pub async fn instance_name_already_exists(
     aws_cluster: &AwsCluster,
 ) -> anyhow::Result<(bool, Vec<String>)> {
     let instance_names = list_instance_names(aws_cluster).await?;
-    let is_contained = instance_names
-        .contains(&format!("ray-{}-head", processed_config.package.name));
+    let is_contained =
+        instance_names.contains(&format!("ray-{}-head", processed_config.package.name));
     Ok((is_contained, instance_names))
 }
 

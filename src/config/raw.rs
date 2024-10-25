@@ -117,9 +117,7 @@ impl Default for AwsCluster {
             region: None,
             ssh_user: None,
             // This is a placeholder value that will be serialized into the generated config-file.
-            ssh_private_key: path_ref(
-                "<fill in path to your ssh-private-key here>",
-            ),
+            ssh_private_key: path_ref("<fill in path to your ssh-private-key here>"),
             iam_instance_profile_arn: None,
             template: Some(AwsTemplateType::default()),
             custom: None,
@@ -127,9 +125,7 @@ impl Default for AwsCluster {
     }
 }
 
-#[derive(
-    Default, Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq,
-)]
+#[derive(Default, Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
 pub enum AwsTemplateType {
@@ -177,9 +173,8 @@ fn assert_path_exists_helper<'de, D>(path: &Path) -> Result<(), D::Error>
 where
     D: Deserializer<'de>,
 {
-    assert_file_existence_status(path, true).map_err(|_| {
-        Error::custom(format!("The path '{}' does not exist.", path.display(),))
-    })
+    assert_file_existence_status(path, true)
+        .map_err(|_| Error::custom(format!("The path '{}' does not exist.", path.display(),)))
 }
 
 fn expand_helper<'de, D>(path: PathRef) -> Result<PathRef, D::Error>
@@ -288,11 +283,7 @@ pub mod tests {
                     }),
                 }),
                 number_of_workers: Some(4),
-                dependencies: vec![
-                    "pytorch".into(),
-                    "pandas".into(),
-                    "numpy".into(),
-                ],
+                dependencies: vec!["pytorch".into(), "pandas".into(), "numpy".into()],
                 pre_setup_commands: vec!["echo 'Hello, world!'".into()],
                 post_setup_commands: vec!["echo 'Finished!'".into()],
             },
@@ -314,10 +305,7 @@ pub mod tests {
     #[rstest]
     #[case(include_str!(path_from_root!("tests" / "fixtures" / "light.toml")), light_raw_config())]
     #[case(include_str!(path_from_root!("tests" / "fixtures" / "custom.toml")), custom_raw_config())]
-    fn test_str_to_raw_config(
-        #[case] input: &str,
-        #[case] expected: RawConfig,
-    ) {
+    fn test_str_to_raw_config(#[case] input: &str, #[case] expected: RawConfig) {
         let actual: RawConfig = toml::from_str(input).unwrap();
         assert_eq!(actual, expected);
     }

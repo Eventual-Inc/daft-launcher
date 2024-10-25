@@ -18,15 +18,13 @@ use crate::{
         defaults::{normal_image_id, normal_instance_type},
         processed::{self, ProcessedConfig},
         raw::{
-            default_name, AwsCluster, AwsCustomType, AwsTemplateType, Cluster,
-            Package, Provider, RawConfig,
+            default_name, AwsCluster, AwsCustomType, AwsTemplateType, Cluster, Package, Provider,
+            RawConfig,
         },
         ray::RayConfig,
         read_custom, write_ray, write_ray_adhoc, Selectable,
     },
-    utils::{
-        assert_file_existence_status, create_new_file, is_debug, path_to_str,
-    },
+    utils::{assert_file_existence_status, create_new_file, is_debug, path_to_str},
     widgets::Spinner,
     ArcStrRef, PathRef, StrRef,
 };
@@ -34,7 +32,7 @@ use crate::{
 #[derive(Parser)]
 #[command(version, about = env!("CARGO_PKG_DESCRIPTION"))]
 pub enum Cli {
-    InitConfig(InitConfig),
+    Init(Init),
     Up(Up),
     Down(Down),
     Submit(Submit),
@@ -49,7 +47,7 @@ pub enum Cli {
 /// These configuration files are the entry point into the daft launcher utility tool.
 /// They contain all the necessary information to spin up a cluster, submit jobs, and more.
 #[derive(Debug, Parser, Clone, PartialEq, Eq)]
-pub struct InitConfig {
+pub struct Init {
     /// Name of the configuration file (can be specified as a path).
     #[arg(short, long, value_name = "NAME", default_value = ".daft.toml")]
     pub name: PathBuf,
@@ -121,10 +119,9 @@ static DAFT_LAUNCHER_VERSION: LazyLock<Version> =
 
 pub async fn handle() -> anyhow::Result<()> {
     match Cli::parse() {
-        Cli::InitConfig(init_config) => handle_init_config(init_config),
+        Cli::Init(init) => handle_init(init),
         Cli::Up(up) => {
-            let (processed_config, ray_config) =
-                run_checks(&up.config.config).await?;
+            let (processed_config, ray_config) = run_checks(&up.config.config).await?;
             handle_up(&processed_config, &ray_config).await
         }
         Cli::Down(down) => {
@@ -138,9 +135,7 @@ pub async fn handle() -> anyhow::Result<()> {
     }
 }
 
-async fn run_checks(
-    config_path: &Path,
-) -> anyhow::Result<(ProcessedConfig, RayConfig)> {
+async fn run_checks(config_path: &Path) -> anyhow::Result<(ProcessedConfig, RayConfig)> {
     let (processed_config, ray_config) = read_custom(config_path)?;
     match processed_config.cluster.provider {
         processed::Provider::Aws(..) => {
@@ -163,33 +158,24 @@ const CLOUD_EMOJI: &str = "🌥️";
 const HAMMER_EMOJI: &str = "🔨";
 const COMPUTER_EMOJI: &str = "💻";
 
-fn handle_init_config(init_config: InitConfig) -> anyhow::Result<()> {
-    assert_file_existence_status(&init_config.name, false)?;
-    let raw_config = if init_config.default {
+fn handle_init(init: Init) -> anyhow::Result<()> {
+    assert_file_existence_status(&init.name, false)?;
+    let raw_config = if init.default {
         RawConfig::default()
     } else {
-        let name =
-            with_input("Cluster name", &prefix(NOTEPAD_EMOJI), default_name())?;
-        let provider = match with_selections::<Provider>(
-            "Cloud provider",
-            &prefix(CLOUD_EMOJI),
-        )? {
+        let name = with_input("Cluster name", &prefix(NOTEPAD_EMOJI), default_name())?;
+        let provider = match with_selections::<Provider>("Cloud provider", &prefix(CLOUD_EMOJI))? {
             Provider::Aws(aws_cluster) => {
-                let template = with_selections::<AwsTemplateType>(
-                    "Template",
-                    &prefix(HAMMER_EMOJI),
-                )?;
+                let template =
+                    with_selections::<AwsTemplateType>("Template", &prefix(HAMMER_EMOJI))?;
                 let custom = if template.is_none() {
                     let instance_type = with_input(
                         "Instance type",
                         &prefix(COMPUTER_EMOJI),
                         &*normal_instance_type(),
                     )?;
-                    let image_id = with_input(
-                        "Image ID",
-                        &prefix(COMPUTER_EMOJI),
-                        &*normal_image_id(),
-                    )?;
+                    let image_id =
+                        with_input("Image ID", &prefix(COMPUTER_EMOJI), &*normal_image_id())?;
                     Some(AwsCustomType {
                         instance_type,
                         image_id,
@@ -216,9 +202,8 @@ fn handle_init_config(init_config: InitConfig) -> anyhow::Result<()> {
             ..Default::default()
         }
     };
-    let mut file = create_new_file(&init_config.name)?;
-    let config = toml::to_string_pretty(&raw_config)
-        .expect("Serialization should always succeed");
+    let mut file = create_new_file(&init.name)?;
+    let config = toml::to_string_pretty(&raw_config).expect("Serialization should always succeed");
     let config = format!(
         r#"# For a full schema of this configuration file, please visit:
 # https://eventual-inc.github.io/daft-launcher
@@ -232,7 +217,7 @@ fn handle_init_config(init_config: InitConfig) -> anyhow::Result<()> {
     file.write_all(config.as_bytes())?;
     println!(
         "Created file at: {}",
-        style(format!("`{}`", init_config.name.display())).cyan(),
+        style(format!("`{}`", init.name.display())).cyan(),
     );
     Ok(())
 }
@@ -275,8 +260,7 @@ async fn handle_up(
         processed::Provider::Aws(ref aws_cluster) => {
             let spinner = Spinner::new("Validating cluster specs");
             let (instance_name_already_exists, names) =
-                instance_name_already_exists(processed_config, aws_cluster)
-                    .await?;
+                instance_name_already_exists(processed_config, aws_cluster).await?;
             if instance_name_already_exists {
                 spinner.fail();
                 let names = names.into_iter().enumerate().fold(
@@ -286,11 +270,8 @@ async fn handle_up(
                             let styled_comma = style(", ").green().to_string();
                             joined_names.push_str(&styled_comma);
                         }
-                        let name = if name
-                            == format!(
-                                "ray-{}-head",
-                                processed_config.package.name
-                            ) {
+                        let name = if name == format!("ray-{}-head", processed_config.package.name)
+                        {
                             style(name).bold()
                         } else {
                             style(name)
@@ -317,7 +298,7 @@ Instance names: {}
             format!("`aws (region = {})`", aws_cluster.region)
         }
     };
-    run_ray_command(temp_dir, path, "up", Some(&["-y"]))?;
+    run_ray_command(temp_dir, path, "up", None, "Spinning up your cluster...")?;
     println!(
         "Successfully spun the cluster {} in your {} cloud",
         style(format!("`{}`", processed_config.package.name)).cyan(),
@@ -327,18 +308,21 @@ Instance names: {}
 }
 
 fn handle_down(down: &Down, ray_config: &RayConfig) -> anyhow::Result<()> {
-    match (&down.name, &down.r#type, &down.region) {
-        (Some(name), Some(r#type), Some(region)) => {
-            let (temp_dir, path) =
-                write_ray_adhoc(&name, &r#type, &region)?;
-            run_ray_command(temp_dir, path, "down", None)
-        }
-        (None, None, None) => {
-            let (temp_dir, path) = write_ray(&ray_config)?;
-            run_ray_command(temp_dir, path, "down", None)
-        }
-        _ => anyhow::bail!("You must provide all three arguments to spin down a cluster: name, type, and region"),
-    }
+    let (temp_dir, path) = match (&down.name, &down.r#type, &down.region) {
+        (Some(name), Some(r#type), Some(region)) => write_ray_adhoc(&name, &r#type, &region),
+        (None, None, None) => write_ray(&ray_config),
+        _ => anyhow::bail!(
+            "You must provide all three arguments to spin down a cluster: name, type, and region"
+        ),
+    }?;
+    run_ray_command(
+        temp_dir,
+        path,
+        "down",
+        None,
+        "Spinning down your cluster...",
+    )?;
+    Ok(())
 }
 
 fn handle_submit(_: Submit) -> anyhow::Result<()> {
@@ -362,31 +346,30 @@ fn run_ray_command(
     path: PathRef,
     sub_command: &str,
     args: Option<&[&str]>,
+    spinner_message: &'static str,
 ) -> anyhow::Result<()> {
     let args = args.unwrap_or(&[]);
-    let spinner = Spinner::new("Spinning up your cluster...");
+    let spinner = Spinner::new(spinner_message);
 
     let mut child = Command::new("ray")
         .env("PYTHONUNBUFFERED", "1")
         .arg(sub_command)
+        .arg("-y")
         .arg(path_to_str(path.as_os_str())?)
         .args(args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?;
 
-    let child_stdout = BufReader::new(
-        child.stdout.take().expect("Stdout should always exist"),
-    );
+    let child_stdout = BufReader::new(child.stdout.take().expect("Stdout should always exist"));
 
     thread::spawn({
         let spinner = spinner.clone();
         move || {
-            for line in child_stdout.lines().map(|line| {
-                line.expect(
-                    "Reading line from child process should always succeed",
-                )
-            }) {
+            for line in child_stdout
+                .lines()
+                .map(|line| line.expect("Reading line from child process should always succeed"))
+            {
                 spinner.pause(&line);
             }
         }
@@ -405,9 +388,7 @@ fn run_ray_command(
         Ok(())
     } else {
         spinner.fail();
-        let child_stderr = BufReader::new(
-            child.stderr.take().expect("Stderr should always exist"),
-        );
+        let child_stderr = BufReader::new(child.stderr.take().expect("Stderr should always exist"));
 
         if is_debug() {
             let full_child_backtrace = child_stderr
@@ -431,10 +412,7 @@ fn run_ray_command(
                     exit_status,
                     style(last_line).red().dim(),
                 ),
-                None => anyhow::bail!(
-                    "Command failed with exit status: {}",
-                    exit_status
-                ),
+                None => anyhow::bail!("Command failed with exit status: {}", exit_status),
             }
         }
     }

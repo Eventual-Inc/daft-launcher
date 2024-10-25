@@ -150,9 +150,8 @@ mod tests {
     use map_macro::hashbrown::hash_map;
     use rstest::{fixture, rstest};
 
-    use crate::path_ref;
-
     use super::*;
+    use crate::path_ref;
 
     #[fixture]
     pub fn light_ray_config() -> RayConfig {

@@ -9,9 +9,9 @@ use which::which;
 use crate::{
     config::{
         defaults::{
-            default_region, default_ssh_user, light_image_id,
-            light_instance_type, normal_image_id, normal_instance_type,
-            DEFAULT_NUMBER_OF_WORKERS,
+            base_setup_commands, default_region, default_ssh_user,
+            light_image_id, light_instance_type, normal_image_id,
+            normal_instance_type, DEFAULT_NUMBER_OF_WORKERS,
         },
         raw,
         raw::Job,
@@ -19,8 +19,6 @@ use crate::{
     },
     StrRef,
 };
-
-use crate::config::defaults::base_setup_commands;
 
 static MIN_PYTHON_VERSION: LazyLock<VersionReq> =
     LazyLock::new(|| "3.9".parse().unwrap());

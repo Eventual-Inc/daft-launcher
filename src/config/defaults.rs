@@ -1,8 +1,6 @@
 use std::borrow::Cow;
 
-use crate::StrRef;
-
-use crate::config::processed::Package;
+use crate::{config::processed::Package, StrRef};
 
 pub fn base_setup_commands(package: &Package) -> Vec<StrRef> {
     [

@@ -127,7 +127,7 @@ impl Provider {
 pub struct AwsCluster {
     pub region: StrRef,
     pub ssh_user: StrRef,
-    pub ssh_private_key: Option<PathRef>,
+    pub ssh_private_key: PathRef,
     pub iam_instance_profile_arn: Option<StrRef>,
     pub image_id: StrRef,
     pub instance_type: StrRef,
@@ -219,7 +219,7 @@ pub mod tests {
                 provider: Provider::Aws(AwsCluster {
                     region: "us-west-2".into(),
                     ssh_user: "ec2-user".into(),
-                    ssh_private_key: None,
+                    ssh_private_key: path_ref("tests/fixtures/test.pem"),
                     iam_instance_profile_arn: None,
                     image_id: "ami-07c5ecd8498c59db5".into(),
                     instance_type: "t2.nano".into(),
@@ -250,7 +250,7 @@ pub mod tests {
                 provider: Provider::Aws(AwsCluster {
                     region: "us-east-2".into(),
                     ssh_user: "ec2-user".into(),
-                    ssh_private_key: None,
+                    ssh_private_key: path_ref("tests/fixtures/test.pem"),
                     iam_instance_profile_arn: None,
                     image_id: "...".into(),
                     instance_type: "...".into(),

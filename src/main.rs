@@ -10,9 +10,11 @@ macro_rules! path_from_root {
     };
 }
 
+mod aws;
 mod cli;
 mod config;
 mod utils;
+mod widgets;
 
 use std::{env, path::Path, rc::Rc, sync::Arc};
 
@@ -28,6 +30,9 @@ pub fn path_ref<'a>(path: impl AsRef<Path>) -> PathRef {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    if let None = env::var("RUST_LOG").ok() {
+        env::set_var("RUST_LOG", "warn");
+    };
     env_logger::try_init().ok();
     log::debug!("daft launcher - {}", env!("CARGO_PKG_VERSION"));
     if let Some("0") | None = env::var("RUST_BACKTRACE").ok().as_deref() {

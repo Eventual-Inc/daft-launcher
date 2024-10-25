@@ -31,7 +31,7 @@ pub fn read_custom(
 ) -> anyhow::Result<(ProcessedConfig, RayConfig)> {
     let mut file =
         OpenOptions::new().read(true).open(path).with_context(|| {
-            format!("No configuration file found at the path {path:?}")
+            format!("No configuration file found at the path `{}`; please run `daft init-config` to generate a configuration file", path.display())
         })?;
     let mut buf = String::new();
     let _ = file

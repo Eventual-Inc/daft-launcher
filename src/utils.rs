@@ -1,5 +1,4 @@
 use std::{
-    borrow::Cow,
     ffi::OsStr,
     fs::{File, OpenOptions},
     io::ErrorKind,
@@ -10,17 +9,18 @@ use anyhow::Context;
 use dirs::home_dir;
 use tempdir::TempDir;
 
-use crate::{path_ref, PathRef};
+use crate::{path_ref, widgets::Spinner, PathRef};
 
-pub fn expand(path: &Path) -> anyhow::Result<Cow<Path>> {
-    if path.starts_with("~") {
+pub fn expand(path: PathRef) -> anyhow::Result<PathRef> {
+    let path = if path.starts_with("~") {
         let home = home_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
         let suffix = path.strip_prefix("~").unwrap();
-        Ok(home.join(suffix).into())
+        path_ref(home.join(suffix))
     } else {
-        Ok(path.into())
-    }
+        path
+    };
+    Ok(path)
 }
 
 pub async fn is_authenticated_with_aws() -> bool {
@@ -37,9 +37,13 @@ pub async fn is_authenticated_with_aws() -> bool {
 }
 
 pub async fn assert_is_authenticated_with_aws() -> anyhow::Result<()> {
-    if is_authenticated_with_aws().await {
+    let spinner = Spinner::new("Authenticating with AWS");
+    let is_authenticated = is_authenticated_with_aws().await;
+    if is_authenticated {
+        spinner.success();
         Ok(())
     } else {
+        spinner.fail();
         anyhow::bail!("You are not signed in to AWS; please sign in first")
     }
 }
@@ -106,7 +110,7 @@ mod tests {
     fn test_expansion(#[case] path: &str, #[case] expected: StrRef) {
         let path = path_ref(path);
         let expected = path_ref(&*expected);
-        let actual = expand(&path).unwrap();
+        let actual = expand(path).unwrap();
         assert_eq!(&*actual, &*expected);
     }
 
@@ -114,7 +118,6 @@ mod tests {
     #[tokio::test]
     #[ignore = "Depends upon global state of AWS authentication; if you want to run this test, run it manually after you've authenticated with AWS"]
     async fn test_is_authenticated_with_aws() {
-        let is_authenticated = is_authenticated_with_aws().await;
-        dbg!(is_authenticated);
+        assert!(is_authenticated_with_aws().await);
     }
 }

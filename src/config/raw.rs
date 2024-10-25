@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use console::style;
 use semver::VersionReq;
 use serde::{de::Error, Deserialize, Deserializer, Serialize};
 
@@ -101,11 +102,10 @@ impl Selectable for Provider {
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct AwsCluster {
-    #[serde(default)]
     pub region: Option<StrRef>,
     pub ssh_user: Option<StrRef>,
-    #[serde(default, deserialize_with = "deserialize_optional_path")]
-    pub ssh_private_key: Option<PathRef>,
+    #[serde(deserialize_with = "deserialize_path")]
+    pub ssh_private_key: PathRef,
     pub iam_instance_profile_arn: Option<StrRef>,
     pub template: Option<AwsTemplateType>,
     pub custom: Option<AwsCustomType>,
@@ -116,7 +116,8 @@ impl Default for AwsCluster {
         Self {
             region: None,
             ssh_user: None,
-            ssh_private_key: None,
+            // This is a placeholder value that will be serialized into the generated config-file.
+            ssh_private_key: path_ref("<fill in path to ssh-private-key here>"),
             iam_instance_profile_arn: None,
             template: Some(AwsTemplateType::default()),
             custom: None,
@@ -183,10 +184,11 @@ fn expand_helper<'de, D>(path: PathRef) -> Result<PathRef, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let path = expand(&path).map_err(|_| {
+    let path = expand(path.clone()).map_err(|error| {
         Error::custom(format!(
-            "Path expansion failed; could not expand the path '{}'",
+            "Path expansion failed; could not expand the path '{}'\nReason: {}",
             path.display(),
+            style(error).red(),
         ))
     })?;
     Ok(path_ref(path))
@@ -208,16 +210,11 @@ where
     Ok(path)
 }
 
-fn deserialize_optional_path<'de, D>(
-    deserializer: D,
-) -> Result<Option<PathRef>, D::Error>
+fn deserialize_path<'de, D>(deserializer: D) -> Result<PathRef, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let path = match Option::deserialize(deserializer)? {
-        Some(path) => path,
-        None => return Ok(None),
-    };
+    let path = PathRef::deserialize(deserializer)?;
     let path = expand_helper::<D>(path)?;
     assert_path_exists_helper::<D>(&path)?;
     if !path.is_file() {
@@ -226,7 +223,7 @@ where
             path.display(),
         )));
     }
-    Ok(Some(path))
+    Ok(path)
 }
 
 #[cfg(test)]
@@ -249,7 +246,7 @@ pub mod tests {
                 provider: Provider::Aws(AwsCluster {
                     region: None,
                     ssh_user: None,
-                    ssh_private_key: None,
+                    ssh_private_key: path_ref("tests/fixtures/test.pem"),
                     iam_instance_profile_arn: None,
                     template: Some(AwsTemplateType::Light),
                     custom: None,
@@ -280,7 +277,7 @@ pub mod tests {
                 provider: Provider::Aws(AwsCluster {
                     region: Some("us-east-2".into()),
                     ssh_user: None,
-                    ssh_private_key: None,
+                    ssh_private_key: path_ref("tests/fixtures/test.pem"),
                     iam_instance_profile_arn: None,
                     template: None,
                     custom: Some(AwsCustomType {

@@ -1,30 +1,35 @@
 use std::{
-    io::Write,
+    io::{BufRead, BufReader, Write},
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Stdio},
     sync::LazyLock,
+    thread,
 };
 
 use clap::Parser;
 use console::style;
 use dialoguer::{theme::ColorfulTheme, Input, Select};
+use log::Level;
 use semver::Version;
 use tempdir::TempDir;
 
 use crate::{
+    aws::list_instance_names,
     config::{
         defaults::{normal_image_id, normal_instance_type},
-        processed::ProcessedConfig,
+        processed::{self, ProcessedConfig},
         raw::{
             default_name, AwsCluster, AwsCustomType, AwsTemplateType, Cluster,
             Package, Provider, RawConfig,
         },
+        ray::RayConfig,
         read_custom, write_ray, write_ray_adhoc, Selectable,
     },
     utils::{
         assert_file_existence_status, assert_is_authenticated_with_aws,
         create_new_file, path_to_str,
     },
+    widgets::Spinner,
     ArcStrRef, PathRef, StrRef,
 };
 
@@ -120,18 +125,32 @@ pub async fn handle() -> anyhow::Result<()> {
     match Cli::parse() {
         Cli::InitConfig(init_config) => handle_init_config(init_config),
         Cli::Up(up) => {
-            assert_is_authenticated_with_aws().await?;
-            handle_up(up)
+            let (processed_config, ray_config) =
+                run_checks(&up.config.config).await?;
+            handle_up(&processed_config, &ray_config).await
         }
         Cli::Down(down) => {
-            assert_is_authenticated_with_aws().await?;
-            handle_down(down)
+            let (_, ray_config) = run_checks(&down.config.config).await?;
+            handle_down(&down, &ray_config)
         }
         Cli::Submit(submit) => handle_submit(submit),
         Cli::Connect(connect) => handle_connect(connect),
         Cli::Dashboard(dashboard) => handle_dashboard(dashboard),
         Cli::Sql(sql) => handle_sql(sql),
     }
+}
+
+async fn run_checks(
+    config_path: &Path,
+) -> anyhow::Result<(ProcessedConfig, RayConfig)> {
+    let (processed_config, ray_config) = read_custom(config_path)?;
+    match processed_config.cluster.provider {
+        processed::Provider::Aws(..) => {
+            assert_is_authenticated_with_aws().await?;
+        }
+    };
+    assert_matching_daft_launcher_versions(config_path, &processed_config)?;
+    Ok((processed_config, ray_config))
 }
 
 fn prefix(prefix: &str) -> ColorfulTheme {
@@ -249,25 +268,37 @@ fn with_selections<T: Selectable>(
     T::parse(selection)
 }
 
-fn handle_up(up: Up) -> anyhow::Result<()> {
-    let (processed_config, ray_config) = read_custom(&up.config.config)?;
-    assert_matching_daft_launcher_versions(
-        &up.config.config,
-        &processed_config,
-    )?;
-
+async fn handle_up(
+    processed_config: &ProcessedConfig,
+    ray_config: &RayConfig,
+) -> anyhow::Result<()> {
     let (temp_dir, path) = write_ray(&ray_config)?;
-    run_ray_command(temp_dir, path, "up", None)
+    let cloud_name = match processed_config.cluster.provider {
+        processed::Provider::Aws(ref aws_cluster) => {
+            let spinner = Spinner::new("Validating cluster specs");
+            let names = list_instance_names(aws_cluster).await?;
+            if names.contains(&processed_config.package.name.to_string()) {
+                spinner.fail();
+                anyhow::bail!("A cluster with that name already exists in that region; please change the name and try again");
+            }
+            spinner.success();
+            if aws_cluster.iam_instance_profile_arn.is_none() {
+                log::warn!("You specified no IAM instance profile ARN; this may cause limit your cluster's abilities to interface with auxiliary AWS services");
+            }
+            format!("`aws (region = {})`", aws_cluster.region)
+        }
+    };
+    run_ray_command(temp_dir, path, "up", Some(&["-y"]))?;
+    println!(
+        "Successfully spun the cluster {} in your {} cloud",
+        style(format!("`{}`", processed_config.package.name)).cyan(),
+        style(format!("`{}`", cloud_name)).cyan(),
+    );
+    Ok(())
 }
 
-fn handle_down(down: Down) -> anyhow::Result<()> {
-    let (processed_config, ray_config) = read_custom(&down.config.config)?;
-    assert_matching_daft_launcher_versions(
-        &down.config.config,
-        &processed_config,
-    )?;
-
-    match (down.name, down.r#type, down.region) {
+fn handle_down(down: &Down, ray_config: &RayConfig) -> anyhow::Result<()> {
+    match (&down.name, &down.r#type, &down.region) {
         (Some(name), Some(r#type), Some(region)) => {
             let (temp_dir, path) =
                 write_ray_adhoc(&name, &r#type, &region)?;
@@ -304,18 +335,80 @@ fn run_ray_command(
     args: Option<&[&str]>,
 ) -> anyhow::Result<()> {
     let args = args.unwrap_or(&[]);
-    let _ = Command::new("ray")
+    let spinner = Spinner::new("Spinning up your cluster...");
+
+    let mut child = Command::new("ray")
+        .env("PYTHONUNBUFFERED", "1")
         .arg(sub_command)
         .arg(path_to_str(path.as_os_str())?)
         .args(args)
-        .spawn()?
-        .wait()?;
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+
+    let child_stdout = BufReader::new(
+        child.stdout.take().expect("Stdout should always exist"),
+    );
+
+    thread::spawn({
+        let spinner = spinner.clone();
+        move || {
+            for line in child_stdout.lines().map(|line| {
+                line.expect(
+                    "Reading line from child process should always succeed",
+                )
+            }) {
+                spinner.pause(&line);
+            }
+        }
+    });
+
+    let exit_status = child.wait()?;
 
     // Explicitly deletes the entire temporary directory.
     // The config file that we wrote to inside of there will now be deleted.
+    //
+    // This should only happen *after* the `ray` command has finished executing.
     drop(temp_dir);
 
-    Ok(())
+    if exit_status.success() {
+        spinner.success();
+        Ok(())
+    } else {
+        spinner.fail();
+        let child_stderr = BufReader::new(
+            child.stderr.take().expect("Stderr should always exist"),
+        );
+
+        if log::log_enabled!(Level::Debug) {
+            let full_child_backtrace = child_stderr
+                .lines()
+                .flatten()
+                .collect::<Vec<_>>()
+                .join("\n");
+            anyhow::bail!(
+                "Command failed with exit status: {}\n{}",
+                exit_status,
+                full_child_backtrace,
+            )
+        } else {
+            let mut last_line = None;
+            for line in child_stderr.lines().flatten() {
+                last_line = Some(line);
+            }
+            match last_line {
+                Some(last_line) => anyhow::bail!(
+                    "Command failed with exit status: {}\nReason: {}",
+                    exit_status,
+                    style(last_line).red().dim(),
+                ),
+                None => anyhow::bail!(
+                    "Command failed with exit status: {}",
+                    exit_status
+                ),
+            }
+        }
+    }
 }
 
 fn assert_matching_daft_launcher_versions(

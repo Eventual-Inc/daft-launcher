@@ -5,6 +5,7 @@ daft_launcher_version = "0.4.0-alpha0"
 [cluster]
 provider = "aws"
 template = "light"
+ssh_private_key = "tests/fixtures/test.pem"
 
 [[job]]
 name = "filter"

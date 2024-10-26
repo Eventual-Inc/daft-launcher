@@ -7,10 +7,12 @@ use std::{
     fs::OpenOptions,
     io::{Read, Write},
     path::Path,
+    sync::LazyLock,
 };
 
 use anyhow::Context;
 use processed::ProcessedConfig;
+use semver::Version;
 use tempdir::TempDir;
 
 use crate::{
@@ -18,6 +20,9 @@ use crate::{
     utils::create_ray_temporary_file,
     PathRef,
 };
+
+static DAFT_LAUNCHER_VERSION: LazyLock<Version> =
+    LazyLock::new(|| env!("CARGO_PKG_VERSION").parse().unwrap());
 
 pub trait Selectable {
     type Parsed;
@@ -37,6 +42,18 @@ pub fn read_custom(path: &Path) -> anyhow::Result<(ProcessedConfig, RayConfig)> 
         .with_context(|| format!("Failed to read file {path:?}"))?;
     let raw_config: RawConfig = toml::from_str(&buf)?;
     let processed_config: ProcessedConfig = raw_config.try_into()?;
+    if !processed_config
+        .package
+        .daft_launcher_version
+        .matches(&*DAFT_LAUNCHER_VERSION)
+    {
+        anyhow::bail!(
+            "The version requirement in the config file located at {:?} (version-requirement {}) is not satisfied by this binary's version (version {})",
+            path.display(),
+            processed_config.package.daft_launcher_version,
+            &*DAFT_LAUNCHER_VERSION,
+        );
+    }
     let ray_config: RayConfig = processed_config.clone().try_into()?;
     Ok((processed_config, ray_config))
 }

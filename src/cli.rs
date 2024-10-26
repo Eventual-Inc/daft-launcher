@@ -1,19 +1,17 @@
 use std::{
     io::{BufRead, BufReader, Write},
-    path::{Path, PathBuf},
+    path::PathBuf,
     process::{Command, Stdio},
-    sync::LazyLock,
     thread,
 };
 
 use clap::Parser;
 use console::style;
 use dialoguer::{theme::ColorfulTheme, Input, Select};
-use semver::Version;
 use tempdir::TempDir;
 
 use crate::{
-    aws::{assert_is_authenticated_with_aws, instance_name_already_exists},
+    aws::{assert_is_authenticated_with_aws, list_instances, AwsInstance},
     config::{
         defaults::{normal_image_id, normal_instance_type},
         processed::{self, ProcessedConfig},
@@ -21,8 +19,7 @@ use crate::{
             default_name, AwsCluster, AwsCustomType, AwsTemplateType, Cluster, Package, Provider,
             RawConfig,
         },
-        ray::RayConfig,
-        read_custom, write_ray, write_ray_adhoc, Selectable,
+        read_custom, write_ray, Selectable,
     },
     utils::{assert_file_existence_status, create_new_file, is_debug, path_to_str},
     widgets::Spinner,
@@ -35,6 +32,7 @@ pub enum Cli {
     Init(Init),
     Up(Up),
     Down(Down),
+    List(List),
     Submit(Submit),
     Connect(Connect),
     Dashboard(Dashboard),
@@ -49,7 +47,7 @@ pub enum Cli {
 #[derive(Debug, Parser, Clone, PartialEq, Eq)]
 pub struct Init {
     /// Name of the configuration file (can be specified as a path).
-    #[arg(short, long, value_name = "NAME", default_value = ".daft.toml")]
+    #[arg(short, long, default_value = ".daft.toml")]
     pub name: PathBuf,
     /// Skip interactive mode and generate a default configuration file.
     #[arg(short, long, default_value = "false")]
@@ -68,15 +66,26 @@ pub struct Up {
 pub struct Down {
     #[clap(flatten)]
     pub config: Config,
-    /// Name of the cluster to spin down
-    #[arg(short, long, value_name = "NAME")]
+    /// Name of the cluster to spin down.
+    #[arg(short, long)]
     pub name: Option<ArcStrRef>,
-    /// The cloud provider which contains the cluster to spin down
-    #[arg(short, long, value_name = "TYPE")]
+    /// The cloud provider which contains the cluster to spin down.
+    #[arg(short, long)]
     pub provider: Option<ArcStrRef>,
-    /// Region of the cluster to spin down
-    #[arg(short, long, value_name = "REGION")]
+    /// Region of the cluster to spin down.
+    #[arg(short, long)]
     pub region: Option<ArcStrRef>,
+}
+
+/// List all clusters in each cloud provider.
+///
+/// This will list all of the clusters, regardless of their state (i.e., running, stopped, etc.).
+/// You can filter the results by appending any of the supported flags.
+#[derive(Debug, Parser, Clone, PartialEq, Eq)]
+pub struct List {
+    /// Only list the clusters that are running.
+    #[arg(short, long)]
+    pub running: bool,
 }
 
 /// Submit a job to a running cluster.
@@ -109,25 +118,17 @@ pub struct Sql {
 
 #[derive(Debug, Parser, Clone, PartialEq, Eq)]
 pub struct Config {
-    /// Path to configuration file
-    #[arg(short, long, value_name = "FILE", default_value = ".daft.toml")]
+    /// Path to configuration file.
+    #[arg(short, long, default_value = ".daft.toml")]
     pub config: PathBuf,
 }
-
-static DAFT_LAUNCHER_VERSION: LazyLock<Version> =
-    LazyLock::new(|| env!("CARGO_PKG_VERSION").parse().unwrap());
 
 pub async fn handle() -> anyhow::Result<()> {
     match Cli::parse() {
         Cli::Init(init) => handle_init(init),
-        Cli::Up(up) => {
-            let (processed_config, ray_config) = run_checks(&up.config.config).await?;
-            handle_up(&processed_config, &ray_config).await
-        }
-        Cli::Down(down) => {
-            let (_, ray_config) = run_checks(&down.config.config).await?;
-            handle_down(&down, &ray_config)
-        }
+        Cli::Up(up) => handle_up(up).await,
+        Cli::Down(down) => handle_down(down).await,
+        Cli::List(list) => handle_list(list).await,
         Cli::Submit(submit) => handle_submit(submit),
         Cli::Connect(connect) => handle_connect(connect),
         Cli::Dashboard(dashboard) => handle_dashboard(dashboard),
@@ -135,15 +136,12 @@ pub async fn handle() -> anyhow::Result<()> {
     }
 }
 
-async fn run_checks(config_path: &Path) -> anyhow::Result<(ProcessedConfig, RayConfig)> {
-    let (processed_config, ray_config) = read_custom(config_path)?;
+async fn assert_is_authenticated_with_cloud_provider_in_config(
+    processed_config: &ProcessedConfig,
+) -> anyhow::Result<()> {
     match processed_config.cluster.provider {
-        processed::Provider::Aws(..) => {
-            assert_is_authenticated_with_aws().await?;
-        }
-    };
-    assert_matching_daft_launcher_versions(config_path, &processed_config)?;
-    Ok((processed_config, ray_config))
+        processed::Provider::Aws(..) => assert_is_authenticated_with_aws().await,
+    }
 }
 
 fn prefix(prefix: &str) -> ColorfulTheme {
@@ -251,39 +249,42 @@ fn with_selections<T: Selectable>(
     T::parse(selection)
 }
 
-async fn handle_up(
-    processed_config: &ProcessedConfig,
-    ray_config: &RayConfig,
-) -> anyhow::Result<()> {
+fn format_aws_instance_names(name: &str, instances: &[AwsInstance]) -> String {
+    let mut joined_names = String::new();
+    for (index, instance) in instances.iter().enumerate() {
+        if index != 0 {
+            joined_names.push_str(&style(", ").green().to_string());
+        }
+        let styled_name = if instance.name_equals_ray_name(name) {
+            style(&instance.ray_name).bold()
+        } else {
+            style(&instance.ray_name)
+        }
+        .green()
+        .to_string();
+        joined_names.push_str(&styled_name);
+    }
+    joined_names
+}
+
+async fn handle_up(up: Up) -> anyhow::Result<()> {
+    let (processed_config, ray_config) = read_custom(&up.config.config)?;
+    assert_is_authenticated_with_cloud_provider_in_config(&processed_config).await?;
     let (temp_dir, path) = write_ray(&ray_config)?;
     let cloud_name = match processed_config.cluster.provider {
         processed::Provider::Aws(ref aws_cluster) => {
             let spinner = Spinner::new("Validating cluster specs");
-            let (instance_name_already_exists, names) =
-                instance_name_already_exists(processed_config, aws_cluster).await?;
+            let instances = list_instances(aws_cluster).await?;
+            let mut instance_name_already_exists = false;
+            for instance in &instances {
+                if instance.name_equals_ray_name(&processed_config.package.name) {
+                    instance_name_already_exists = true;
+                }
+            }
             if instance_name_already_exists {
                 spinner.fail();
-                let names = names.into_iter().enumerate().fold(
-                    String::default(),
-                    |mut joined_names, (index, name)| {
-                        if index != 0 {
-                            let styled_comma = style(", ").green().to_string();
-                            joined_names.push_str(&styled_comma);
-                        }
-                        let name = if name == format!("ray-{}-head", processed_config.package.name)
-                        {
-                            style(name).bold()
-                        } else {
-                            style(name)
-                        }
-                        .green()
-                        .to_string();
-                        joined_names.push_str(&name);
-                        joined_names
-                    },
-                );
-                anyhow::bail!(
-                    r#"An instance with the name "{}" already exists in that specified region; please choose a different name
+                let names = format_aws_instance_names(&processed_config.package.name, &instances);
+                anyhow::bail!(r#"An instance with the name "{}" already exists in that specified region; please choose a different name
 Instance names: {}
 {}"#,
                     processed_config.package.name,
@@ -307,13 +308,14 @@ Instance names: {}
     Ok(())
 }
 
-fn handle_down(down: &Down, ray_config: &RayConfig) -> anyhow::Result<()> {
-    let (temp_dir, path) = match (&down.name, &down.provider, &down.region) {
-        (Some(name), Some(provider), Some(region)) => write_ray_adhoc(&name, &provider, &region),
-        (None, None, None) => write_ray(&ray_config),
-        _ => anyhow::bail!(
-            "You must provide all three arguments to spin down a cluster: name, provider, and region"
-        ),
+async fn handle_down(down: Down) -> anyhow::Result<()> {
+    let (processed_config, ray_config) = read_custom(&down.config.config)?;
+    let (temp_dir, path) = match down.name.clone() {
+        Some(..) => todo!(),
+        None => {
+            assert_is_authenticated_with_cloud_provider_in_config(&processed_config).await?;
+            write_ray(&ray_config)
+        }
     }?;
     run_ray_command(
         temp_dir,
@@ -323,6 +325,11 @@ fn handle_down(down: &Down, ray_config: &RayConfig) -> anyhow::Result<()> {
         "Spinning down your cluster...",
     )?;
     Ok(())
+}
+
+async fn handle_list(list: List) -> anyhow::Result<()> {
+    assert_is_authenticated_with_aws().await?;
+    todo!()
 }
 
 fn handle_submit(_: Submit) -> anyhow::Result<()> {
@@ -415,25 +422,5 @@ fn run_ray_command(
                 None => anyhow::bail!("Command failed with exit status: {}", exit_status),
             }
         }
-    }
-}
-
-fn assert_matching_daft_launcher_versions(
-    config_path: &Path,
-    processed_config: &ProcessedConfig,
-) -> anyhow::Result<()> {
-    if processed_config
-        .package
-        .daft_launcher_version
-        .matches(&DAFT_LAUNCHER_VERSION)
-    {
-        Ok(())
-    } else {
-        anyhow::bail!(
-            "The version requirement in the config file located at {:?} (version-requirement {}) is not satisfied by this binary's version (version {})",
-            config_path,
-            processed_config.package.daft_launcher_version,
-            &*DAFT_LAUNCHER_VERSION,
-        )
     }
 }

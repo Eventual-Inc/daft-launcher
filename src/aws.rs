@@ -1,10 +1,9 @@
-use aws_config::{BehaviorVersion, Region};
-use aws_sdk_ec2::{operation::describe_instances::DescribeInstancesOutput, Client};
+use std::net::Ipv4Addr;
 
-use crate::{
-    config::processed::{AwsCluster, ProcessedConfig},
-    widgets::Spinner,
-};
+use aws_config::{BehaviorVersion, Region};
+use aws_sdk_ec2::{types::InstanceStateName, Client};
+
+use crate::{config::processed::AwsCluster, widgets::Spinner, StrRef};
 
 async fn is_authenticated_with_aws() -> bool {
     let sdk_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
@@ -27,47 +26,64 @@ pub async fn assert_is_authenticated_with_aws() -> anyhow::Result<()> {
     }
 }
 
-pub async fn list_instances(aws_cluster: &AwsCluster) -> anyhow::Result<DescribeInstancesOutput> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AwsInstance {
+    pub ray_name: StrRef,
+    pub key_pair_name: Option<StrRef>,
+    pub public_ipv4_address: Option<Ipv4Addr>,
+    pub state: Option<InstanceStateName>,
+}
+
+impl AwsInstance {
+    pub fn name_equals_ray_name(&self, name: &str) -> bool {
+        let name = format!("ray-{}-head", name);
+        &*name == &*self.ray_name
+    }
+}
+
+pub async fn list_instances(aws_cluster: &AwsCluster) -> anyhow::Result<Vec<AwsInstance>> {
     let region = Region::new(aws_cluster.region.to_string());
     let sdk_config = aws_config::defaults(BehaviorVersion::latest())
         .region(region)
         .load()
         .await;
     let client = Client::new(&sdk_config);
-    let output = client.describe_instances().send().await?;
-    Ok(output)
-}
-
-pub async fn list_instance_names(aws_cluster: &AwsCluster) -> anyhow::Result<Vec<String>> {
-    let instances = list_instances(aws_cluster).await?;
+    let instances = client.describe_instances().send().await?;
     let reservations = instances.reservations.unwrap_or_default();
-    let mut instance_names = Vec::new();
-    for instances in reservations
+    let instance_states = reservations
         .iter()
         .filter_map(|reservation| reservation.instances.as_ref())
-    {
-        for tags in instances
-            .iter()
-            .filter_map(|instance| instance.tags.as_ref())
-        {
-            for (key, value) in tags.iter().filter_map(|tag| tag.key().zip(tag.value())) {
+        .flatten()
+        .filter_map(|instance| {
+            instance.tags.as_ref().map(|tags| {
+                (
+                    instance,
+                    tags.iter().filter_map(|tag| tag.key().zip(tag.value())),
+                )
+            })
+        })
+        .filter_map(|(instance, tags)| {
+            let mut ray_name = None;
+            for (key, value) in tags {
                 if key == "Name" {
-                    instance_names.push(value.to_string());
+                    ray_name = Some(value.into());
                 }
             }
-        }
-    }
-    Ok(instance_names)
-}
-
-pub async fn instance_name_already_exists(
-    processed_config: &ProcessedConfig,
-    aws_cluster: &AwsCluster,
-) -> anyhow::Result<(bool, Vec<String>)> {
-    let instance_names = list_instance_names(aws_cluster).await?;
-    let is_contained =
-        instance_names.contains(&format!("ray-{}-head", processed_config.package.name));
-    Ok((is_contained, instance_names))
+            let ray_name = ray_name?;
+            Some(AwsInstance {
+                ray_name,
+                key_pair_name: instance.key_name().map(Into::into),
+                public_ipv4_address: instance
+                    .public_ip_address()
+                    .and_then(|ip_addr| ip_addr.parse().ok()),
+                state: instance
+                    .state()
+                    .and_then(|instance_state| instance_state.name())
+                    .cloned(),
+            })
+        })
+        .collect();
+    Ok(instance_states)
 }
 
 #[cfg(test)]

@@ -274,7 +274,7 @@ async fn handle_up(up: Up) -> anyhow::Result<()> {
     let cloud_name = match processed_config.cluster.provider {
         processed::Provider::Aws(ref aws_cluster) => {
             let spinner = Spinner::new("Validating cluster specs");
-            let instances = list_instances(aws_cluster).await?;
+            let instances = list_instances(aws_cluster.region.to_string()).await?;
             let mut instance_name_already_exists = false;
             for instance in &instances {
                 if instance.name_equals_ray_name(&processed_config.package.name) {
@@ -282,7 +282,6 @@ async fn handle_up(up: Up) -> anyhow::Result<()> {
                 }
             }
             if instance_name_already_exists {
-                spinner.fail();
                 let names = format_aws_instance_names(&processed_config.package.name, &instances);
                 anyhow::bail!(r#"An instance with the name "{}" already exists in that specified region; please choose a different name
 Instance names: {}
@@ -329,7 +328,9 @@ async fn handle_down(down: Down) -> anyhow::Result<()> {
 
 async fn handle_list(list: List) -> anyhow::Result<()> {
     assert_is_authenticated_with_aws().await?;
-    todo!()
+    let instances = list_instances("us-west-2").await?;
+    dbg!(instances);
+    Ok(())
 }
 
 fn handle_submit(_: Submit) -> anyhow::Result<()> {
@@ -394,7 +395,6 @@ fn run_ray_command(
         spinner.success();
         Ok(())
     } else {
-        spinner.fail();
         let child_stderr = BufReader::new(child.stderr.take().expect("Stderr should always exist"));
 
         if is_debug() {

@@ -1,9 +1,9 @@
-use std::net::Ipv4Addr;
+use std::{borrow::Cow, net::Ipv4Addr};
 
 use aws_config::{BehaviorVersion, Region};
 use aws_sdk_ec2::{types::InstanceStateName, Client};
 
-use crate::{config::processed::AwsCluster, widgets::Spinner, StrRef};
+use crate::{widgets::Spinner, StrRef};
 
 async fn is_authenticated_with_aws() -> bool {
     let sdk_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
@@ -21,7 +21,6 @@ pub async fn assert_is_authenticated_with_aws() -> anyhow::Result<()> {
         spinner.success();
         Ok(())
     } else {
-        spinner.fail();
         anyhow::bail!("You are not signed in to AWS; please sign in first")
     }
 }
@@ -41,8 +40,12 @@ impl AwsInstance {
     }
 }
 
-pub async fn list_instances(aws_cluster: &AwsCluster) -> anyhow::Result<Vec<AwsInstance>> {
-    let region = Region::new(aws_cluster.region.to_string());
+pub async fn list_instances(
+    region: impl Into<Cow<'static, str>>,
+) -> anyhow::Result<Vec<AwsInstance>> {
+    let region: Cow<_> = region.into();
+    let spinner = Spinner::new(format!("Listing all AWS instances in region {}", region));
+    let region = Region::new(region);
     let sdk_config = aws_config::defaults(BehaviorVersion::latest())
         .region(region)
         .load()
@@ -83,6 +86,7 @@ pub async fn list_instances(aws_cluster: &AwsCluster) -> anyhow::Result<Vec<AwsI
             })
         })
         .collect();
+    spinner.success();
     Ok(instance_states)
 }
 

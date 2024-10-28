@@ -7,7 +7,7 @@ use serde::{de::Error, Deserialize, Deserializer, Serialize};
 use crate::{
     config::{PathRef, Selectable},
     path_ref,
-    utils::{assert_file_existence_status, expand},
+    utils::{assert_file_status, expand, Status},
     StrRef,
 };
 
@@ -173,8 +173,14 @@ fn assert_path_exists_helper<'de, D>(path: &Path) -> Result<(), D::Error>
 where
     D: Deserializer<'de>,
 {
-    assert_file_existence_status(path, true)
-        .map_err(|_| Error::custom(format!("The path '{}' does not exist.", path.display(),)))
+    tokio::task::block_in_place(|| {
+        tokio::runtime::Handle::current().block_on(async {
+            assert_file_status(path, Status::File).await.map_err(|_| {
+                Error::custom(format!("The path '{}' does not exist.", path.display()))
+            })
+        })
+    })?;
+    Ok(())
 }
 
 fn expand_helper<'de, D>(path: PathRef) -> Result<PathRef, D::Error>

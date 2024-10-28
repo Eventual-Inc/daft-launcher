@@ -21,7 +21,7 @@ pub async fn run_ray(
     let spinner = Arc::new(Spinner::new("..."));
 
     {
-        let (temp_dir, path) = _impl::write_ray(&ray_config)?;
+        let (temp_dir, path) = _impl::write_ray(&ray_config).await?;
         _impl::run_ray(subcommand, path, args, {
             let spinner = spinner.clone();
             move |message| spinner.pause(message)

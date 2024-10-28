@@ -1,16 +1,16 @@
-use std::{io::Write, process::Stdio};
+use std::process::Stdio;
 
 use console::style;
 use futures::{Stream, StreamExt};
 use tempdir::TempDir;
 use tokio::{
-    io::{AsyncBufReadExt, BufReader, Lines},
+    io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines},
     process::Command,
 };
 
 use crate::{
     config::ray::RayConfig,
-    utils::{create_ray_temporary_file, is_debug, path_to_str},
+    utils::{create_temporary_ray_file, is_debug, path_to_str},
     PathRef,
 };
 
@@ -104,14 +104,14 @@ fn to_async_iter<I: Unpin + tokio::io::AsyncBufRead>(
     })
 }
 
-pub fn write_ray(ray_config: &RayConfig) -> anyhow::Result<(TempDir, PathRef)> {
+pub async fn write_ray(ray_config: &RayConfig) -> anyhow::Result<(TempDir, PathRef)> {
     let contents =
         serde_yaml::to_string(ray_config).expect("Serialization to yaml should always succeed");
-    let (temp_dir, path, mut file) = create_ray_temporary_file()?;
+    let (temp_dir, path, mut file) = create_temporary_ray_file().await?;
 
     log::debug!("Writing ray config to temporary file {}", path.display());
     log::debug!("{}", contents);
-    file.write_all(contents.as_bytes())?;
+    file.write_all(contents.as_bytes()).await?;
 
     Ok((temp_dir, path))
 }

@@ -1,8 +1,9 @@
-use std::{io::Write, path::PathBuf};
+use std::path::PathBuf;
 
 use clap::Parser;
 use console::style;
 use dialoguer::{theme::ColorfulTheme, Input, Select};
+use tokio::io::AsyncWriteExt;
 
 use crate::{
     aws::{
@@ -19,7 +20,7 @@ use crate::{
         read, Selectable,
     },
     ray::{run_ray, RaySubcommand},
-    utils::{assert_file_existence_status, create_new_file},
+    utils::{assert_file_status, create_new_file, Status},
     ArcStrRef, StrRef,
 };
 
@@ -125,7 +126,7 @@ pub struct Config {
 
 pub async fn handle() -> anyhow::Result<()> {
     match Cli::parse() {
-        Cli::Init(init) => handle_init(init),
+        Cli::Init(init) => handle_init(init).await,
         Cli::Up(up) => handle_up(up).await,
         Cli::Down(down) => handle_down(down).await,
         Cli::List(list) => handle_list(list).await,
@@ -160,8 +161,8 @@ const CLOUD_EMOJI: &str = "🌥️";
 const HAMMER_EMOJI: &str = "🔨";
 const COMPUTER_EMOJI: &str = "💻";
 
-fn handle_init(init: Init) -> anyhow::Result<()> {
-    assert_file_existence_status(&init.name, false)?;
+async fn handle_init(init: Init) -> anyhow::Result<()> {
+    assert_file_status(&init.name, Status::DoesNotExist).await?;
 
     let raw_config = if init.default {
         RawConfig::default()
@@ -205,7 +206,7 @@ fn handle_init(init: Init) -> anyhow::Result<()> {
             ..Default::default()
         }
     };
-    let mut file = create_new_file(&init.name)?;
+    let mut file = create_new_file(&init.name).await?;
     let config = toml::to_string_pretty(&raw_config).expect("Serialization should always succeed");
     let config = format!(
         r#"# For a full schema of this configuration file, please visit:
@@ -217,7 +218,7 @@ fn handle_init(init: Init) -> anyhow::Result<()> {
 {}"#,
         config
     );
-    file.write_all(config.as_bytes())?;
+    file.write_all(config.as_bytes()).await?;
     println!(
         "Created file at: {}",
         style(format!("`{}`", init.name.display())).cyan(),

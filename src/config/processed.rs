@@ -1,4 +1,5 @@
 use std::{
+    path::Path,
     process::{Command, Stdio},
     sync::LazyLock,
 };
@@ -12,10 +13,10 @@ use crate::{
             base_setup_commands, default_region, default_ssh_user, light_image_id,
             light_instance_type, normal_image_id, normal_instance_type, DEFAULT_NUMBER_OF_WORKERS,
         },
-        raw,
-        raw::Job,
+        raw::{self, Job},
         PathRef,
     },
+    utils::path_to_str,
     StrRef,
 };
 
@@ -70,10 +71,11 @@ impl Provider {
         raw_provider: raw::Provider,
         package: &Package,
     ) -> anyhow::Result<(Self, Vec<StrRef>, Vec<StrRef>)> {
-        let (provider, pre_setup_commands, post_setup_commands) =
-            match raw_provider {
-                raw::Provider::Aws(aws_cluster) => {
-                    match (aws_cluster.template, aws_cluster.custom) {
+        let (provider, pre_setup_commands, post_setup_commands) = match raw_provider {
+            raw::Provider::Aws(aws_cluster) => {
+                let ssh_key_name = to_key_stem(&*aws_cluster.ssh_private_key.clone())?.into();
+
+                match (aws_cluster.template, aws_cluster.custom) {
                     (Some(..), Some(..)) => anyhow::bail!("Cannot specify both a template type and custom configurations in the configuration file"),
                     (None, None) => anyhow::bail!("Please specify either a template type or some custom configurations in the configuration file"),
 
@@ -81,6 +83,7 @@ impl Provider {
                         Provider::Aws(AwsCluster {
                             region: aws_cluster.region.unwrap_or_else(default_region),
                             ssh_user: aws_cluster.ssh_user.unwrap_or_else(default_ssh_user),
+                            ssh_key_name,
                             ssh_private_key: aws_cluster.ssh_private_key,
                             iam_instance_profile_arn: aws_cluster.iam_instance_profile_arn,
                             image_id: light_image_id(),
@@ -93,6 +96,7 @@ impl Provider {
                         Provider::Aws(AwsCluster {
                             region: aws_cluster.region.unwrap_or_else(default_region),
                             ssh_user: aws_cluster.ssh_user.unwrap_or_else(default_ssh_user),
+                            ssh_key_name,
                             ssh_private_key: aws_cluster.ssh_private_key,
                             iam_instance_profile_arn: aws_cluster.iam_instance_profile_arn,
                             image_id: normal_image_id(),
@@ -106,6 +110,7 @@ impl Provider {
                         Provider::Aws(AwsCluster {
                             region: aws_cluster.region.unwrap_or_else(default_region),
                             ssh_user: aws_cluster.ssh_user.unwrap_or_else(default_ssh_user),
+                            ssh_key_name,
                             ssh_private_key: aws_cluster.ssh_private_key,
                             iam_instance_profile_arn: aws_cluster.iam_instance_profile_arn,
                             image_id: custom.image_id,
@@ -115,8 +120,8 @@ impl Provider {
                         base_setup_commands(package),
                     ),
                 }
-                }
-            };
+            }
+        };
         Ok((provider, pre_setup_commands, post_setup_commands))
     }
 }
@@ -125,6 +130,7 @@ impl Provider {
 pub struct AwsCluster {
     pub region: StrRef,
     pub ssh_user: StrRef,
+    pub ssh_key_name: StrRef,
     pub ssh_private_key: PathRef,
     pub iam_instance_profile_arn: Option<StrRef>,
     pub image_id: StrRef,
@@ -199,6 +205,14 @@ fn get_ray_version() -> anyhow::Result<VersionReq> {
     Ok(format!("={version}").parse().unwrap())
 }
 
+fn to_key_stem(path: &Path) -> anyhow::Result<&str> {
+    let path = path
+        .file_stem()
+        .expect("File should exist, as checked by deserialzation logic in raw.rs");
+    let key_name = path_to_str(path)?;
+    Ok(key_name)
+}
+
 #[cfg(test)]
 pub mod tests {
     use rstest::{fixture, rstest};
@@ -221,6 +235,7 @@ pub mod tests {
                 provider: Provider::Aws(AwsCluster {
                     region: "us-west-2".into(),
                     ssh_user: "ec2-user".into(),
+                    ssh_key_name: "test".into(),
                     ssh_private_key: path_ref("tests/fixtures/test.pem"),
                     iam_instance_profile_arn: None,
                     image_id: "ami-07c5ecd8498c59db5".into(),
@@ -256,6 +271,7 @@ pub mod tests {
                 provider: Provider::Aws(AwsCluster {
                     region: "us-east-2".into(),
                     ssh_user: "ec2-user".into(),
+                    ssh_key_name: "test".into(),
                     ssh_private_key: path_ref("tests/fixtures/test.pem"),
                     iam_instance_profile_arn: None,
                     image_id: "...".into(),

@@ -10,9 +10,25 @@ macro_rules! path_from_root {
     };
 }
 
+macro_rules! spinner {
+    {
+        $msg:expr
+        , $e:expr
+        $(,)?
+    } => {{
+        use crate::widgets::Spinner;
+
+        let spinner = Spinner::new($msg);
+        let output = $e;
+        spinner.success();
+        output
+    }};
+}
+
 mod aws;
 mod cli;
 mod config;
+mod ray;
 mod utils;
 mod widgets;
 

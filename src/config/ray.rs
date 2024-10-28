@@ -1,10 +1,8 @@
-use std::path::Path;
-
 use hashbrown::HashMap;
 use map_macro::hashbrown::hash_map;
 use serde::Serialize;
 
-use crate::{config::processed, utils::path_to_str, PathRef, StrRef};
+use crate::{config::processed, PathRef, StrRef};
 
 #[derive(Debug, Serialize, Clone, PartialEq)]
 pub struct RayConfig {
@@ -71,18 +69,8 @@ pub struct Resources {
     pub gpu: usize,
 }
 
-fn to_key_stem(path: &Path) -> anyhow::Result<&str> {
-    let path = path
-        .file_stem()
-        .expect("File should exist, as checked by deserialzation logic in raw.rs");
-    let key_name = path_to_str(path)?;
-    Ok(key_name)
-}
-
-impl TryFrom<processed::ProcessedConfig> for RayConfig {
-    type Error = anyhow::Error;
-
-    fn try_from(config: processed::ProcessedConfig) -> Result<Self, Self::Error> {
+impl From<processed::ProcessedConfig> for RayConfig {
+    fn from(config: processed::ProcessedConfig) -> Self {
         let (provider, available_node_types, auth) = match config.cluster.provider {
             processed::Provider::Aws(aws_cluster) => (
                 Provider {
@@ -97,7 +85,7 @@ impl TryFrom<processed::ProcessedConfig> for RayConfig {
                                 .iam_instance_profile_arn
                                 .map(|arn| IamInstanceProfile { arn }),
                             image_id: aws_cluster.image_id,
-                            key_name: to_key_stem(&*aws_cluster.ssh_private_key)?.into(),
+                            key_name: aws_cluster.ssh_key_name,
                         }),
                         min_workers: Some(config.cluster.number_of_workers),
                         max_workers: Some(config.cluster.number_of_workers),
@@ -118,7 +106,7 @@ impl TryFrom<processed::ProcessedConfig> for RayConfig {
                 },
             ),
         };
-        Ok(Self {
+        Self {
             cluster_name: config.package.name,
             max_workers: config.cluster.number_of_workers,
             provider,
@@ -126,7 +114,7 @@ impl TryFrom<processed::ProcessedConfig> for RayConfig {
             available_node_types,
             initialization_commands: config.cluster.pre_setup_commands,
             setup_commands: config.cluster.post_setup_commands,
-        })
+        }
     }
 }
 

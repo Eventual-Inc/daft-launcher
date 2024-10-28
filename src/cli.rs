@@ -76,11 +76,16 @@ pub struct Down {
     pub region: Option<ArcStrRef>,
 }
 
-/// List all clusters in each cloud provider.
+/// List all ray-clusters in each cloud provider.
 ///
 /// This will list all of the clusters, regardless of their state (i.e.,
 /// running, stopped, etc.). You can filter the results by appending any of the
 /// supported flags.
+///
+/// Please note that this command will not list any *non-ray-clusters*! We only
+/// list instances if and only if they have a "ray-cluster-name" tag on them. If
+/// not, we assume that they have *not* been instantiated by ray, and
+/// as a result, we don't list them.
 #[derive(Debug, Parser, Clone, PartialEq, Eq)]
 pub struct List {
     /// Only list the clusters that are running.
@@ -294,7 +299,6 @@ async fn handle_down(down: Down) -> anyhow::Result<()> {
 async fn handle_list(_: List) -> anyhow::Result<()> {
     assert_authenticated(None).await?;
     let instances = list_instances("us-west-2").await?;
-    dbg!(instances);
     Ok(())
 }
 

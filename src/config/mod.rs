@@ -71,7 +71,8 @@ pub trait Selectable {
     fn parse(s: &str) -> anyhow::Result<Self::Parsed>;
 }
 
-/// The main entry-point into working with `daft-launcher` based configuration files.
+/// The main entry-point into working with `daft-launcher` based configuration
+/// files.
 ///
 /// Reads the contents at the given path and attempts to deserialize it into a
 /// `ProcessedConfig` (in which schema and high-level data invariants are

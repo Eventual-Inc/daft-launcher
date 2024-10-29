@@ -8,7 +8,7 @@ use crate::{config::ray::RayConfig, widgets::Spinner};
 
 pub async fn run_ray(
     ray_config: &RayConfig,
-    subcommand: _impl::RaySubcommand,
+    ray_subcommand: _impl::RaySubcommand,
     args: &[&str],
 ) -> anyhow::Result<()> {
     // # Note
@@ -18,11 +18,15 @@ pub async fn run_ray(
     // If this same pattern arises again, create a new `with_spinner_arced` macro,
     // or something of that like.
 
-    let spinner = Arc::new(Spinner::new("..."));
+    let message = match ray_subcommand {
+        RaySubcommand::Up => "Spinning up your cluster",
+        RaySubcommand::Down => "Spinning down your cluster",
+    };
+    let spinner = Arc::new(Spinner::new(message));
 
     {
         let (temp_dir, path) = _impl::write_ray(&ray_config).await?;
-        _impl::run_ray(subcommand, path, args, {
+        _impl::run_ray(ray_subcommand, path, args, {
             let spinner = spinner.clone();
             move |message| spinner.pause(message)
         })

@@ -31,10 +31,10 @@ pub async fn handle_init(init: Init) -> anyhow::Result<()> {
         RawConfig::default()
     } else {
         let name = with_input("Cluster name", &prefix(NOTEPAD_EMOJI), default_name())?;
-        let provider = match with_selections::<Provider>("Cloud provider", &prefix(CLOUD_EMOJI))? {
+        let provider = match with_selection::<Provider>("Cloud provider", &prefix(CLOUD_EMOJI))? {
             Provider::Aws(aws_cluster) => {
                 let template =
-                    with_selections::<AwsTemplateType>("Template", &prefix(HAMMER_EMOJI))?;
+                    with_selection::<AwsTemplateType>("Template", &prefix(HAMMER_EMOJI))?;
                 let custom = if template.is_none() {
                     let instance_type = with_input(
                         "Instance type",
@@ -148,6 +148,22 @@ pub async fn handle_list(list: List) -> anyhow::Result<()> {
     Ok(())
 }
 
+pub async fn handle_submit() -> anyhow::Result<()> {
+    todo!()
+}
+
+pub async fn handle_connect() -> anyhow::Result<()> {
+    todo!()
+}
+
+pub async fn handle_dashboard() -> anyhow::Result<()> {
+    todo!()
+}
+
+pub async fn handle_sql() -> anyhow::Result<()> {
+    todo!()
+}
+
 // helpers
 // =============================================================================
 
@@ -205,10 +221,7 @@ fn with_input<S: Into<String>>(
     Ok(value)
 }
 
-fn with_selections<T: Selectable>(
-    prompt: &str,
-    theme: &ColorfulTheme,
-) -> anyhow::Result<T::Parsed> {
+fn with_selection<T: Selectable>(prompt: &str, theme: &ColorfulTheme) -> anyhow::Result<T::Parsed> {
     let options = T::to_options();
     let selection = Select::with_theme(theme)
         .with_prompt(prompt)

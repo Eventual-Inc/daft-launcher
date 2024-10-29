@@ -80,11 +80,6 @@ pub struct List {
     pub name: Option<Regex>,
 }
 
-// fn parse_regex(s: &str) -> anyhow::Result<Regex> {
-//     todo!()
-//     // Regex::from_str(s).map_err(|e| e.to_string())
-// }
-
 /// Submit a job to a running cluster.
 #[derive(Debug, Parser, Clone, PartialEq, Eq)]
 pub struct Submit {
@@ -166,7 +161,8 @@ async fn handle_list(list: List) -> anyhow::Result<()> {
 async fn handle_submit(submit: Submit) -> anyhow::Result<()> {
     let (processed_config, _) = read(&submit.config.config).await?;
     _assert::assert_submit(&processed_config).await?;
-    todo!()
+    _impl::handle_submit().await?;
+    Ok(())
 }
 
 fn handle_connect(_: Connect) -> anyhow::Result<()> {

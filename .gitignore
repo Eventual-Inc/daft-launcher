@@ -1,3 +1,6 @@
+# cargo
+target
+
 # python
 .python-version
 .venv
@@ -7,11 +10,8 @@ dist
 __pycache__
 *.py[cod]
 
-# zed
+# editors
 .zed
 
-# misc
+# daft related
 .daft.toml
-
-# cargo
-target

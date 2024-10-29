@@ -148,7 +148,7 @@ async fn handle_up(up: Up) -> anyhow::Result<()> {
 async fn handle_down(down: Down) -> anyhow::Result<()> {
     let (processed_config, ray_config) = read(&down.config.config).await?;
     _assert::assert_down(&down, &processed_config).await?;
-    _impl::handle_down(ray_config).await?;
+    _impl::handle_down(processed_config, ray_config).await?;
     Ok(())
 }
 

@@ -93,25 +93,49 @@ pub async fn handle_up(
     processed_config: ProcessedConfig,
     ray_config: RayConfig,
 ) -> anyhow::Result<()> {
-    let cloud_name = match processed_config.cluster.provider {
+    match processed_config.cluster.provider {
         processed::Provider::Aws(ref aws_cluster) => {
             if aws_cluster.iam_instance_profile_arn.is_none() {
                 log::warn!("You specified no IAM instance profile ARN; this may cause limit your cluster's abilities to interface with auxiliary AWS services");
             }
-            format!("`aws (region = {})`", aws_cluster.region)
         }
     };
-    run_ray(&ray_config, RaySubcommand::Up, &[]).await?;
+
+    let (stylized_name, stylized_cloud) = to_stylized_name_and_cloud(&processed_config);
+    run_ray(
+        &ray_config,
+        RaySubcommand::Up,
+        &[],
+        format!(
+            r#"Spinning up a cluster named "{}" in your {} cloud"#,
+            stylized_name, stylized_cloud
+        ),
+    )
+    .await?;
     println!(
-        "Successfully spun up the cluster {} in your {} cloud",
-        style(format!("`{}`", processed_config.package.name)).cyan(),
-        style(format!("`{}`", cloud_name)).cyan(),
+        r#"Successfully spun up a cluster named "{}""#,
+        stylized_name,
     );
     Ok(())
 }
 
-pub async fn handle_down(ray_config: RayConfig) -> anyhow::Result<()> {
-    run_ray(&ray_config, RaySubcommand::Down, &[]).await
+pub async fn handle_down(
+    processed_config: ProcessedConfig,
+    ray_config: RayConfig,
+) -> anyhow::Result<()> {
+    let (stylized_name, stylized_cloud) = to_stylized_name_and_cloud(&processed_config);
+    run_ray(
+        &ray_config,
+        RaySubcommand::Down,
+        &[],
+        format!(
+            r#"Spinning down the "{}" cluster in your {} cloud"#,
+            stylized_name, stylized_cloud
+        ),
+    )
+    .await?;
+    println!(r#"Successfully spun down the "{}" cluster"#, stylized_name,);
+    Ok(())
 }
 
 pub async fn handle_list(list: List) -> anyhow::Result<()> {
@@ -149,18 +173,6 @@ pub async fn handle_list(list: List) -> anyhow::Result<()> {
 }
 
 pub async fn handle_submit() -> anyhow::Result<()> {
-    todo!()
-}
-
-pub async fn handle_connect() -> anyhow::Result<()> {
-    todo!()
-}
-
-pub async fn handle_dashboard() -> anyhow::Result<()> {
-    todo!()
-}
-
-pub async fn handle_sql() -> anyhow::Result<()> {
     todo!()
 }
 
@@ -232,4 +244,19 @@ fn with_selection<T: Selectable>(prompt: &str, theme: &ColorfulTheme) -> anyhow:
         .get(selection)
         .expect("Index should always be in bounds");
     T::parse(selection)
+}
+
+fn to_stylized_name_and_cloud(processed_config: &ProcessedConfig) -> (String, String) {
+    let cloud_name = match processed_config.cluster.provider {
+        processed::Provider::Aws(ref aws_cluster) => {
+            format!("`aws (region = {})`", aws_cluster.region)
+        }
+    };
+
+    let stylized_name = style(format!("`{}`", processed_config.package.name))
+        .cyan()
+        .to_string();
+    let stylized_cloud = style(format!("`{}`", cloud_name)).cyan().to_string();
+
+    (stylized_name, stylized_cloud)
 }

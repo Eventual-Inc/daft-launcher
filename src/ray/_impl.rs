@@ -18,6 +18,7 @@ use crate::{
 pub enum RaySubcommand {
     Up,
     Down,
+    Submit,
 }
 
 impl AsRef<str> for RaySubcommand {
@@ -25,6 +26,7 @@ impl AsRef<str> for RaySubcommand {
         match self {
             Self::Up => "up",
             Self::Down => "down",
+            Self::Submit => "submit",
         }
     }
 }

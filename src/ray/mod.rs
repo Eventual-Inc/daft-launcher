@@ -1,6 +1,6 @@
 mod _impl;
 
-use std::sync::Arc;
+use std::{borrow::Cow, sync::Arc};
 
 pub use _impl::RaySubcommand;
 
@@ -10,6 +10,7 @@ pub async fn run_ray(
     ray_config: &RayConfig,
     ray_subcommand: _impl::RaySubcommand,
     args: &[&str],
+    message: impl Into<Cow<'static, str>>,
 ) -> anyhow::Result<()> {
     // # Note
     // Can't use the [`spinner!`] macro here since the internal computations require
@@ -18,10 +19,6 @@ pub async fn run_ray(
     // If this same pattern arises again, create a new `with_spinner_arced` macro,
     // or something of that like.
 
-    let message = match ray_subcommand {
-        RaySubcommand::Up => "Spinning up your cluster",
-        RaySubcommand::Down => "Spinning down your cluster",
-    };
     let spinner = Arc::new(Spinner::new(message));
 
     {

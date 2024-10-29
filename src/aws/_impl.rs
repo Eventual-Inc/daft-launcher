@@ -18,6 +18,7 @@ use crate::StrRef;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AwsInstance {
+    pub instance_id: StrRef,
     pub regular_name: StrRef,
     pub ray_name: StrRef,
     pub key_pair_name: Option<StrRef>,
@@ -82,7 +83,9 @@ pub async fn list_instances(region: Cow<'static, str>) -> anyhow::Result<Vec<Aws
             }
             let ray_name = ray_name?;
             let regular_name = regular_name?;
+            let instance_id = instance.instance_id.as_deref()?.into();
             Some(AwsInstance {
+                instance_id,
                 regular_name,
                 ray_name,
                 key_pair_name: instance.key_name().map(Into::into),

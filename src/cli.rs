@@ -1,6 +1,12 @@
 use std::path::PathBuf;
 
+use aws_sdk_ec2::types::InstanceStateName;
 use clap::Parser;
+use comfy_table::{
+    modifiers::{UTF8_ROUND_CORNERS, UTF8_SOLID_INNER_BORDERS},
+    presets::UTF8_FULL,
+    Attribute, Cell, CellAlignment, Color, ContentArrangement, Table,
+};
 use console::style;
 use dialoguer::{theme::ColorfulTheme, Input, Select};
 use tokio::io::AsyncWriteExt;
@@ -299,6 +305,52 @@ async fn handle_down(down: Down) -> anyhow::Result<()> {
 async fn handle_list(_: List) -> anyhow::Result<()> {
     assert_authenticated(None).await?;
     let instances = list_instances("us-west-2").await?;
+    let mut table = Table::default();
+
+    table
+        .load_preset(UTF8_FULL)
+        .apply_modifier(UTF8_ROUND_CORNERS)
+        .apply_modifier(UTF8_SOLID_INNER_BORDERS)
+        .set_content_arrangement(ContentArrangement::DynamicFullWidth)
+        .set_header(["Name", "Instance ID", "Status", "IPv4"].map(|header| {
+            Cell::new(header)
+                .set_alignment(CellAlignment::Center)
+                .add_attribute(Attribute::Bold)
+        }));
+
+    for instance in &instances {
+        let status = instance.state.as_ref().map_or_else(
+            || Cell::new("n/a").add_attribute(Attribute::Dim),
+            |status| {
+                let cell = Cell::new(status);
+                match status {
+                    InstanceStateName::Running => cell.fg(Color::Green),
+                    InstanceStateName::Pending => cell.fg(Color::Yellow),
+                    InstanceStateName::ShuttingDown | InstanceStateName::Stopping => {
+                        cell.fg(Color::DarkYellow)
+                    }
+                    InstanceStateName::Stopped | InstanceStateName::Terminated => {
+                        cell.fg(Color::Red)
+                    }
+                    _ => cell,
+                }
+            },
+        );
+        let ipv4 = instance
+            .public_ipv4_address
+            .as_ref()
+            .map_or("n/a".into(), ToString::to_string);
+
+        table.add_row(vec![
+            Cell::new(instance.regular_name.to_string()).fg(Color::Cyan),
+            Cell::new(&*instance.instance_id),
+            status,
+            Cell::new(ipv4),
+        ]);
+    }
+
+    println!("{}", table);
+
     Ok(())
 }
 

@@ -1,14 +1,14 @@
 #[cfg(test)]
 macro_rules! path_from_root {
-    ($($segment:literal) / *) => {
-        concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            $(
-                concat!("/", $segment)
-            ),*
-        )
-    };
-}
+        ($($segment:literal) / *) => {
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                $(
+                    concat!("/", $segment)
+                ),*
+            )
+        };
+    }
 
 macro_rules! spinner {
     {

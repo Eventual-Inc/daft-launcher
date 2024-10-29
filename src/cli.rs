@@ -9,12 +9,13 @@ use comfy_table::{
 };
 use console::style;
 use dialoguer::{theme::ColorfulTheme, Input, Select};
+use regex::Regex;
 use tokio::io::AsyncWriteExt;
 
 use crate::{
     aws::{
         assert_authenticated as assert_authenticated_with_aws, assert_non_clashing_cluster_name,
-        list_instances,
+        list_instances, AwsInstance,
     },
     config::{
         defaults::{normal_image_id, normal_instance_type},
@@ -92,18 +93,29 @@ pub struct Down {
 /// list instances if and only if they have a "ray-cluster-name" tag on them. If
 /// not, we assume that they have *not* been instantiated by ray, and
 /// as a result, we don't list them.
-#[derive(Debug, Parser, Clone, PartialEq, Eq)]
+#[derive(Debug, Parser, Clone)]
 pub struct List {
     /// Only list the clusters that are running.
     #[arg(short, long)]
     pub running: bool,
+    /// Only list the clusters that match this regex.
+    #[arg(short, long)]
+    pub name: Option<Regex>,
 }
+
+// fn parse_regex(s: &str) -> anyhow::Result<Regex> {
+//     todo!()
+//     // Regex::from_str(s).map_err(|e| e.to_string())
+// }
 
 /// Submit a job to a running cluster.
 #[derive(Debug, Parser, Clone, PartialEq, Eq)]
 pub struct Submit {
     #[clap(flatten)]
     pub config: Config,
+    /// Run the job with this same name in the config file.
+    #[arg(short, long)]
+    pub name: String,
 }
 
 /// Establish an `SSH` port-forward from your local machine to the remote
@@ -141,7 +153,7 @@ pub async fn handle() -> anyhow::Result<()> {
         Cli::Up(up) => handle_up(up).await,
         Cli::Down(down) => handle_down(down).await,
         Cli::List(list) => handle_list(list).await,
-        Cli::Submit(submit) => handle_submit(submit),
+        Cli::Submit(submit) => handle_submit(submit).await,
         Cli::Connect(connect) => handle_connect(connect),
         Cli::Dashboard(dashboard) => handle_dashboard(dashboard),
         Cli::Sql(sql) => handle_sql(sql),
@@ -267,7 +279,7 @@ fn with_selections<T: Selectable>(
 }
 
 async fn handle_up(up: Up) -> anyhow::Result<()> {
-    let (processed_config, ray_config) = read(&up.config.config)?;
+    let (processed_config, ray_config) = read(&up.config.config).await?;
     assert_authenticated(Some(&processed_config.cluster.provider)).await?;
     let cloud_name = match processed_config.cluster.provider {
         processed::Provider::Aws(ref aws_cluster) => {
@@ -293,7 +305,7 @@ async fn handle_up(up: Up) -> anyhow::Result<()> {
 }
 
 async fn handle_down(down: Down) -> anyhow::Result<()> {
-    let (processed_config, ray_config) = read(&down.config.config)?;
+    let (processed_config, ray_config) = read(&down.config.config).await?;
     match down.name.clone().as_deref() {
         Some(..) => todo!(),
         None => assert_authenticated(Some(&processed_config.cluster.provider)).await?,
@@ -302,7 +314,7 @@ async fn handle_down(down: Down) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn handle_list(_: List) -> anyhow::Result<()> {
+async fn handle_list(list: List) -> anyhow::Result<()> {
     assert_authenticated(None).await?;
     let instances = list_instances("us-west-2").await?;
     let mut table = Table::default();
@@ -318,7 +330,7 @@ async fn handle_list(_: List) -> anyhow::Result<()> {
                 .add_attribute(Attribute::Bold)
         }));
 
-    for instance in &instances {
+    fn add_instance_to_table(instance: &AwsInstance, table: &mut Table) {
         let status = instance.state.as_ref().map_or_else(
             || Cell::new("n/a").add_attribute(Attribute::Dim),
             |status| {
@@ -349,12 +361,30 @@ async fn handle_list(_: List) -> anyhow::Result<()> {
         ]);
     }
 
+    for instance in &instances {
+        let is_running = instance
+            .state
+            .as_ref()
+            .map_or(false, |state| *state == InstanceStateName::Running);
+        let running_condition = !(list.running && !is_running);
+        let regex_condition = list
+            .name
+            .as_ref()
+            .map_or(true, |regex| regex.is_match(&instance.regular_name));
+        if running_condition && regex_condition {
+            add_instance_to_table(instance, &mut table);
+        }
+    }
+
     println!("{}", table);
 
     Ok(())
 }
 
-fn handle_submit(_: Submit) -> anyhow::Result<()> {
+async fn handle_submit(submit: Submit) -> anyhow::Result<()> {
+    let (processed_config, _) = read(&submit.config.config).await?;
+    assert_authenticated(Some(&processed_config.cluster.provider)).await?;
+
     todo!()
 }
 

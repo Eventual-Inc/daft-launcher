@@ -29,6 +29,32 @@ pub struct ProcessedConfig {
     pub jobs: Vec<Job>,
 }
 
+impl TryFrom<raw::RawConfig> for ProcessedConfig {
+    type Error = anyhow::Error;
+
+    fn try_from(raw: raw::RawConfig) -> anyhow::Result<Self> {
+        let package = raw.package.try_into()?;
+        let (provider, mut pre_setup_commands, mut post_setup_commands) =
+            Provider::process(raw.cluster.provider, &package)?;
+        pre_setup_commands.extend(raw.cluster.pre_setup_commands);
+        post_setup_commands.extend(raw.cluster.post_setup_commands);
+        Ok(ProcessedConfig {
+            package,
+            cluster: Cluster {
+                provider,
+                number_of_workers: raw
+                    .cluster
+                    .number_of_workers
+                    .unwrap_or(DEFAULT_NUMBER_OF_WORKERS),
+                dependencies: raw.cluster.dependencies,
+                pre_setup_commands,
+                post_setup_commands,
+            },
+            jobs: raw.jobs,
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Package {
     pub daft_launcher_version: VersionReq,
@@ -40,7 +66,7 @@ pub struct Package {
 impl TryFrom<raw::Package> for Package {
     type Error = anyhow::Error;
 
-    fn try_from(value: raw::Package) -> Result<Self, Self::Error> {
+    fn try_from(value: raw::Package) -> anyhow::Result<Self> {
         let python_version = value.python_version.map_or_else(get_python_version, Ok)?;
         let ray_version = value.ray_version.map_or_else(get_ray_version, Ok)?;
         Ok(Self {
@@ -137,32 +163,6 @@ pub struct AwsCluster {
     pub instance_type: StrRef,
 }
 
-impl TryFrom<raw::RawConfig> for ProcessedConfig {
-    type Error = anyhow::Error;
-
-    fn try_from(raw: raw::RawConfig) -> Result<Self, Self::Error> {
-        let package = raw.package.try_into()?;
-        let (provider, mut pre_setup_commands, mut post_setup_commands) =
-            Provider::process(raw.cluster.provider, &package)?;
-        pre_setup_commands.extend(raw.cluster.pre_setup_commands);
-        post_setup_commands.extend(raw.cluster.post_setup_commands);
-        Ok(ProcessedConfig {
-            package,
-            cluster: Cluster {
-                provider,
-                number_of_workers: raw
-                    .cluster
-                    .number_of_workers
-                    .unwrap_or(DEFAULT_NUMBER_OF_WORKERS),
-                dependencies: raw.cluster.dependencies,
-                pre_setup_commands,
-                post_setup_commands,
-            },
-            jobs: raw.jobs,
-        })
-    }
-}
-
 fn get_version(executable: &str, prefix: &str) -> anyhow::Result<Version> {
     if which(executable).is_err() {
         anyhow::bail!("Cannot find a(n) {executable} executable in your $PATH; failed to autodetect {executable} version")
@@ -215,6 +215,7 @@ fn to_key_stem(path: &Path) -> anyhow::Result<&str> {
 
 #[cfg(test)]
 pub mod tests {
+
     use rstest::{fixture, rstest};
 
     use super::*;

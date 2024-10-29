@@ -50,14 +50,16 @@ pub mod processed;
 pub mod raw;
 pub mod ray;
 
-use std::{fs::OpenOptions, io::Read, path::Path, sync::LazyLock};
+use std::{path::Path, sync::LazyLock};
 
-use anyhow::Context;
+use console::style;
 use processed::ProcessedConfig;
 use semver::Version;
+use tokio::{fs::OpenOptions, io::AsyncReadExt};
 
 use crate::{
     config::{raw::RawConfig, ray::RayConfig},
+    utils::{self, Status},
     PathRef,
 };
 
@@ -79,16 +81,20 @@ pub trait Selectable {
 /// enforced). Upon successful deserialization, the `ProcessedConfig` is used to
 /// generate a `RayConfig` counterpart. Finally, both the `ProcessedConfig` and
 /// `RayConfig` are both returned.
-pub fn read(path: &Path) -> anyhow::Result<(ProcessedConfig, RayConfig)> {
-    let mut file =
-        OpenOptions::new().read(true).open(path).with_context(|| {
-            format!("No configuration file found at the path `{}`; please run `daft init-config` to generate a configuration file", path.display())
+pub async fn read(path: &Path) -> anyhow::Result<(ProcessedConfig, RayConfig)> {
+    utils::assert_file_status(path, Status::File)
+        .await
+        .map_err(|error| {
+            anyhow::anyhow!(
+                "{}\nPlease run {} to generate a new configuration file",
+                error,
+                style("`daft init`").blue()
+            )
         })?;
-    let mut buf = String::new();
-    let _ = file
-        .read_to_string(&mut buf)
-        .with_context(|| format!("Failed to read file {path:?}"))?;
-    let raw_config: RawConfig = toml::from_str(&buf)?;
+    let mut file = OpenOptions::new().read(true).open(path).await?;
+    let mut dst = String::new();
+    let _ = file.read_to_string(&mut dst).await?;
+    let raw_config: RawConfig = toml::from_str(&dst)?;
     let processed_config: ProcessedConfig = raw_config.try_into()?;
     if !processed_config
         .package

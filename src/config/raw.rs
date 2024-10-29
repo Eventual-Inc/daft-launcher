@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use console::style;
 use semver::VersionReq;
 use serde::{de::Error, Deserialize, Deserializer, Serialize};
@@ -169,30 +167,24 @@ pub struct Job {
     pub command: StrRef,
 }
 
-fn assert_path_exists_helper<'de, D>(path: &Path) -> Result<(), D::Error>
+fn deserialize_helper<'de, D>(deserializer: D, status: Status) -> Result<PathRef, D::Error>
 where
     D: Deserializer<'de>,
 {
-    tokio::task::block_in_place(|| {
-        tokio::runtime::Handle::current().block_on(async {
-            assert_file_status(path, Status::File).await.map_err(|_| {
-                Error::custom(format!("The path '{}' does not exist.", path.display()))
-            })
-        })
-    })?;
-    Ok(())
-}
-
-fn expand_helper<'de, D>(path: PathRef) -> Result<PathRef, D::Error>
-where
-    D: Deserializer<'de>,
-{
+    let path = PathRef::deserialize(deserializer)?;
     let path = expand(path.clone()).map_err(|error| {
         Error::custom(format!(
             "Path expansion failed; could not expand the path '{}'\nReason: {}",
             path.display(),
             style(error).red(),
         ))
+    })?;
+    tokio::task::block_in_place(|| {
+        tokio::runtime::Handle::current().block_on(async {
+            assert_file_status(&path, status)
+                .await
+                .map_err(Error::custom)
+        })
     })?;
     Ok(path_ref(path))
 }
@@ -201,32 +193,14 @@ fn deserialize_dir<'de, D>(deserializer: D) -> Result<PathRef, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let path = PathRef::deserialize(deserializer)?;
-    let path = expand_helper::<D>(path)?;
-    assert_path_exists_helper::<D>(&path)?;
-    if !path.is_dir() {
-        return Err(Error::custom(format!(
-            "The path '{}' is not a directory.",
-            path.display(),
-        )));
-    }
-    Ok(path)
+    deserialize_helper(deserializer, Status::Directory)
 }
 
 fn deserialize_path<'de, D>(deserializer: D) -> Result<PathRef, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let path = PathRef::deserialize(deserializer)?;
-    let path = expand_helper::<D>(path)?;
-    assert_path_exists_helper::<D>(&path)?;
-    if !path.is_file() {
-        return Err(Error::custom(format!(
-            "The path '{}' is not a file.",
-            path.display(),
-        )));
-    }
-    Ok(path)
+    deserialize_helper(deserializer, Status::File)
 }
 
 #[cfg(test)]
@@ -311,7 +285,8 @@ pub mod tests {
     #[rstest]
     #[case(include_str!(path_from_root!("tests" / "fixtures" / "light.toml")), light_raw_config())]
     #[case(include_str!(path_from_root!("tests" / "fixtures" / "custom.toml")), custom_raw_config())]
-    fn test_str_to_raw_config(#[case] input: &str, #[case] expected: RawConfig) {
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn test_str_to_raw_config(#[case] input: &str, #[case] expected: RawConfig) {
         let actual: RawConfig = toml::from_str(input).unwrap();
         assert_eq!(actual, expected);
     }

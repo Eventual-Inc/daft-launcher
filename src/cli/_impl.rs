@@ -10,6 +10,7 @@ use tokio::io::AsyncWriteExt;
 
 use crate::{
     aws::{list_instances, AwsInstance},
+    cli::{Init, List},
     config::{
         defaults::{normal_image_id, normal_instance_type},
         processed::{self, ProcessedConfig},
@@ -24,10 +25,6 @@ use crate::{
     utils::create_new_file,
     StrRef,
 };
-
-use crate::cli::Init;
-
-use crate::cli::List;
 
 const NOTEPAD_EMOJI: &str = "📝";
 const CLOUD_EMOJI: &str = "🌥️";

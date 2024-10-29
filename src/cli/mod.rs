@@ -1,3 +1,4 @@
+mod _assert;
 mod _impl;
 
 use std::path::PathBuf;
@@ -6,11 +7,8 @@ use clap::Parser;
 use regex::Regex;
 
 use crate::{
-    aws::{
-        assert_authenticated as assert_authenticated_with_aws, assert_non_clashing_cluster_name,
-    },
+    aws::assert_authenticated as assert_authenticated_with_aws,
     config::{processed, read},
-    utils::{assert_file_status, Status},
     ArcStrRef,
 };
 
@@ -143,60 +141,35 @@ pub async fn handle() -> anyhow::Result<()> {
     }
 }
 
-async fn assert_authenticated(provider: Option<&processed::Provider>) -> anyhow::Result<()> {
-    let (authenticate_with_aws,) = provider.map_or((true,), |provider| match provider {
-        processed::Provider::Aws(..) => (true,),
-    });
-
-    if authenticate_with_aws {
-        assert_authenticated_with_aws().await?;
-    };
-
-    Ok(())
-}
-
 async fn handle_init(init: Init) -> anyhow::Result<()> {
-    assert_file_status(&init.name, Status::DoesNotExist).await?;
-
-    _impl::handle_init(init).await
+    _assert::assert_init(&init).await?;
+    _impl::handle_init(init).await?;
+    Ok(())
 }
 
 async fn handle_up(up: Up) -> anyhow::Result<()> {
     let (processed_config, ray_config) = read(&up.config.config).await?;
-    assert_authenticated(Some(&processed_config.cluster.provider)).await?;
-    match processed_config.cluster.provider {
-        processed::Provider::Aws(ref aws_cluster) => {
-            assert_non_clashing_cluster_name(
-                &processed_config.package.name,
-                aws_cluster.region.to_string(),
-            )
-            .await?;
-        }
-    };
-
-    _impl::handle_up(processed_config, ray_config).await
+    _assert::assert_up(&processed_config).await?;
+    _impl::handle_up(processed_config, ray_config).await?;
+    Ok(())
 }
 
 async fn handle_down(down: Down) -> anyhow::Result<()> {
     let (processed_config, ray_config) = read(&down.config.config).await?;
-    match down.name.clone().as_deref() {
-        Some(..) => todo!(),
-        None => assert_authenticated(Some(&processed_config.cluster.provider)).await?,
-    };
-
-    _impl::handle_down(ray_config).await
+    _assert::assert_down(&down, &processed_config).await?;
+    _impl::handle_down(ray_config).await?;
+    Ok(())
 }
 
 async fn handle_list(list: List) -> anyhow::Result<()> {
-    assert_authenticated(None).await?;
-
-    _impl::handle_list(list).await
+    _assert::assert_list().await?;
+    _impl::handle_list(list).await?;
+    Ok(())
 }
 
 async fn handle_submit(submit: Submit) -> anyhow::Result<()> {
     let (processed_config, _) = read(&submit.config.config).await?;
-    assert_authenticated(Some(&processed_config.cluster.provider)).await?;
-
+    _assert::assert_submit(&processed_config).await?;
     todo!()
 }
 
@@ -210,4 +183,19 @@ fn handle_dashboard(_: Dashboard) -> anyhow::Result<()> {
 
 fn handle_sql(_: Sql) -> anyhow::Result<()> {
     todo!()
+}
+
+// helpers
+// =============================================================================
+
+async fn assert_authenticated(provider: Option<&processed::Provider>) -> anyhow::Result<()> {
+    let (authenticate_with_aws,) = provider.map_or((true,), |provider| match provider {
+        processed::Provider::Aws(..) => (true,),
+    });
+
+    if authenticate_with_aws {
+        assert_authenticated_with_aws().await?;
+    };
+
+    Ok(())
 }

@@ -148,6 +148,9 @@ pub async fn handle_list(list: List) -> anyhow::Result<()> {
     Ok(())
 }
 
+// helpers
+// =============================================================================
+
 const NOTEPAD_EMOJI: &str = "📝";
 const CLOUD_EMOJI: &str = "🌥️";
 const HAMMER_EMOJI: &str = "🔨";

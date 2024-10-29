@@ -50,6 +50,10 @@ pub async fn file_status(path: &Path) -> anyhow::Result<Status> {
 pub async fn assert_file_status(path: &Path, expected_status: Status) -> anyhow::Result<()> {
     let actual_status = file_status(path).await?;
     match (actual_status, expected_status) {
+        (Status::DoesNotExist, Status::DoesNotExist)
+        | (Status::File, Status::File)
+        | (Status::Directory, Status::Directory) => Ok(()),
+
         (_, Status::DoesNotExist) => anyhow::bail!(
             r#"The file/dir "{}" already exists"#,
             style(path.display()).red()
@@ -67,8 +71,6 @@ pub async fn assert_file_status(path: &Path, expected_status: Status) -> anyhow:
             r#"Expected a file at the path "{}", but found a directory"#,
             path.display()
         ),
-
-        _ => Ok(()),
     }
 }
 

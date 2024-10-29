@@ -1,36 +1,11 @@
-# build-system
-# ------------------------------------------------------------------------------
-
 [build-system]
 requires = ["maturin>=1.7,<2.0"]
 build-backend = "maturin"
 
-# project
-# ------------------------------------------------------------------------------
-
 [project]
 name = "daft_launcher"
 requires-python = ">=3.9"
-dependencies = [
-    # "boto3",
-    # "click",
-    # "pydantic",
-    "ray",
-    # "tomli; python_version < '3.11'",
-]
-
-# [project.license]
-# file = "LICENSE"
-
-# tool
-# ------------------------------------------------------------------------------
+dependencies = ["ray", "boto3"]
 
 [tool.maturin]
 bindings = "bin"
-
-# [tool.pyright]
-# venvPath = '.'
-# venv = '.venv'
-
-# [tool.ruff]
-# include = ["daft_launcher/**/*.py"]

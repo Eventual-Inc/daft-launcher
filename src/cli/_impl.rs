@@ -26,18 +26,6 @@ use crate::{
     StrRef,
 };
 
-const NOTEPAD_EMOJI: &str = "📝";
-const CLOUD_EMOJI: &str = "🌥️";
-const HAMMER_EMOJI: &str = "🔨";
-const COMPUTER_EMOJI: &str = "💻";
-
-fn prefix(prefix: &str) -> ColorfulTheme {
-    ColorfulTheme {
-        prompt_prefix: style(prefix.into()),
-        ..Default::default()
-    }
-}
-
 pub async fn handle_init(init: Init) -> anyhow::Result<()> {
     let raw_config = if init.default {
         RawConfig::default()
@@ -101,35 +89,6 @@ pub async fn handle_init(init: Init) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn with_input<S: Into<String>>(
-    prompt: &str,
-    theme: &ColorfulTheme,
-    default: S,
-) -> anyhow::Result<StrRef> {
-    let value = Input::<String>::with_theme(theme)
-        .with_prompt(prompt)
-        .default(default.into())
-        .interact_text()?
-        .into();
-    Ok(value)
-}
-
-fn with_selections<T: Selectable>(
-    prompt: &str,
-    theme: &ColorfulTheme,
-) -> anyhow::Result<T::Parsed> {
-    let options = T::to_options();
-    let selection = Select::with_theme(theme)
-        .with_prompt(prompt)
-        .default(0)
-        .items(&options)
-        .interact()?;
-    let &selection = options
-        .get(selection)
-        .expect("Index should always be in bounds");
-    T::parse(selection)
-}
-
 pub async fn handle_up(
     processed_config: ProcessedConfig,
     ray_config: RayConfig,
@@ -158,7 +117,6 @@ pub async fn handle_down(ray_config: RayConfig) -> anyhow::Result<()> {
 pub async fn handle_list(list: List) -> anyhow::Result<()> {
     let instances = list_instances("us-west-2").await?;
     let mut table = Table::default();
-
     table
         .load_preset(UTF8_FULL)
         .apply_modifier(UTF8_ROUND_CORNERS)
@@ -169,37 +127,6 @@ pub async fn handle_list(list: List) -> anyhow::Result<()> {
                 .set_alignment(CellAlignment::Center)
                 .add_attribute(Attribute::Bold)
         }));
-
-    fn add_instance_to_table(instance: &AwsInstance, table: &mut Table) {
-        let status = instance.state.as_ref().map_or_else(
-            || Cell::new("n/a").add_attribute(Attribute::Dim),
-            |status| {
-                let cell = Cell::new(status);
-                match status {
-                    InstanceStateName::Running => cell.fg(Color::Green),
-                    InstanceStateName::Pending => cell.fg(Color::Yellow),
-                    InstanceStateName::ShuttingDown | InstanceStateName::Stopping => {
-                        cell.fg(Color::DarkYellow)
-                    }
-                    InstanceStateName::Stopped | InstanceStateName::Terminated => {
-                        cell.fg(Color::Red)
-                    }
-                    _ => cell,
-                }
-            },
-        );
-        let ipv4 = instance
-            .public_ipv4_address
-            .as_ref()
-            .map_or("n/a".into(), ToString::to_string);
-
-        table.add_row(vec![
-            Cell::new(instance.regular_name.to_string()).fg(Color::Cyan),
-            Cell::new(&*instance.instance_id),
-            status,
-            Cell::new(ipv4),
-        ]);
-    }
 
     for instance in &instances {
         let is_running = instance
@@ -219,4 +146,74 @@ pub async fn handle_list(list: List) -> anyhow::Result<()> {
     println!("{}", table);
 
     Ok(())
+}
+
+const NOTEPAD_EMOJI: &str = "📝";
+const CLOUD_EMOJI: &str = "🌥️";
+const HAMMER_EMOJI: &str = "🔨";
+const COMPUTER_EMOJI: &str = "💻";
+
+fn prefix(prefix: &str) -> ColorfulTheme {
+    ColorfulTheme {
+        prompt_prefix: style(prefix.into()),
+        ..Default::default()
+    }
+}
+
+fn add_instance_to_table(instance: &AwsInstance, table: &mut Table) {
+    let status = instance.state.as_ref().map_or_else(
+        || Cell::new("n/a").add_attribute(Attribute::Dim),
+        |status| {
+            let cell = Cell::new(status);
+            match status {
+                InstanceStateName::Running => cell.fg(Color::Green),
+                InstanceStateName::Pending => cell.fg(Color::Yellow),
+                InstanceStateName::ShuttingDown | InstanceStateName::Stopping => {
+                    cell.fg(Color::DarkYellow)
+                }
+                InstanceStateName::Stopped | InstanceStateName::Terminated => cell.fg(Color::Red),
+                _ => cell,
+            }
+        },
+    );
+    let ipv4 = instance
+        .public_ipv4_address
+        .as_ref()
+        .map_or("n/a".into(), ToString::to_string);
+
+    table.add_row(vec![
+        Cell::new(instance.regular_name.to_string()).fg(Color::Cyan),
+        Cell::new(&*instance.instance_id),
+        status,
+        Cell::new(ipv4),
+    ]);
+}
+
+fn with_input<S: Into<String>>(
+    prompt: &str,
+    theme: &ColorfulTheme,
+    default: S,
+) -> anyhow::Result<StrRef> {
+    let value = Input::<String>::with_theme(theme)
+        .with_prompt(prompt)
+        .default(default.into())
+        .interact_text()?
+        .into();
+    Ok(value)
+}
+
+fn with_selections<T: Selectable>(
+    prompt: &str,
+    theme: &ColorfulTheme,
+) -> anyhow::Result<T::Parsed> {
+    let options = T::to_options();
+    let selection = Select::with_theme(theme)
+        .with_prompt(prompt)
+        .default(0)
+        .items(&options)
+        .interact()?;
+    let &selection = options
+        .get(selection)
+        .expect("Index should always be in bounds");
+    T::parse(selection)
 }

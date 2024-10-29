@@ -6,11 +6,7 @@ use std::path::PathBuf;
 use clap::Parser;
 use regex::Regex;
 
-use crate::{
-    aws::assert_authenticated as assert_authenticated_with_aws,
-    config::{processed, read},
-    ArcStrRef,
-};
+use crate::{config::read, ArcStrRef};
 
 #[derive(Parser)]
 #[command(version, about = env!("CARGO_PKG_DESCRIPTION"))]
@@ -183,19 +179,4 @@ fn handle_dashboard(_: Dashboard) -> anyhow::Result<()> {
 
 fn handle_sql(_: Sql) -> anyhow::Result<()> {
     todo!()
-}
-
-// helpers
-// =============================================================================
-
-async fn assert_authenticated(provider: Option<&processed::Provider>) -> anyhow::Result<()> {
-    let (authenticate_with_aws,) = provider.map_or((true,), |provider| match provider {
-        processed::Provider::Aws(..) => (true,),
-    });
-
-    if authenticate_with_aws {
-        assert_authenticated_with_aws().await?;
-    };
-
-    Ok(())
 }

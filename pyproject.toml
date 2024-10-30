@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "daft_launcher"
 requires-python = ">=3.9"
-dependencies = ["ray", "boto3"]
+dependencies = ["ray[default]", "boto3"]
 
 [tool.maturin]
 bindings = "bin"

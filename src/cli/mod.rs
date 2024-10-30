@@ -119,7 +119,7 @@ pub struct Sql {
 /// Exports the Ray YAML file that is generated internally to interface with the
 /// Ray CLI.
 ///
-/// This should largely be used for escape-hatching / debugging; most users
+/// This should largely be used for escape-hatching + debugging. Most users
 /// should not have to interact with this feature.
 #[derive(Debug, Parser, Clone, PartialEq, Eq)]
 pub struct Export {

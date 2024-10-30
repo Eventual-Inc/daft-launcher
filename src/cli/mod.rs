@@ -90,8 +90,7 @@ pub struct Submit {
     #[clap(flatten)]
     pub config: Config,
     /// Run the job with this same name in the config file.
-    #[arg(short, long)]
-    pub name: String,
+    pub name: ArcStrRef,
 }
 
 /// Establish an `SSH` port-forward from your local machine to the remote

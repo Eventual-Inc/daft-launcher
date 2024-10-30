@@ -11,7 +11,7 @@ use dialoguer::{theme::ColorfulTheme, Input, Select};
 use tokio::{fs::OpenOptions, io::AsyncWriteExt};
 
 use crate::{
-    aws::{list_instances, AwsInstance},
+    aws::{get_public_ipv4_addrs, list_instances, AwsInstance},
     cli::{Init, List, Submit},
     config::{
         defaults::{normal_image_id, normal_instance_type},
@@ -23,7 +23,7 @@ use crate::{
         ray::RayConfig,
         Selectable,
     },
-    ray::{run_ray, RaySubcommand},
+    ray::{run_ray, RayCommand, RayJob},
     utils::{create_new_file, start_ssh_process},
     StrRef,
 };
@@ -108,7 +108,7 @@ pub async fn handle_up(
         r#"Spinning up a cluster named {} in your {} cloud"#,
         stylized_name, stylized_cloud
     );
-    run_ray(RaySubcommand::Up, &ray_config, &[]).await?;
+    let _ = run_ray(RayCommand::Up, &ray_config).await?;
     println!(r#"Successfully spun up a cluster named {}"#, stylized_name,);
     Ok(())
 }
@@ -122,7 +122,7 @@ pub async fn handle_down(
         r#"Spinning down the {} cluster in your {} cloud"#,
         stylized_name, stylized_cloud
     );
-    run_ray(RaySubcommand::Down, &ray_config, &[]).await?;
+    let _ = run_ray(RayCommand::Down, &ray_config).await?;
     println!(r#"Successfully spun down the {} cluster"#, stylized_name);
     Ok(())
 }
@@ -175,42 +175,29 @@ pub async fn handle_submit(
     let (stylized_name, stylized_cloud) = to_stylized_name_and_cloud(&processed_config);
     println!(
         r#"Submitting the "{}" job to the {} cluster in your {} cloud"#,
-        style(submit.name).cyan(),
+        style(&submit.name).cyan(),
         stylized_name,
         stylized_cloud,
     );
     match processed_config.cluster.provider {
-        processed::Provider::Aws(aws_cluster) => {
+        processed::Provider::Aws(ref aws_cluster) => {
             let instances = list_instances("us-west-2").await?;
-            let instance = instances
-                .into_iter()
-                .find(|instance| {
-                    instance.cluster_name_equals_ray_name(&processed_config.package.name)
-                })
-                .unwrap();
-            let addr = instance.public_ipv4_address.unwrap();
-            let mut child_process =
+            let mut ipv4_addrs = get_public_ipv4_addrs(&processed_config.package.name, &instances);
+            let addr = match &*ipv4_addrs {
+                [_] => ipv4_addrs.pop().unwrap(),
+                _ => panic!("Multiple clusters found"),
+            };
+            let child_process =
                 start_ssh_process(&aws_cluster.ssh_user, addr, &aws_cluster.ssh_private_key)
                     .unwrap();
-            let _ = child_process.wait().await.unwrap();
-            // let stdout = run_ray(RaySubcommand::Submit, &ray_config, &[]);
-            // let (exit_status, stdout) = tokio::join!(child_process.wait(),
-            // stdout); let child_process = exit_status?;
-            // let stdout = String::from_utf8(stdout?)?;
-            // dbg!(child_process, stdout);
-            // let stdout = run_ray(RaySubcommand::Submit, &ray_config, &[])
-            //     .await
-            //     .unwrap();
-            // let _ = child_process.wait().await?;
-            // let last = stdout
-            //     .split(|&char| char == b'\n')
-            //     .fold(None, |last, slice| match slice {
-            //         [] => last,
-            //         _ => Some(slice),
-            //     })
-            //     .expect("Job id should always be printed to stdout");
-            // let last = String::from_utf8(last.to_owned())?;
-            // dbg!(last);
+            let job = processed_config.jobs.get(&*submit.name).ok_or_else(|| anyhow::anyhow!(
+                r#"A job with the name "{}" was not found in the config file located at {}"#,
+                style(&submit.name).cyan(),
+                style(&submit.config.config.display()).cyan(),
+            ))?.clone();
+            let _ = run_ray(RayCommand::Job(RayJob::Submit(job)), &ray_config).await?;
+
+            drop(child_process);
         }
     };
     Ok(())

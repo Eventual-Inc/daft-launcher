@@ -2,54 +2,75 @@ use tempdir::TempDir;
 use tokio::{io::AsyncWriteExt, process::Command};
 
 use crate::{
-    config::ray::RayConfig,
+    config::{raw::Job, ray::RayConfig},
     utils::{create_temporary_ray_file, path_to_str},
     PathRef,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RaySubcommand {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RayCommand {
     Up,
     Down,
-    Submit,
+    Job(RayJob),
 }
 
-impl AsRef<str> for RaySubcommand {
-    fn as_ref(&self) -> &str {
+impl AsRef<[&'static str]> for RayCommand {
+    fn as_ref(&self) -> &[&'static str] {
         match self {
-            Self::Up => "up",
-            Self::Down => "down",
-            Self::Submit => "submit",
+            Self::Up => &["up"],
+            Self::Down => &["down"],
+            Self::Job(RayJob::Submit(..)) => &["job", "submit"],
         }
     }
 }
 
-pub async fn run_ray(
-    subcommand: RaySubcommand,
-    ray_config: &RayConfig,
-    args: &[&str],
-) -> anyhow::Result<Vec<u8>> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RayJob {
+    Submit(Job),
+}
+
+pub async fn run_ray(ray_command: RayCommand, ray_config: &RayConfig) -> anyhow::Result<Vec<u8>> {
     const RAY_CMD: &str = "ray";
     const PYTHON_BUFFERING_ENV_VAR: &str = "PYTHONUNBUFFERED";
     const PYTHON_BUFFERING_ENV_VALUE: &str = "1";
 
-    let (temp_dir, path) = write_ray(&ray_config).await?;
-
-    let child = Command::new(RAY_CMD)
+    let mut command = Command::new(RAY_CMD);
+    command
         .env(PYTHON_BUFFERING_ENV_VAR, PYTHON_BUFFERING_ENV_VALUE)
-        .arg(subcommand.as_ref())
-        .arg(path_to_str(path.as_os_str())?)
-        .args(args)
-        .arg("-y")
-        .spawn()?;
+        .args(ray_command.as_ref());
 
-    let output = child.wait_with_output().await?;
+    let output = match ray_command {
+        RayCommand::Up | RayCommand::Down => {
+            let (temp_dir, path) = write_ray(&ray_config).await?;
 
-    // Explicitly deletes the entire temporary directory.
-    // The config file that we wrote to inside of there will now be deleted.
-    //
-    // This should only happen *after* the `ray` command has finished executing.
-    drop(temp_dir);
+            let child = command
+                .arg(path_to_str(path.as_os_str())?)
+                .arg("-y")
+                .spawn()?;
+
+            let output = child.wait_with_output().await?;
+
+            // Explicitly deletes the entire temporary directory.
+            // The config file that we wrote to inside of there will now be deleted.
+            //
+            // This should only happen *after* the `ray` command has finished executing.
+            drop(temp_dir);
+
+            output
+        }
+        RayCommand::Job(RayJob::Submit(job)) => {
+            command
+                .arg("--working-dir")
+                .arg(&*job.working_dir)
+                .arg("--address")
+                .arg("http://localhost:8265")
+                .arg("--")
+                .args(job.command.split(' '))
+                .spawn()?
+                .wait_with_output()
+                .await?
+        }
+    };
 
     if output.status.success() {
         Ok(output.stdout)

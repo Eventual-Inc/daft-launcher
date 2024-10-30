@@ -4,6 +4,7 @@ use std::{
     sync::LazyLock,
 };
 
+use hashbrown::HashMap;
 use semver::{Version, VersionReq};
 
 use crate::{
@@ -25,7 +26,7 @@ static MIN_PYTHON_VERSION: LazyLock<VersionReq> = LazyLock::new(|| "3.9".parse()
 pub struct ProcessedConfig {
     pub package: Package,
     pub cluster: Cluster,
-    pub jobs: Vec<Job>,
+    pub jobs: HashMap<StrRef, Job>,
 }
 
 impl TryFrom<raw::RawConfig> for ProcessedConfig {
@@ -37,6 +38,7 @@ impl TryFrom<raw::RawConfig> for ProcessedConfig {
             Provider::process(raw.cluster.provider, &package)?;
         pre_setup_commands.extend(raw.cluster.pre_setup_commands);
         post_setup_commands.extend(raw.cluster.post_setup_commands);
+        let jobs = job_list_to_job_map(raw.jobs)?;
         Ok(ProcessedConfig {
             package,
             cluster: Cluster {
@@ -49,7 +51,7 @@ impl TryFrom<raw::RawConfig> for ProcessedConfig {
                 pre_setup_commands,
                 post_setup_commands,
             },
-            jobs: raw.jobs,
+            jobs,
         })
     }
 }
@@ -215,6 +217,18 @@ fn to_key_stem(path: &Path) -> anyhow::Result<&str> {
     Ok(key_name)
 }
 
+fn job_list_to_job_map(jobs: Vec<Job>) -> anyhow::Result<HashMap<StrRef, Job>> {
+    let map = HashMap::with_capacity(jobs.len());
+    jobs.into_iter().try_fold(map, |mut map, job| {
+        if map.contains_key(&job.name) {
+            anyhow::bail!("Duplicate job name found: {}", job.name);
+        } else {
+            map.insert(job.name.clone(), job);
+            Ok(map)
+        }
+    })
+}
+
 #[cfg(test)]
 pub mod tests {
 
@@ -232,6 +246,12 @@ pub mod tests {
             ray_version: get_ray_version().unwrap(),
         };
         let post_setup_commands = base_setup_commands(&package);
+        let jobs = job_list_to_job_map(vec![Job {
+            name: "filter".into(),
+            working_dir: path_ref("tests"),
+            command: "python filter.py".into(),
+        }])
+        .unwrap();
         ProcessedConfig {
             package,
             cluster: Cluster {
@@ -249,11 +269,7 @@ pub mod tests {
                 pre_setup_commands: vec![],
                 post_setup_commands,
             },
-            jobs: vec![Job {
-                name: "filter".into(),
-                working_dir: path_ref("tests"),
-                command: "python filter.py".into(),
-            }],
+            jobs,
         }
     }
 
@@ -267,7 +283,19 @@ pub mod tests {
         };
         let mut post_setup_commands = base_setup_commands(&package);
         post_setup_commands.extend(["echo 'Finished!'".into()]);
-
+        let jobs = job_list_to_job_map(vec![
+            Job {
+                name: "filter".into(),
+                working_dir: path_ref("tests"),
+                command: "python filter.py".into(),
+            },
+            Job {
+                name: "dedupe".into(),
+                working_dir: path_ref("tests"),
+                command: "python dedupe.py".into(),
+            },
+        ])
+        .unwrap();
         ProcessedConfig {
             package,
             cluster: Cluster {
@@ -285,18 +313,7 @@ pub mod tests {
                 pre_setup_commands: vec!["echo 'Hello, world!'".into()],
                 post_setup_commands,
             },
-            jobs: vec![
-                Job {
-                    name: "filter".into(),
-                    working_dir: path_ref("tests"),
-                    command: "python filter.py".into(),
-                },
-                Job {
-                    name: "dedupe".into(),
-                    working_dir: path_ref("tests"),
-                    command: "python dedupe.py".into(),
-                },
-            ],
+            jobs,
         }
     }
 

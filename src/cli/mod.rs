@@ -144,7 +144,7 @@ pub async fn handle() -> anyhow::Result<()> {
         Cli::List(list) => handle_list(list).await,
         Cli::Submit(submit) => handle_submit(submit).await,
         Cli::Connect(connect) => handle_connect(connect),
-        Cli::Dashboard(dashboard) => handle_dashboard(dashboard),
+        Cli::Dashboard(dashboard) => handle_dashboard(dashboard).await,
         Cli::Sql(sql) => handle_sql(sql),
         Cli::Export(export) => handle_export(export).await,
     }
@@ -187,8 +187,10 @@ fn handle_connect(_: Connect) -> anyhow::Result<()> {
     todo!()
 }
 
-fn handle_dashboard(_: Dashboard) -> anyhow::Result<()> {
-    todo!()
+async fn handle_dashboard(dashboard: Dashboard) -> anyhow::Result<()> {
+    let (processed_config, _) = read(&dashboard.config.config).await?;
+    _impl::handle_dashboard(processed_config).await?;
+    Ok(())
 }
 
 fn handle_sql(_: Sql) -> anyhow::Result<()> {

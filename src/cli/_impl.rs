@@ -8,7 +8,7 @@ use comfy_table::{
 };
 use console::style;
 use dialoguer::{theme::ColorfulTheme, Input, Select};
-use tokio::{fs::OpenOptions, io::AsyncWriteExt};
+use tokio::{fs::OpenOptions, io::AsyncWriteExt, process::Child};
 
 use crate::{
     aws::{get_public_ipv4_addrs, list_instances, AwsInstance},
@@ -181,15 +181,12 @@ pub async fn handle_submit(
     );
     match processed_config.cluster.provider {
         processed::Provider::Aws(ref aws_cluster) => {
-            let instances = list_instances("us-west-2").await?;
-            let mut ipv4_addrs = get_public_ipv4_addrs(&processed_config.package.name, &instances);
-            let addr = match &*ipv4_addrs {
-                [_] => ipv4_addrs.pop().unwrap(),
-                _ => panic!("Multiple clusters found"),
-            };
-            let child_process =
-                start_ssh_process(&aws_cluster.ssh_user, addr, &aws_cluster.ssh_private_key)
-                    .unwrap();
+            let child = aws_ssh_helper(
+                &processed_config.package.name,
+                &aws_cluster.ssh_user,
+                &aws_cluster.ssh_private_key,
+            )
+            .await?;
             let job = processed_config.jobs.get(&*submit.name).ok_or_else(|| anyhow::anyhow!(
                 r#"A job with the name "{}" was not found in the config file located at {}"#,
                 style(&submit.name).cyan(),
@@ -197,9 +194,24 @@ pub async fn handle_submit(
             ))?.clone();
             let _ = run_ray(RayCommand::Job(RayJob::Submit(job)), &ray_config).await?;
 
-            drop(child_process);
+            drop(child);
         }
     };
+    Ok(())
+}
+
+pub async fn handle_dashboard(processed_config: ProcessedConfig) -> anyhow::Result<()> {
+    match processed_config.cluster.provider {
+        processed::Provider::Aws(aws_cluster) => {
+            let mut child = aws_ssh_helper(
+                &processed_config.package.name,
+                &aws_cluster.ssh_user,
+                &aws_cluster.ssh_private_key,
+            )
+            .await?;
+            let _ = child.wait().await?;
+        }
+    }
     Ok(())
 }
 
@@ -226,6 +238,21 @@ const NOTEPAD_EMOJI: &str = "📝";
 const CLOUD_EMOJI: &str = "🌥️";
 const HAMMER_EMOJI: &str = "🔨";
 const COMPUTER_EMOJI: &str = "💻";
+
+async fn aws_ssh_helper(
+    name: &str,
+    ssh_user: &str,
+    ssh_private_key: &Path,
+) -> anyhow::Result<Child> {
+    let instances = list_instances("us-west-2").await?;
+    let mut ipv4_addrs = get_public_ipv4_addrs(name, &instances);
+    let addr = match &*ipv4_addrs {
+        [_] => ipv4_addrs.pop().unwrap(),
+        _ => panic!("Multiple clusters found"),
+    };
+    let child = start_ssh_process(ssh_user, addr, ssh_private_key)?;
+    Ok(child)
+}
 
 fn prefix(prefix: &str) -> ColorfulTheme {
     ColorfulTheme {

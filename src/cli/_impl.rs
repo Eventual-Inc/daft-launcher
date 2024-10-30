@@ -85,7 +85,7 @@ pub async fn handle_init(init: Init) -> anyhow::Result<()> {
     );
     file.write_all(config.as_bytes()).await?;
     println!(
-        "Created file at: {}",
+        "Wrote the Daft Launcher config file to the path: {}",
         style(format!("`{}`", init.name.display())).cyan(),
     );
     Ok(())
@@ -212,6 +212,10 @@ pub async fn handle_export(path: &Path, ray_config: RayConfig) -> anyhow::Result
     let contents =
         serde_yaml::to_string(&ray_config).expect("Serializing to string should always succeed");
     file.write_all(contents.as_bytes()).await?;
+    println!(
+        "Wrote the Ray YAML config file to the path: {}",
+        style(format!("`{}`", path.display())).cyan(),
+    );
     Ok(())
 }
 

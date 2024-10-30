@@ -3,12 +3,10 @@ use crate::{
         assert_authenticated as assert_authenticated_with_aws,
         assert_non_clashing_cluster_name as assert_non_clashing_cluster_name_with_aws,
     },
-    cli::{Down, Init},
+    cli::{Down, Export, Init},
     config::processed::{self, ProcessedConfig},
     utils::{assert_file_status, Status},
 };
-
-use crate::cli::Export;
 
 pub async fn assert_init(init: &Init) -> anyhow::Result<()> {
     assert_file_status(&init.name, Status::DoesNotExist).await?;

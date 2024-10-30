@@ -12,7 +12,7 @@ use tokio::{fs::OpenOptions, io::AsyncWriteExt};
 
 use crate::{
     aws::{list_instances, AwsInstance},
-    cli::{Init, List},
+    cli::{Init, List, Submit},
     config::{
         defaults::{normal_image_id, normal_instance_type},
         processed::{self, ProcessedConfig},
@@ -27,8 +27,6 @@ use crate::{
     utils::{create_new_file, start_ssh_process},
     StrRef,
 };
-
-use crate::cli::Submit;
 
 pub async fn handle_init(init: Init) -> anyhow::Result<()> {
     let raw_config = if init.default {
@@ -196,8 +194,8 @@ pub async fn handle_submit(
                     .unwrap();
             let _ = child_process.wait().await.unwrap();
             // let stdout = run_ray(RaySubcommand::Submit, &ray_config, &[]);
-            // let (exit_status, stdout) = tokio::join!(child_process.wait(), stdout);
-            // let child_process = exit_status?;
+            // let (exit_status, stdout) = tokio::join!(child_process.wait(),
+            // stdout); let child_process = exit_status?;
             // let stdout = String::from_utf8(stdout?)?;
             // dbg!(child_process, stdout);
             // let stdout = run_ray(RaySubcommand::Submit, &ray_config, &[])

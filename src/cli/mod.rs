@@ -116,9 +116,11 @@ pub struct Sql {
     pub config: Config,
 }
 
-/// Exports the Ray YAML file that is generated internally to interface with the Ray CLI.
+/// Exports the Ray YAML file that is generated internally to interface with the
+/// Ray CLI.
 ///
-/// This should largely be used for escape-hatching / debugging; most users should not have to interact with this feature.
+/// This should largely be used for escape-hatching / debugging; most users
+/// should not have to interact with this feature.
 #[derive(Debug, Parser, Clone, PartialEq, Eq)]
 pub struct Export {
     #[clap(flatten)]

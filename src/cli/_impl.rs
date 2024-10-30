@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{path::Path, time::Duration};
 
 use aws_sdk_ec2::types::InstanceStateName;
 use comfy_table::{
@@ -8,7 +8,7 @@ use comfy_table::{
 };
 use console::style;
 use dialoguer::{theme::ColorfulTheme, Input, Select};
-use tokio::{fs::OpenOptions, io::AsyncWriteExt, process::Child};
+use tokio::{fs::OpenOptions, io::AsyncWriteExt, process::Child, time};
 
 use crate::{
     aws::{get_public_ipv4_addrs, list_instances, AwsInstance},
@@ -23,7 +23,7 @@ use crate::{
         ray::RayConfig,
         Selectable,
     },
-    ray::{run_ray, RayCommand, RayJob},
+    ray::{self, run_ray, RayCommand, RayJob},
     utils::{create_new_file, start_ssh_process},
     StrRef,
 };
@@ -200,7 +200,10 @@ pub async fn handle_submit(
     Ok(())
 }
 
-pub async fn handle_dashboard(processed_config: ProcessedConfig) -> anyhow::Result<()> {
+pub async fn handle_connect(
+    processed_config: ProcessedConfig,
+    no_dashboard: bool,
+) -> anyhow::Result<()> {
     match processed_config.cluster.provider {
         processed::Provider::Aws(aws_cluster) => {
             let mut child = aws_ssh_helper(
@@ -209,7 +212,20 @@ pub async fn handle_dashboard(processed_config: ProcessedConfig) -> anyhow::Resu
                 &aws_cluster.ssh_private_key,
             )
             .await?;
-            let _ = child.wait().await?;
+            if no_dashboard {
+                child.wait().await?;
+            } else {
+                time::sleep(Duration::from_millis(500)).await;
+                let (open_fut, child_fut) = tokio::join!(
+                    async {
+                        open::that(ray::LOCAL_ON_CONNECT_ADDR)?;
+                        Ok::<_, anyhow::Error>(())
+                    },
+                    child.wait(),
+                );
+                open_fut?;
+                child_fut?;
+            }
         }
     }
     Ok(())

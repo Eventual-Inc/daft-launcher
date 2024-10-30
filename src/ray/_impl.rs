@@ -7,6 +7,8 @@ use crate::{
     PathRef,
 };
 
+pub const LOCAL_ON_CONNECT_ADDR: &str = "http://localhost:8265";
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RayCommand {
     Up,
@@ -63,7 +65,7 @@ pub async fn run_ray(ray_command: RayCommand, ray_config: &RayConfig) -> anyhow:
                 .arg("--working-dir")
                 .arg(&*job.working_dir)
                 .arg("--address")
-                .arg("http://localhost:8265")
+                .arg(LOCAL_ON_CONNECT_ADDR)
                 .arg("--")
                 .args(job.command.split(' '))
                 .spawn()?

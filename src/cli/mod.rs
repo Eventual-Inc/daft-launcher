@@ -17,7 +17,6 @@ pub enum Cli {
     List(List),
     Submit(Submit),
     Connect(Connect),
-    Dashboard(Dashboard),
     Sql(Sql),
     Export(Export),
 }
@@ -99,13 +98,9 @@ pub struct Submit {
 pub struct Connect {
     #[clap(flatten)]
     pub config: Config,
-}
-
-/// Launch a native browser window to view the cluster's dashboard.
-#[derive(Debug, Parser, Clone, PartialEq, Eq)]
-pub struct Dashboard {
-    #[clap(flatten)]
-    pub config: Config,
+    /// Stop the Ray dashboard from opening upon connection to the remote cluster.
+    #[arg(short, long)]
+    pub no_dashboard: bool,
 }
 
 /// Run a SQL query against the remote cluster.
@@ -143,8 +138,7 @@ pub async fn handle() -> anyhow::Result<()> {
         Cli::Down(down) => handle_down(down).await,
         Cli::List(list) => handle_list(list).await,
         Cli::Submit(submit) => handle_submit(submit).await,
-        Cli::Connect(connect) => handle_connect(connect),
-        Cli::Dashboard(dashboard) => handle_dashboard(dashboard).await,
+        Cli::Connect(connect) => handle_connect(connect).await,
         Cli::Sql(sql) => handle_sql(sql),
         Cli::Export(export) => handle_export(export).await,
     }
@@ -183,13 +177,9 @@ async fn handle_submit(submit: Submit) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn handle_connect(_: Connect) -> anyhow::Result<()> {
-    todo!()
-}
-
-async fn handle_dashboard(dashboard: Dashboard) -> anyhow::Result<()> {
-    let (processed_config, _) = read(&dashboard.config.config).await?;
-    _impl::handle_dashboard(processed_config).await?;
+async fn handle_connect(connect: Connect) -> anyhow::Result<()> {
+    let (processed_config, _) = read(&connect.config.config).await?;
+    _impl::handle_connect(processed_config, connect.no_dashboard).await?;
     Ok(())
 }
 

@@ -11,7 +11,6 @@
 
 use std::{borrow::Cow, time::Duration};
 
-use console::style;
 use indicatif::{ProgressBar, ProgressStyle};
 
 const SUCCESS_EMOJI: &str = "✅";
@@ -60,22 +59,6 @@ impl Spinner {
     /// message (instead of the default failure message).
     pub fn success(mut self) {
         self.terminated_successfully = true;
-    }
-
-    /// Pause the [`Spinner`] rendering loop in order to print a message to the
-    /// CLI.
-    ///
-    /// # Note
-    /// 1. This API will print the message using a "dimmed" colour.
-    ///
-    /// 2. If you naively just print to the CLI without pausing the spinner, a
-    /// weird rendering artefact will occur. The [`Spinner`]'s will start
-    /// printing to the next line, and the previous line will contain a frozen
-    /// version of the last spinning state. This is a result of the
-    /// limited rendering APIs of terminal-based UIs.
-    pub fn pause(&self, message: &str) {
-        self.spinner
-            .suspend(|| println!("{}", style(message).dim()));
     }
 }
 

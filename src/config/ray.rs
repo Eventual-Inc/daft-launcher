@@ -19,6 +19,7 @@ pub struct RayConfig {
 pub struct Provider {
     pub r#type: StrRef,
     pub region: StrRef,
+    pub cache_stopped_nodes: bool,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq)]
@@ -76,6 +77,7 @@ impl From<processed::ProcessedConfig> for RayConfig {
                 Provider {
                     r#type: "aws".into(),
                     region: aws_cluster.region,
+                    cache_stopped_nodes: false,
                 },
                 {
                     let generic_node_type = NodeType {
@@ -135,6 +137,7 @@ mod tests {
             provider: Provider {
                 r#type: "aws".into(),
                 region: "us-west-2".into(),
+                cache_stopped_nodes: false,
             },
             auth: Auth {
                 ssh_user: "ec2-user".into(),
@@ -172,6 +175,7 @@ mod tests {
             provider: Provider {
                 r#type: "aws".into(),
                 region: "us-east-2".into(),
+                cache_stopped_nodes: false,
             },
             auth: Auth {
                 ssh_user: "ec2-user".into(),

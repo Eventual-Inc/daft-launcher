@@ -5,15 +5,15 @@ use crate::{config::processed::Package, StrRef};
 pub fn base_setup_commands(package: &Package) -> Vec<StrRef> {
     [
         "curl -LsSf https://astral.sh/uv/install.sh | sh".into(),
-        format!("uv python install {}", package.python_version).into(),
-        format!("uv python pin {}", package.python_version).into(),
+        format!("uv python install {}", package.python_version.raw).into(),
+        format!("uv python pin {}", package.python_version.raw).into(),
         "uv v".into(),
         r#"echo "alias pip='uv pip'" >> $HOME/.bashrc"#.into(),
         r#"echo "source $HOME/.venv/bin/activate" >> $HOME/.bashrc"#.into(),
         "source $HOME/.bashrc".into(),
         format!(
             r#"uv pip install "ray[default]=={}" "getdaft" "deltalake""#,
-            package.ray_version
+            package.ray_version.raw
         )
         .into(),
     ]

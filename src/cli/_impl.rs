@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use aws_sdk_ec2::types::InstanceStateName;
 use comfy_table::{
     modifiers::{UTF8_ROUND_CORNERS, UTF8_SOLID_INNER_BORDERS},
@@ -6,7 +8,7 @@ use comfy_table::{
 };
 use console::style;
 use dialoguer::{theme::ColorfulTheme, Input, Select};
-use tokio::io::AsyncWriteExt;
+use tokio::{fs::OpenOptions, io::AsyncWriteExt};
 
 use crate::{
     aws::{list_instances, AwsInstance},
@@ -22,9 +24,13 @@ use crate::{
         Selectable,
     },
     ray::{run_ray, RaySubcommand},
-    utils::create_new_file,
+    utils::{create_new_file, start_ssh_process},
     StrRef,
 };
+
+use crate::cli::Submit;
+
+use crate::cli::Export;
 
 pub async fn handle_init(init: Init) -> anyhow::Result<()> {
     let raw_config = if init.default {
@@ -102,20 +108,12 @@ pub async fn handle_up(
     };
 
     let (stylized_name, stylized_cloud) = to_stylized_name_and_cloud(&processed_config);
-    run_ray(
-        &ray_config,
-        RaySubcommand::Up,
-        &[],
-        format!(
-            r#"Spinning up a cluster named "{}" in your {} cloud"#,
-            stylized_name, stylized_cloud
-        ),
-    )
-    .await?;
     println!(
-        r#"Successfully spun up a cluster named "{}""#,
-        stylized_name,
+        r#"Spinning up a cluster named {} in your {} cloud"#,
+        stylized_name, stylized_cloud
     );
+    run_ray(RaySubcommand::Up, &ray_config, &[]).await?;
+    println!(r#"Successfully spun up a cluster named {}"#, stylized_name,);
     Ok(())
 }
 
@@ -124,17 +122,12 @@ pub async fn handle_down(
     ray_config: RayConfig,
 ) -> anyhow::Result<()> {
     let (stylized_name, stylized_cloud) = to_stylized_name_and_cloud(&processed_config);
-    run_ray(
-        &ray_config,
-        RaySubcommand::Down,
-        &[],
-        format!(
-            r#"Spinning down the "{}" cluster in your {} cloud"#,
-            stylized_name, stylized_cloud
-        ),
-    )
-    .await?;
-    println!(r#"Successfully spun down the "{}" cluster"#, stylized_name,);
+    println!(
+        r#"Spinning down the {} cluster in your {} cloud"#,
+        stylized_name, stylized_cloud
+    );
+    run_ray(RaySubcommand::Down, &ray_config, &[]).await?;
+    println!(r#"Successfully spun down the {} cluster"#, stylized_name);
     Ok(())
 }
 
@@ -153,16 +146,22 @@ pub async fn handle_list(list: List) -> anyhow::Result<()> {
         }));
 
     for instance in &instances {
-        let is_running = instance
-            .state
-            .as_ref()
-            .map_or(false, |state| *state == InstanceStateName::Running);
-        let running_condition = !(list.running && !is_running);
+        let running_condition = {
+            let is_running = instance
+                .state
+                .as_ref()
+                .map_or(false, |state| *state == InstanceStateName::Running);
+            !(list.running && !is_running)
+        };
         let regex_condition = list
             .name
             .as_ref()
             .map_or(true, |regex| regex.is_match(&instance.regular_name));
-        if running_condition && regex_condition {
+        let head_condition = {
+            let is_head_node = instance.is_head();
+            !(list.head && !is_head_node)
+        };
+        if running_condition && regex_condition && head_condition {
             add_instance_to_table(instance, &mut table);
         }
     }
@@ -172,8 +171,65 @@ pub async fn handle_list(list: List) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub async fn handle_submit() -> anyhow::Result<()> {
-    todo!()
+pub async fn handle_submit(
+    submit: Submit,
+    processed_config: ProcessedConfig,
+    ray_config: RayConfig,
+) -> anyhow::Result<()> {
+    let (stylized_name, stylized_cloud) = to_stylized_name_and_cloud(&processed_config);
+    println!(
+        r#"Submitting the "{}" job to the {} cluster in your {} cloud"#,
+        style(submit.name).cyan(),
+        stylized_name,
+        stylized_cloud,
+    );
+    match processed_config.cluster.provider {
+        processed::Provider::Aws(aws_cluster) => {
+            let instances = list_instances("us-west-2").await?;
+            let instance = instances
+                .into_iter()
+                .find(|instance| {
+                    instance.cluster_name_equals_ray_name(&processed_config.package.name)
+                })
+                .unwrap();
+            let addr = instance.public_ipv4_address.unwrap();
+            let mut child_process =
+                start_ssh_process(&aws_cluster.ssh_user, addr, &aws_cluster.ssh_private_key)
+                    .unwrap();
+            let _ = child_process.wait().await.unwrap();
+            // let stdout = run_ray(RaySubcommand::Submit, &ray_config, &[]);
+            // let (exit_status, stdout) = tokio::join!(child_process.wait(), stdout);
+            // let child_process = exit_status?;
+            // let stdout = String::from_utf8(stdout?)?;
+            // dbg!(child_process, stdout);
+            // let stdout = run_ray(RaySubcommand::Submit, &ray_config, &[])
+            //     .await
+            //     .unwrap();
+            // let _ = child_process.wait().await?;
+            // let last = stdout
+            //     .split(|&char| char == b'\n')
+            //     .fold(None, |last, slice| match slice {
+            //         [] => last,
+            //         _ => Some(slice),
+            //     })
+            //     .expect("Job id should always be printed to stdout");
+            // let last = String::from_utf8(last.to_owned())?;
+            // dbg!(last);
+        }
+    };
+    Ok(())
+}
+
+pub async fn handle_export(path: &Path, ray_config: RayConfig) -> anyhow::Result<()> {
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .await?;
+    let contents =
+        serde_yaml::to_string(&ray_config).expect("Serializing to string should always succeed");
+    file.write_all(contents.as_bytes()).await?;
+    Ok(())
 }
 
 // helpers
@@ -249,7 +305,7 @@ fn with_selection<T: Selectable>(prompt: &str, theme: &ColorfulTheme) -> anyhow:
 fn to_stylized_name_and_cloud(processed_config: &ProcessedConfig) -> (String, String) {
     let cloud_name = match processed_config.cluster.provider {
         processed::Provider::Aws(ref aws_cluster) => {
-            format!("`aws (region = {})`", aws_cluster.region)
+            format!("aws (region = {})", aws_cluster.region)
         }
     };
 

@@ -14,7 +14,7 @@ pub use _impl::AwsInstance;
 
 pub async fn assert_authenticated() -> anyhow::Result<()> {
     spinner! {
-        "Authenticating with AWS!",
+        "Checking authentication status with AWS",
         {
             _impl::assert_authenticated().await?;
             Ok(())

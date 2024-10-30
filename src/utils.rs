@@ -1,22 +1,25 @@
-use std::{ffi::OsStr, io::ErrorKind, path::Path};
+use std::{ffi::OsStr, io::ErrorKind, net::Ipv4Addr, path::Path};
 
 use anyhow::Context;
 use console::style;
 use dirs::home_dir;
-use log::Level;
 use tempdir::TempDir;
-use tokio::fs::{File, OpenOptions};
+use tokio::{
+    fs::{File, OpenOptions},
+    process::{Child, Command},
+};
+use which::which;
 
 use crate::{path_ref, PathRef};
 
-pub fn is_debug() -> bool {
-    log::log_enabled!(Level::Debug)
-}
-
 pub fn expand(path: PathRef) -> anyhow::Result<PathRef> {
-    let path = if path.starts_with("~") {
+    const HOME_DIR_PLACEHOLDER: &str = "~";
+
+    let path = if path.starts_with(HOME_DIR_PLACEHOLDER) {
         let home = home_dir().ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
-        let suffix = path.strip_prefix("~").unwrap();
+        let suffix = path
+            .strip_prefix(HOME_DIR_PLACEHOLDER)
+            .expect("Path must contain `HOME_DIR_PLACEHOLDER` since that was just checked");
         path_ref(home.join(suffix))
     } else {
         path
@@ -39,7 +42,10 @@ pub async fn file_status(path: &Path) -> anyhow::Result<Status> {
             } else if metadata.is_dir() {
                 Ok(Status::Directory)
             } else {
-                anyhow::bail!("The path {:?} is neither a file nor a directory", path)
+                anyhow::bail!(
+                    "The path {} is neither a file nor a directory",
+                    path.display(),
+                )
             }
         }
         Err(error) if error.kind() == ErrorKind::NotFound => Ok(Status::DoesNotExist),
@@ -111,6 +117,34 @@ pub async fn create_temporary_ray_file() -> anyhow::Result<(TempDir, PathRef, Fi
         .await
         .expect("Creating new file in temporary directory should always succeed");
     Ok((temp_dir, path, file))
+}
+
+pub fn assert_executable_exists(executable_name: &str) -> anyhow::Result<()> {
+    let _ = which(executable_name).map_err(|_| {
+        anyhow::anyhow!(
+            "The command {} is not available in the PATH",
+            style(executable_name).red()
+        )
+    })?;
+    Ok(())
+}
+
+pub fn start_ssh_process(
+    user: &str,
+    addr: Ipv4Addr,
+    ssh_private_key: &Path,
+) -> anyhow::Result<Child> {
+    assert_executable_exists("ssh")?;
+    let child = Command::new("ssh")
+        .arg("-N")
+        .arg("-i")
+        .arg(ssh_private_key)
+        .arg("-L")
+        .arg("8265:localhost:8265")
+        .arg(format!("{}@{}", user, addr))
+        .kill_on_drop(true)
+        .spawn()?;
+    Ok(child)
 }
 
 #[cfg(test)]

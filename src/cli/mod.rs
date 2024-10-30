@@ -19,6 +19,7 @@ pub enum Cli {
     Connect(Connect),
     Dashboard(Dashboard),
     Sql(Sql),
+    Export(Export),
 }
 
 /// Initialize a configuration file.
@@ -75,6 +76,9 @@ pub struct List {
     /// Only list the clusters that are running.
     #[arg(short, long)]
     pub running: bool,
+    /// Only list the head nodes of clusters.
+    #[arg(long)]
+    pub head: bool,
     /// Only list the clusters that match this regex.
     #[arg(short, long)]
     pub name: Option<Regex>,
@@ -112,6 +116,18 @@ pub struct Sql {
     pub config: Config,
 }
 
+/// Exports the Ray YAML file that is generated internally to interface with the Ray CLI.
+///
+/// This should largely be used for escape-hatching / debugging; most users should not have to interact with this feature.
+#[derive(Debug, Parser, Clone, PartialEq, Eq)]
+pub struct Export {
+    #[clap(flatten)]
+    pub config: Config,
+    /// The path for which to write the generated Ray YAML file into.
+    #[arg(short, long, default_value = "ray.yaml")]
+    pub name: PathBuf,
+}
+
 #[derive(Debug, Parser, Clone, PartialEq, Eq)]
 pub struct Config {
     /// Path to configuration file.
@@ -129,6 +145,7 @@ pub async fn handle() -> anyhow::Result<()> {
         Cli::Connect(connect) => handle_connect(connect),
         Cli::Dashboard(dashboard) => handle_dashboard(dashboard),
         Cli::Sql(sql) => handle_sql(sql),
+        Cli::Export(export) => handle_export(export).await,
     }
 }
 
@@ -159,9 +176,9 @@ async fn handle_list(list: List) -> anyhow::Result<()> {
 }
 
 async fn handle_submit(submit: Submit) -> anyhow::Result<()> {
-    let (processed_config, _) = read(&submit.config.config).await?;
+    let (processed_config, ray_config) = read(&submit.config.config).await?;
     _assert::assert_submit(&processed_config).await?;
-    _impl::handle_submit().await?;
+    _impl::handle_submit(submit, processed_config, ray_config).await?;
     Ok(())
 }
 
@@ -175,4 +192,11 @@ fn handle_dashboard(_: Dashboard) -> anyhow::Result<()> {
 
 fn handle_sql(_: Sql) -> anyhow::Result<()> {
     todo!()
+}
+
+async fn handle_export(export: Export) -> anyhow::Result<()> {
+    _assert::assert_export(&export).await?;
+    let (_, ray_config) = read(&export.config.config).await?;
+    _impl::handle_export(&export.name, ray_config).await?;
+    Ok(())
 }

@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use console::style;
 use semver::VersionReq;
 use serde::{de::Error, Deserialize, Deserializer, Serialize};
@@ -21,10 +23,10 @@ pub struct RawConfig {
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct Package {
-    pub daft_launcher_version: VersionReq,
+    pub daft_launcher_version: VersionBundle,
     pub name: StrRef,
-    pub python_version: Option<VersionReq>,
-    pub ray_version: Option<VersionReq>,
+    pub python_version: Option<VersionBundle>,
+    pub ray_version: Option<VersionBundle>,
 }
 
 pub fn default_name() -> String {
@@ -165,6 +167,34 @@ pub struct Job {
     #[serde(deserialize_with = "deserialize_dir")]
     pub working_dir: PathRef,
     pub command: StrRef,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct VersionBundle {
+    pub version_req: VersionReq,
+    #[serde(skip_serializing)]
+    pub raw: StrRef,
+}
+
+impl FromStr for VersionBundle {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let raw: StrRef = s.into();
+        let version_req = raw.parse()?;
+        Ok(Self { version_req, raw })
+    }
+}
+
+impl<'de> Deserialize<'de> for VersionBundle {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let raw: StrRef = String::deserialize(deserializer)?.into();
+        let version_req = raw.parse().map_err(serde::de::Error::custom)?;
+        Ok(Self { version_req, raw })
+    }
 }
 
 fn deserialize_helper<'de, D>(deserializer: D, status: Status) -> Result<PathRef, D::Error>

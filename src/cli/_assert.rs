@@ -8,6 +8,8 @@ use crate::{
     utils::{assert_file_status, Status},
 };
 
+use crate::cli::Export;
+
 pub async fn assert_init(init: &Init) -> anyhow::Result<()> {
     assert_file_status(&init.name, Status::DoesNotExist).await?;
     Ok(())
@@ -34,6 +36,11 @@ pub async fn assert_list() -> anyhow::Result<()> {
 
 pub async fn assert_submit(processed_config: &ProcessedConfig) -> anyhow::Result<()> {
     assert_authenticated(Some(&processed_config.cluster.provider)).await?;
+    Ok(())
+}
+
+pub async fn assert_export(export: &Export) -> anyhow::Result<()> {
+    assert_file_status(&export.name, Status::DoesNotExist).await?;
     Ok(())
 }
 

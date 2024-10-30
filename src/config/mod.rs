@@ -99,12 +99,13 @@ pub async fn read(path: &Path) -> anyhow::Result<(ProcessedConfig, RayConfig)> {
     if !processed_config
         .package
         .daft_launcher_version
+        .version_req
         .matches(&*DAFT_LAUNCHER_VERSION)
     {
         anyhow::bail!(
             "The version requirement in the config file located at {:?} (version-requirement {}) is not satisfied by this binary's version (version {})",
             path.display(),
-            processed_config.package.daft_launcher_version,
+            processed_config.package.daft_launcher_version.version_req,
             &*DAFT_LAUNCHER_VERSION,
         );
     }

@@ -5,7 +5,6 @@ use std::{
 };
 
 use semver::{Version, VersionReq};
-use which::which;
 
 use crate::{
     config::{
@@ -13,10 +12,10 @@ use crate::{
             base_setup_commands, default_region, default_ssh_user, light_image_id,
             light_instance_type, normal_image_id, normal_instance_type, DEFAULT_NUMBER_OF_WORKERS,
         },
-        raw::{self, Job},
+        raw::{self, Job, VersionBundle},
         PathRef,
     },
-    utils::path_to_str,
+    utils::{assert_executable_exists, path_to_str},
     StrRef,
 };
 
@@ -57,10 +56,10 @@ impl TryFrom<raw::RawConfig> for ProcessedConfig {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Package {
-    pub daft_launcher_version: VersionReq,
+    pub daft_launcher_version: raw::VersionBundle,
     pub name: StrRef,
-    pub python_version: VersionReq,
-    pub ray_version: VersionReq,
+    pub python_version: raw::VersionBundle,
+    pub ray_version: raw::VersionBundle,
 }
 
 impl TryFrom<raw::Package> for Package {
@@ -164,9 +163,7 @@ pub struct AwsCluster {
 }
 
 fn get_version(executable: &str, prefix: &str) -> anyhow::Result<Version> {
-    if which(executable).is_err() {
-        anyhow::bail!("Cannot find a(n) {executable} executable in your $PATH; failed to autodetect {executable} version")
-    };
+    assert_executable_exists(executable)?;
     let output = Command::new(executable)
         .arg("--version")
         .stdout(Stdio::piped())
@@ -174,35 +171,40 @@ fn get_version(executable: &str, prefix: &str) -> anyhow::Result<Version> {
         .spawn()?
         .wait_with_output()?;
     if output.status.success() {
-        let version_req = String::from_utf8(output.stdout)?
+        let version = String::from_utf8(output.stdout)?
             .strip_prefix(prefix)
             .unwrap()
             .strip_suffix("\n")
             .unwrap()
             .parse()
             .unwrap();
-        Ok(version_req)
+        Ok(version)
     } else {
         anyhow::bail!("Failed to run `{executable} --version`")
     }
 }
 
-fn get_python_version() -> anyhow::Result<VersionReq> {
+fn get_python_version() -> anyhow::Result<VersionBundle> {
     let version = get_version("python", "Python ")?;
     if MIN_PYTHON_VERSION.matches(&version) {
-        log::debug!("Python version determined to be: {version}");
-        Ok(format!("={version}").parse().unwrap())
+        log::debug!("Python version determined to be: {}", version);
+        let raw: StrRef = version.to_string().into();
+        let version_req = raw.parse().expect("...");
+        Ok(VersionBundle { version_req, raw })
     } else {
         anyhow::bail!(
-            "Python version {version} is not supported; must be >= {MIN_PYTHON_VERSION:?}"
+            "Python version {} is not supported; must be >= {MIN_PYTHON_VERSION:?}",
+            version,
         )
     }
 }
 
-fn get_ray_version() -> anyhow::Result<VersionReq> {
+fn get_ray_version() -> anyhow::Result<VersionBundle> {
     let version = get_version("ray", "ray, version ")?;
     log::debug!("Ray version determined to be: {version}");
-    Ok(format!("={version}").parse().unwrap())
+    let raw: StrRef = version.to_string().into();
+    let version_req = raw.parse().expect("...");
+    Ok(VersionBundle { version_req, raw })
 }
 
 fn to_key_stem(path: &Path) -> anyhow::Result<&str> {

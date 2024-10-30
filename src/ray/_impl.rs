@@ -1,16 +1,9 @@
-use std::process::Stdio;
-
-use console::style;
-use futures::{Stream, StreamExt};
 use tempdir::TempDir;
-use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines},
-    process::Command,
-};
+use tokio::{io::AsyncWriteExt, process::Command};
 
 use crate::{
     config::ray::RayConfig,
-    utils::{create_temporary_ray_file, is_debug, path_to_str},
+    utils::{create_temporary_ray_file, path_to_str},
     PathRef,
 };
 
@@ -33,77 +26,36 @@ impl AsRef<str> for RaySubcommand {
 
 pub async fn run_ray(
     subcommand: RaySubcommand,
-    path: PathRef,
+    ray_config: &RayConfig,
     args: &[&str],
-    print_helper: impl 'static + Fn(&str) + Send,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Vec<u8>> {
     const RAY_CMD: &str = "ray";
     const PYTHON_BUFFERING_ENV_VAR: &str = "PYTHONUNBUFFERED";
     const PYTHON_BUFFERING_ENV_VALUE: &str = "1";
 
-    let mut child = Command::new(RAY_CMD)
+    let (temp_dir, path) = write_ray(&ray_config).await?;
+
+    let child = Command::new(RAY_CMD)
         .env(PYTHON_BUFFERING_ENV_VAR, PYTHON_BUFFERING_ENV_VALUE)
         .arg(subcommand.as_ref())
-        .arg("-y")
         .arg(path_to_str(path.as_os_str())?)
         .args(args)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .arg("-y")
         .spawn()?;
 
-    let child_stdout = BufReader::new(child.stdout.take().expect("Stdout should always exist"));
-    to_async_iter(child_stdout.lines())
-        .for_each(|line| {
-            let print_helper = &print_helper;
-            async move { print_helper(&line) }
-        })
-        .await;
+    let output = child.wait_with_output().await?;
 
-    let exit_status = child.wait().await?;
+    // Explicitly deletes the entire temporary directory.
+    // The config file that we wrote to inside of there will now be deleted.
+    //
+    // This should only happen *after* the `ray` command has finished executing.
+    drop(temp_dir);
 
-    if exit_status.success() {
-        Ok(())
+    if output.status.success() {
+        Ok(output.stdout)
     } else {
-        let child_stderr = BufReader::new(child.stderr.take().expect("Stderr should always exist"));
-
-        if is_debug() {
-            let full_child_backtrace = to_async_iter(child_stderr.lines())
-                .fold(String::default(), |mut acc, line| async move {
-                    acc.push_str(&line);
-                    acc
-                })
-                .await;
-            anyhow::bail!(
-                "Command failed with exit status: {}\n{}",
-                exit_status,
-                full_child_backtrace,
-            )
-        } else {
-            let last_line = to_async_iter(child_stderr.lines())
-                .fold(None, |_, line| async move { Some(line) })
-                .await;
-            match last_line {
-                Some(last_line) => anyhow::bail!(
-                    "Command failed with exit status: {}\nReason: {}",
-                    exit_status,
-                    style(last_line).red().dim(),
-                ),
-                None => anyhow::bail!("Command failed with exit status: {}", exit_status),
-            }
-        }
+        anyhow::bail!("Command failed with exit status: {}", output.status)
     }
-}
-
-fn to_async_iter<I: Unpin + tokio::io::AsyncBufRead>(
-    lines: Lines<I>,
-) -> impl Stream<Item = String> {
-    futures::stream::unfold(lines, |mut lines| async {
-        lines
-            .next_line()
-            .await
-            .expect("Reading line from child process should always succeed")
-            .map(|line| (line, lines))
-    })
 }
 
 pub async fn write_ray(ray_config: &RayConfig) -> anyhow::Result<(TempDir, PathRef)> {

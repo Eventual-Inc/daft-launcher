@@ -124,7 +124,7 @@ pub struct Export {
     #[clap(flatten)]
     pub config: Config,
     /// The path for which to write the generated Ray YAML file into.
-    #[arg(short, long, default_value = "ray.yaml")]
+    #[arg(short, long, default_value = ".ray.yaml")]
     pub name: PathBuf,
 }
 

@@ -30,8 +30,6 @@ use crate::{
 
 use crate::cli::Submit;
 
-use crate::cli::Export;
-
 pub async fn handle_init(init: Init) -> anyhow::Result<()> {
     let raw_config = if init.default {
         RawConfig::default()

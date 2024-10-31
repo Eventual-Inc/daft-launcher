@@ -2,7 +2,7 @@ use tempdir::TempDir;
 use tokio::{io::AsyncWriteExt, process::Command};
 
 use crate::{
-    config::{raw::Job, ray::RayConfig},
+    config::{processed::Job, ray::RayConfig},
     utils::{create_temporary_ray_file, path_to_str},
     PathRef,
 };

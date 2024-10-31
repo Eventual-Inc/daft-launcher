@@ -15,10 +15,10 @@ use crate::{
     cli::{Init, List, Submit},
     config::{
         defaults::{normal_image_id, normal_instance_type},
-        processed::{self, ProcessedConfig},
+        processed::{self, Job, ProcessedConfig},
         raw::{
-            default_name, AwsCluster, AwsCustomType, AwsTemplateType, Cluster, Job, Package,
-            Provider, RawConfig,
+            default_name, AwsCluster, AwsCustomType, AwsTemplateType, Cluster, Package, Provider,
+            RawConfig,
         },
         ray::RayConfig,
         Selectable,
@@ -252,12 +252,14 @@ pub async fn handle_sql(
                 &aws_cluster.ssh_private_key,
             )
             .await?;
-            let job = Job {
-                name: "sql".into(),
-                working_dir,
-                command,
-            };
-            let _ = run_ray(RayCommand::Job(RayJob::Submit(job)), &ray_config).await?;
+            let _ = run_ray(
+                RayCommand::Job(RayJob::Submit(Job {
+                    working_dir,
+                    command,
+                })),
+                &ray_config,
+            )
+            .await?;
             drop(child);
             drop(temp_dir);
         }
@@ -297,6 +299,7 @@ async fn aws_ssh_helper(
     let instances = list_instances("us-west-2").await?;
     let mut ipv4_addrs = get_public_ipv4_addrs(name, &instances);
     let addr = match &*ipv4_addrs {
+        [] => panic!("No clusters found"),
         [_] => ipv4_addrs.pop().unwrap(),
         _ => panic!("Multiple clusters found"),
     };

@@ -13,7 +13,7 @@ use crate::{
             base_setup_commands, default_region, default_ssh_user, light_image_id,
             light_instance_type, normal_image_id, normal_instance_type, DEFAULT_NUMBER_OF_WORKERS,
         },
-        raw::{self, Job, VersionBundle},
+        raw::{self, VersionBundle},
         PathRef,
     },
     utils::{assert_executable_exists, path_to_str},
@@ -164,6 +164,21 @@ pub struct AwsCluster {
     pub instance_type: StrRef,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Job {
+    pub working_dir: PathRef,
+    pub command: StrRef,
+}
+
+impl From<raw::Job> for Job {
+    fn from(value: raw::Job) -> Self {
+        Self {
+            working_dir: value.working_dir,
+            command: value.command,
+        }
+    }
+}
+
 fn get_version(executable: &str, prefix: &str) -> anyhow::Result<Version> {
     assert_executable_exists(executable)?;
     let output = Command::new(executable)
@@ -217,13 +232,13 @@ fn to_key_stem(path: &Path) -> anyhow::Result<&str> {
     Ok(key_name)
 }
 
-fn job_list_to_job_map(jobs: Vec<Job>) -> anyhow::Result<HashMap<StrRef, Job>> {
+fn job_list_to_job_map(jobs: Vec<raw::Job>) -> anyhow::Result<HashMap<StrRef, Job>> {
     let map = HashMap::with_capacity(jobs.len());
     jobs.into_iter().try_fold(map, |mut map, job| {
         if map.contains_key(&job.name) {
             anyhow::bail!("Duplicate job name found: {}", job.name);
         } else {
-            map.insert(job.name.clone(), job);
+            map.insert(job.name.clone(), job.into());
             Ok(map)
         }
     })
@@ -246,7 +261,7 @@ pub mod tests {
             ray_version: get_ray_version().unwrap(),
         };
         let post_setup_commands = base_setup_commands(&package);
-        let jobs = job_list_to_job_map(vec![Job {
+        let jobs = job_list_to_job_map(vec![raw::Job {
             name: "filter".into(),
             working_dir: path_ref("tests"),
             command: "python filter.py".into(),
@@ -284,12 +299,12 @@ pub mod tests {
         let mut post_setup_commands = base_setup_commands(&package);
         post_setup_commands.extend(["echo 'Finished!'".into()]);
         let jobs = job_list_to_job_map(vec![
-            Job {
+            raw::Job {
                 name: "filter".into(),
                 working_dir: path_ref("tests"),
                 command: "python filter.py".into(),
             },
-            Job {
+            raw::Job {
                 name: "dedupe".into(),
                 working_dir: path_ref("tests"),
                 command: "python dedupe.py".into(),

@@ -10,7 +10,7 @@ mod _impl;
 
 use std::borrow::Cow;
 
-pub use _impl::{get_public_ipv4_addrs, AwsInstance};
+pub use _impl::AwsInstance;
 
 pub async fn assert_authenticated() -> anyhow::Result<()> {
     spinner! {

@@ -11,7 +11,7 @@ use dialoguer::{theme::ColorfulTheme, Input, Select};
 use tokio::{fs::OpenOptions, io::AsyncWriteExt, process::Child, time};
 
 use crate::{
-    aws::{get_public_ipv4_addrs, list_instances, AwsInstance},
+    aws::{list_instances, AwsInstance},
     cli::{Init, List, Submit},
     config::{
         defaults::{normal_image_id, normal_instance_type},
@@ -245,7 +245,10 @@ pub async fn handle_sql(
             let (temp_dir, path, mut file) =
                 create_temporary_file("daft-launcher", "sql.py").await?;
             file.write_all(SQL_PY_SCRIPT.as_bytes()).await?;
-            let working_dir: PathRef = path.parent().expect("...").into();
+            let working_dir: PathRef = path
+                .parent()
+                .expect("Path inside of temporary directory should always have a parent")
+                .into();
             let child = aws_ssh_helper(
                 &processed_config.package.name,
                 &aws_cluster.ssh_user,
@@ -297,11 +300,33 @@ async fn aws_ssh_helper(
     ssh_private_key: &Path,
 ) -> anyhow::Result<Child> {
     let instances = list_instances("us-west-2").await?;
-    let mut ipv4_addrs = get_public_ipv4_addrs(name, &instances);
-    let addr = match &*ipv4_addrs {
-        [] => panic!("No clusters found"),
-        [_] => ipv4_addrs.pop().unwrap(),
-        _ => panic!("Multiple clusters found"),
+    let mut addrs_and_instance_ids = instances
+        .iter()
+        .filter_map(|instance| {
+            if instance.cluster_name_equals_ray_name(name) {
+                instance
+                    .public_ipv4_address
+                    .map(|addr| (addr, instance.instance_id.clone()))
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+    let (addr, _) = match &*addrs_and_instance_ids {
+        [] => anyhow::bail!("No clusters found"),
+        [_] => addrs_and_instance_ids.pop().unwrap(),
+        _ => {
+            let options = addrs_and_instance_ids
+                .iter()
+                .map(|(addr, instance_id)| format!("{} (Instance ID: {})", addr, instance_id))
+                .collect::<Vec<_>>();
+            let (index, _) = with_selection_2(
+                &format!("Multiple AWS clusters found with the name {}; which one do you want to connect into?", format!("`{}`", style(name).cyan())),
+                &*options,
+                &prefix(CLOUD_EMOJI),
+            )?;
+            addrs_and_instance_ids.swap_remove(index)
+        }
     };
     let child = start_ssh_process(ssh_user, addr, ssh_private_key)?;
     Ok(child)
@@ -354,6 +379,22 @@ fn with_input<S: Into<String>>(
         .interact_text()?
         .into();
     Ok(value)
+}
+
+fn with_selection_2<'a>(
+    prompt: &str,
+    options: &'a [impl ToString],
+    theme: &ColorfulTheme,
+) -> anyhow::Result<(usize, &'a impl ToString)> {
+    let selection_index = Select::with_theme(theme)
+        .with_prompt(prompt)
+        .default(0)
+        .items(options)
+        .interact()?;
+    let selection = options
+        .get(selection_index)
+        .expect("Selection index should always be in bounds");
+    Ok((selection_index, selection))
 }
 
 fn with_selection<T: Selectable>(prompt: &str, theme: &ColorfulTheme) -> anyhow::Result<T::Parsed> {

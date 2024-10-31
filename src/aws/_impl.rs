@@ -153,19 +153,6 @@ Instance names: {}
     }
 }
 
-pub fn get_public_ipv4_addrs(name: &str, instances: &[AwsInstance]) -> Vec<Ipv4Addr> {
-    instances
-        .iter()
-        .filter_map(|instance| {
-            if instance.cluster_name_equals_ray_name(name) {
-                instance.public_ipv4_address
-            } else {
-                None
-            }
-        })
-        .collect()
-}
-
 // helpers
 // =============================================================================
 

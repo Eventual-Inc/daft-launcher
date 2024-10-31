@@ -32,7 +32,9 @@ pub async fn assert_list() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub async fn assert_submit(processed_config: &ProcessedConfig) -> anyhow::Result<()> {
+pub async fn assert_submit_and_connect_and_sql(
+    processed_config: &ProcessedConfig,
+) -> anyhow::Result<()> {
     assert_authenticated(Some(&processed_config.cluster.provider)).await?;
     Ok(())
 }

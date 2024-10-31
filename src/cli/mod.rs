@@ -108,6 +108,9 @@ pub struct Connect {
 pub struct Sql {
     #[clap(flatten)]
     pub config: Config,
+    /// The SQL query to execute on the remote cluster.
+    #[arg(trailing_var_arg = true)]
+    args: Vec<ArcStrRef>,
 }
 
 /// Exports the Ray YAML file that is generated internally to interface with the
@@ -139,7 +142,7 @@ pub async fn handle() -> anyhow::Result<()> {
         Cli::List(list) => handle_list(list).await,
         Cli::Submit(submit) => handle_submit(submit).await,
         Cli::Connect(connect) => handle_connect(connect).await,
-        Cli::Sql(sql) => handle_sql(sql),
+        Cli::Sql(sql) => handle_sql(sql).await,
         Cli::Export(export) => handle_export(export).await,
     }
 }
@@ -172,19 +175,23 @@ async fn handle_list(list: List) -> anyhow::Result<()> {
 
 async fn handle_submit(submit: Submit) -> anyhow::Result<()> {
     let (processed_config, ray_config) = read(&submit.config.config).await?;
-    _assert::assert_submit(&processed_config).await?;
+    _assert::assert_submit_and_connect_and_sql(&processed_config).await?;
     _impl::handle_submit(submit, processed_config, ray_config).await?;
     Ok(())
 }
 
 async fn handle_connect(connect: Connect) -> anyhow::Result<()> {
     let (processed_config, _) = read(&connect.config.config).await?;
+    _assert::assert_submit_and_connect_and_sql(&processed_config).await?;
     _impl::handle_connect(processed_config, connect.no_dashboard).await?;
     Ok(())
 }
 
-fn handle_sql(_: Sql) -> anyhow::Result<()> {
-    todo!()
+async fn handle_sql(sql: Sql) -> anyhow::Result<()> {
+    let (processed_config, ray_config) = read(&sql.config.config).await?;
+    _assert::assert_submit_and_connect_and_sql(&processed_config).await?;
+    _impl::handle_sql(processed_config, ray_config, sql.args).await?;
+    Ok(())
 }
 
 async fn handle_export(export: Export) -> anyhow::Result<()> {

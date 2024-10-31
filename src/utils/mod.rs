@@ -5,8 +5,8 @@ use std::{net::Ipv4Addr, path::Path};
 use console::style;
 
 pub use _impl::{
-    assert_executable_exists, assert_file_status, create_new_file, create_temporary_ray_file,
-    expand, path_to_str, Status,
+    assert_executable_exists, assert_file_status, create_new_file, create_temporary_file,
+    create_temporary_ray_file, expand, path_to_str, Status,
 };
 use tokio::process::Child;
 

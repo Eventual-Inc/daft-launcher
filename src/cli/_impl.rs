@@ -17,16 +17,18 @@ use crate::{
         defaults::{normal_image_id, normal_instance_type},
         processed::{self, ProcessedConfig},
         raw::{
-            default_name, AwsCluster, AwsCustomType, AwsTemplateType, Cluster, Package, Provider,
-            RawConfig,
+            default_name, AwsCluster, AwsCustomType, AwsTemplateType, Cluster, Job, Package,
+            Provider, RawConfig,
         },
         ray::RayConfig,
         Selectable,
     },
     ray::{self, run_ray, RayCommand, RayJob},
-    utils::{create_new_file, start_ssh_process},
-    StrRef,
+    utils::{create_new_file, create_temporary_file, start_ssh_process},
+    ArcStrRef, PathRef, StrRef,
 };
+
+const SQL_PY_SCRIPT: &str = include_str!(path_from_root!("assets" / "sql.py"));
 
 pub async fn handle_init(init: Init) -> anyhow::Result<()> {
     let raw_config = if init.default {
@@ -228,6 +230,38 @@ pub async fn handle_connect(
             }
         }
     }
+    Ok(())
+}
+
+pub async fn handle_sql(
+    processed_config: ProcessedConfig,
+    ray_config: RayConfig,
+    args: Vec<ArcStrRef>,
+) -> anyhow::Result<()> {
+    let sql_query = args.join(" ");
+    let command = format!("python sql.py '{}'", sql_query).into();
+    match processed_config.cluster.provider {
+        processed::Provider::Aws(aws_cluster) => {
+            let (temp_dir, path, mut file) =
+                create_temporary_file("daft-launcher", "sql.py").await?;
+            file.write_all(SQL_PY_SCRIPT.as_bytes()).await?;
+            let working_dir: PathRef = path.parent().expect("...").into();
+            let child = aws_ssh_helper(
+                &processed_config.package.name,
+                &aws_cluster.ssh_user,
+                &aws_cluster.ssh_private_key,
+            )
+            .await?;
+            let job = Job {
+                name: "sql".into(),
+                working_dir,
+                command,
+            };
+            let _ = run_ray(RayCommand::Job(RayJob::Submit(job)), &ray_config).await?;
+            drop(child);
+            drop(temp_dir);
+        }
+    };
     Ok(())
 }
 

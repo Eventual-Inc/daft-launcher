@@ -106,16 +106,22 @@ where
         .with_context(|| anyhow::anyhow!("Invalid characters in path"))
 }
 
-pub async fn create_temporary_ray_file() -> anyhow::Result<(TempDir, PathRef, File)> {
+pub async fn create_temporary_file(
+    dirname: &str,
+    filename: &str,
+) -> anyhow::Result<(TempDir, PathRef, File)> {
     let temp_dir =
-        TempDir::new("ray_config").expect("Creation of temporary directory should always succeed");
-    let path = path_ref(temp_dir.path().join("ray.yaml"));
-    log::debug!(
-        "Created new temporary dir {temp_dir:?} and new temporary ray config file at path {path:?}"
-    );
+        TempDir::new(dirname).expect("Creation of temporary directory should always succeed");
+    let path = path_ref(temp_dir.path().join(filename));
+    log::debug!("Created new temporary file at path {}", path.display(),);
     let file = create_new_file(&path)
         .await
         .expect("Creating new file in temporary directory should always succeed");
+    Ok((temp_dir, path, file))
+}
+
+pub async fn create_temporary_ray_file() -> anyhow::Result<(TempDir, PathRef, File)> {
+    let (temp_dir, path, file) = create_temporary_file("ray_config", "ray.yaml").await?;
     Ok((temp_dir, path, file))
 }
 

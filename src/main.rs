@@ -1,4 +1,3 @@
-#[cfg(test)]
 macro_rules! path_from_root {
         ($($segment:literal) / *) => {
             concat!(

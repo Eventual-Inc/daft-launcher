@@ -7,7 +7,7 @@
   - [Down](./commands/down.md)
   - [List](./commands/list.md)
   - [Submit](./commands/submit.md)
-  - [Dashboard](./commands/dashboard.md)
+  - [Connect](./commands/connect.md)
   - [Sql](./commands/sql.md)
 - [Example](./example.md)
 - [Future Plans](./future_plans.md)

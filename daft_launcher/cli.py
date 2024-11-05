@@ -3,7 +3,7 @@
 from typing import Optional
 import click
 from pathlib import Path
-from daft_launcher import commands, data_definitions, helpers
+from daft_launcher import commands, merge, data_definitions, helpers
 from importlib import metadata
 
 
@@ -26,7 +26,7 @@ def _get_config_bundle(config: Optional[Path]) -> data_definitions.Configuration
             raise click.UsageError(
                 f"No default '{DEFAULT_CONFIG_PATH}' file found in current directory."
             )
-    return data_definitions.build_ray_config_from_path(config)
+    return merge.build_ray_config_from_path(config)
 
 
 def _assert_identity_file_path(identity_file: Optional[Path]):

@@ -39,7 +39,11 @@ Happy daft-ing! 🚀"""
 def init_config(name: Path):
     with open(AWS_TEMPLATE_PATH) as template_f:
         with open(name, "w") as config_f:
-            config_f.write(template_f.read())
+            for line in template_f.readlines():
+                if line.startswith("daft_launcher_version"):
+                    version = helpers.daft_launcher_version()
+                    line: str = f'daft_launcher_version = "{version}"\n'
+                config_f.write(line)
             print(f"Successfully created a new configuration file: {name}")
 
 

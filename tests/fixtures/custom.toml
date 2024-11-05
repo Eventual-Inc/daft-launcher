@@ -1,0 +1,26 @@
+[package]
+name = "custom"
+daft_launcher_version = "0.1.0"
+
+[cluster]
+provider = "aws"
+region = "us-east-2"
+ssh_private_key = "tests/fixtures/test.pem"
+number_of_workers = 4
+dependencies = ["pytorch", "pandas", "numpy"]
+pre_setup_commands = ["echo 'Hello, world!'"]
+post_setup_commands = ["echo 'Finished!'"]
+
+[cluster.custom]
+image_id = "..."
+instance_type = "..."
+
+[[job]]
+name = "filter"
+working_dir = "tests"
+command = "python filter.py"
+
+[[job]]
+name = "dedupe"
+working_dir = "tests"
+command = "python dedupe.py"

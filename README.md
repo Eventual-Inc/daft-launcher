@@ -14,8 +14,6 @@
 
 `daft-launcher` is a simple launcher for spinning up and managing Ray clusters for [`daft`](https://github.com/Eventual-Inc/Daft).
 
-For a deeper introduction, please refer to our [documentation](https://eventual-inc.github.io/daft-launcher/).
-
 ## Goal
 
 Getting started with Daft in a local environment is easy.

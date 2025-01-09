@@ -1,11 +1,18 @@
+# cargo
+target
+
 # python
 .python-version
 .venv
 build
 dist
 *.egg-info
-__pycache__/
+__pycache__
 *.py[cod]
 
-# zed
+# editors
 .zed
+
+# daft related
+.daft.toml
+.ray.yaml

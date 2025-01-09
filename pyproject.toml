@@ -1,5 +1,5 @@
 [project]
-name = "daft_launcher"
+name = "daft-launcher"
 dependencies = ["ray[default]", "boto3"]
 license = { file = "LICENSE" }
 requires-python = ">=3.9"

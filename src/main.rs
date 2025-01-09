@@ -15,9 +15,9 @@ struct Command {
 
 #[derive(Debug, Subcommand, Clone, PartialEq, Eq)]
 enum SubCommand {
-    /// Initialize a "daft-launcher" configuration file.
+    /// Initialize a "daft launcher" configuration file.
     ///
-    /// If no path is provided, will create a default ".daft.toml" in the
+    /// If no path is provided, this will create a default ".daft.toml" in the
     /// current working directory.
     Init(Init),
 }

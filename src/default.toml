@@ -1,0 +1,10 @@
+# This is a default configuration file that you can use to spin up a ray-cluster using `daft-launcher`.
+# Change up some of the configurations in here, and then run `daft up`.
+#
+# For more information on the availale commands and configuration options, visit [here](https://eventual-inc.github.io/daft-launcher).
+#
+# Happy daft-ing!
+
+[setup]
+name = "daft-launcher-example"
+version = "<VERSION>"

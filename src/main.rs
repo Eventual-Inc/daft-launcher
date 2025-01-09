@@ -29,13 +29,6 @@ struct Init {
     path: PathBuf,
 }
 
-// #[derive(Debug, Parser, Clone, PartialEq, Eq)]
-// pub struct Config {
-//     /// Path to configuration file.
-//     #[arg(short, long, default_value = ".daft.toml")]
-//     pub config: PathBuf,
-// }
-
 fn main() -> anyhow::Result<()> {
     let command = Command::parse();
     match command.sub_command {

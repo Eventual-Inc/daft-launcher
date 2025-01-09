@@ -8,3 +8,4 @@
 [setup]
 name = "daft-launcher-example"
 version = "<VERSION>"
+provider = "aws"

@@ -97,12 +97,20 @@ where
         path
     };
 
-    if path.exists() {
+    #[cfg(test)]
+    {
         Ok(path)
-    } else {
-        Err(serde::de::Error::custom(format!(
-            "The path, {path:?}, does not exist"
-        )))
+    }
+
+    #[cfg(not(test))]
+    {
+        if path.exists() {
+            Ok(path)
+        } else {
+            Err(serde::de::Error::custom(format!(
+                "The path, {path:?}, does not exist"
+            )))
+        }
     }
 }
 
@@ -259,11 +267,10 @@ async fn write_ray_config(
     Ok(())
 }
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    let daft_launcher = DaftLauncher::parse();
+async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
     match daft_launcher.sub_command {
         SubCommand::Init(Init { path }) => {
+            #[cfg(not(test))]
             if path.exists() {
                 bail!("The path {path:?} already exists; the path given must point to a new location on your filesystem");
             };
@@ -282,4 +289,34 @@ async fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    run(DaftLauncher::parse()).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_init_and_export() {
+        run(DaftLauncher {
+            sub_command: SubCommand::Init(Init {
+                path: ".daft.toml".into(),
+            }),
+            verbosity: 0,
+        })
+        .await
+        .unwrap();
+        run(DaftLauncher {
+            sub_command: SubCommand::Export(ConfigPath {
+                path: ".daft.toml".into(),
+            }),
+            verbosity: 0,
+        })
+        .await
+        .unwrap();
+    }
 }

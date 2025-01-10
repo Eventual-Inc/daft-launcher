@@ -19,7 +19,7 @@ struct Command {
 
 #[derive(Debug, Subcommand, Clone, PartialEq, Eq)]
 enum SubCommand {
-    /// Initialize a "daft launcher" configuration file.
+    /// Initialize a daft-launcher configuration file.
     ///
     /// If no path is provided, this will create a default ".daft.toml" in the
     /// current working directory.
@@ -62,17 +62,25 @@ struct RawConfig {
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 struct Setup {
     name: StrRef,
-    #[serde(deserialize_with = "deserialize_version")]
+    #[serde(deserialize_with = "parse_version_req")]
     version: VersionReq,
     provider: Provider,
 }
 
-fn deserialize_version<'de, D>(deserializer: D) -> Result<VersionReq, D::Error>
+fn parse_version_req<'de, D>(deserializer: D) -> Result<VersionReq, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
     let raw: StrRef = Deserialize::deserialize(deserializer)?;
-    raw.parse().map_err(serde::de::Error::custom)
+    let version_req = raw
+        .parse::<VersionReq>()
+        .map_err(serde::de::Error::custom)?;
+    let current_version = env!("CARGO_PKG_VERSION").parse::<Version>().unwrap();
+    if version_req.matches(&current_version) {
+        Ok(version_req)
+    } else {
+        Err(serde::de::Error::custom(format!("You're running daft-launcher version {current_version}, but your configuration file requires version {version_req}")))
+    }
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
@@ -94,7 +102,7 @@ fn main() -> anyhow::Result<()> {
     match command.sub_command {
         SubCommand::Init(Init { path }) => {
             if path.exists() {
-                bail!("The path '{:?}' already exists; the path given must point to a new location on your filesystem", path);
+                bail!("The path '{path:?}' already exists; the path given must point to a new location on your filesystem");
             };
             let contents = include_str!("default.toml");
             let contents = contents.replace("<VERSION>", env!("CARGO_PKG_VERSION"));

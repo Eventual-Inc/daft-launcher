@@ -9,3 +9,7 @@
 name = "daft-launcher-example"
 version = "<VERSION>"
 provider = "aws"
+region = "us-west-2"
+
+# Fill this out with your custom `.pem` key, or generate a new one by running `ssh-keygen -t rsa -b 2048 -m PEM -f my-key.pem`.
+# ssh-private-key = "~/.ssh/mykey.pem"

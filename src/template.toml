@@ -11,10 +11,14 @@ version = "<VERSION>"
 provider = "aws"
 region = "us-west-2"
 
+instance-type = "i3.2xlarge"
+image-id = "ami-04dd23e62ed049936"
+
 # This is the user profile that ssh's into the head machine.
-# This value depends upon the AMI that you choose.
-# For AWS AMIs, keep it as 'ec2-user'; for Ubuntu AMIs, change it to 'ubuntu'.
-ssh-user = "ec2-user"
+# This value depends upon the `image-id` value up above.
+# For Ubuntu AMIs, keep it as 'ubuntu'; for AWS AMIs, change it to 'ec2-user'.
+ssh-user = "ubuntu"
 
 # Fill this out with your custom `.pem` key, or generate a new one by running `ssh-keygen -t rsa -b 2048 -m PEM -f my-key.pem`.
+# Make sure the public key is uploaded to AWS.
 ssh-private-key = "~/.ssh/my-keypair.pem"

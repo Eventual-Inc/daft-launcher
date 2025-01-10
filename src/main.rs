@@ -219,7 +219,7 @@ fn main() -> anyhow::Result<()> {
             if path.exists() {
                 bail!("The path {path:?} already exists; the path given must point to a new location on your filesystem");
             };
-            let contents = include_str!("default.toml");
+            let contents = include_str!("template.toml");
             let contents = contents.replace("<VERSION>", env!("CARGO_PKG_VERSION"));
             fs::write(path, contents)?;
         }

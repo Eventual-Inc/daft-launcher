@@ -149,19 +149,6 @@ struct RayConfig {
     available_node_types: HashMap<StrRef, RayNodeType>,
 }
 
-#[derive(Debug, Serialize, Clone, PartialEq, Eq)]
-struct RayNodeType {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    resources: Option<RayResources>,
-    max_workers: usize,
-}
-
-#[derive(Debug, Serialize, Clone, PartialEq, Eq)]
-#[serde(rename_all = "UPPERCASE")]
-struct RayResources {
-    cpu: usize,
-}
-
 #[derive(Default, Debug, Serialize, Clone, PartialEq, Eq)]
 struct RayProvider {
     r#type: StrRef,
@@ -172,6 +159,35 @@ struct RayProvider {
 struct RayAuth {
     ssh_user: StrRef,
     ssh_private_key: PathRef,
+}
+
+#[derive(Debug, Serialize, Clone, PartialEq, Eq)]
+struct RayNodeType {
+    max_workers: usize,
+    node_config: RayNodeConfig,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    resources: Option<RayResources>,
+}
+
+#[derive(Debug, Serialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "PascalCase")]
+struct RayNodeConfig {
+    key_name: StrRef,
+    instance_type: StrRef,
+    image_id: StrRef,
+    iam_instance_profile: IamInstanceProfile,
+}
+
+#[derive(Debug, Serialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "PascalCase")]
+struct IamInstanceProfile {
+    arn: StrRef,
+}
+
+#[derive(Debug, Serialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "UPPERCASE")]
+struct RayResources {
+    cpu: usize,
 }
 
 async fn write_ray_config(
@@ -194,15 +210,27 @@ async fn write_ray_config(
                 (
                     "ray.head.default".into(),
                     RayNodeType {
-                        resources: Some(RayResources { cpu: 0 }),
                         max_workers: daft_config.setup.number_of_workers,
+                        node_config: RayNodeConfig {
+                            key_name: "a".into(),
+                            instance_type: "b".into(),
+                            image_id: "c".into(),
+                            iam_instance_profile: IamInstanceProfile { arn: "d".into() },
+                        },
+                        resources: Some(RayResources { cpu: 0 }),
                     },
                 ),
                 (
                     "ray.worker.default".into(),
                     RayNodeType {
-                        resources: None,
                         max_workers: daft_config.setup.number_of_workers,
+                        node_config: RayNodeConfig {
+                            key_name: "a".into(),
+                            instance_type: "b".into(),
+                            image_id: "c".into(),
+                            iam_instance_profile: IamInstanceProfile { arn: "d".into() },
+                        },
+                        resources: None,
                     },
                 ),
             ]

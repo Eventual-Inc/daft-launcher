@@ -149,6 +149,7 @@ struct RayConfig {
 
 #[derive(Debug, Serialize, Clone, PartialEq, Eq)]
 struct RayNodeType {
+    #[serde(skip_serializing_if = "Option::is_none")]
     resources: Option<RayResources>,
     min_workers: usize,
     max_workers: usize,
@@ -172,7 +173,10 @@ struct RayAuth {
     ssh_private_key: PathRef,
 }
 
-async fn get_ray_config(path: &Path) -> anyhow::Result<RayConfig> {
+async fn write_ray_config(
+    daft_config_path: &Path,
+    destination_path: impl AsRef<Path>,
+) -> anyhow::Result<()> {
     fn convert(daft_config: DaftConfig) -> RayConfig {
         RayConfig {
             cluster_name: daft_config.setup.name,
@@ -208,10 +212,13 @@ async fn get_ray_config(path: &Path) -> anyhow::Result<RayConfig> {
         }
     }
 
-    let contents = fs::read_to_string(&path).await?;
+    let contents = fs::read_to_string(&daft_config_path).await?;
     let daft_config = dbg!(toml::from_str::<DaftConfig>(&contents)?);
     let ray_config = dbg!(convert(daft_config));
-    Ok(ray_config)
+    let ray_config = serde_yaml::to_string(&ray_config)?;
+    fs::write(destination_path, ray_config).await?;
+
+    Ok(())
 }
 
 #[tokio::main]
@@ -227,18 +234,13 @@ async fn main() -> anyhow::Result<()> {
             fs::write(path, contents).await?;
         }
         SubCommand::Export(ConfigPath { path }) => {
-            let ray_config = get_ray_config(&path).await?;
-            let ray_config = serde_yaml::to_string(&ray_config)?;
-            fs::write(".ray.yaml", ray_config).await?;
+            write_ray_config(&path, ".ray.yaml").await?;
         }
-        SubCommand::Up(ConfigPath { .. }) => {
-            // let ray_config = get_ray_config(&path).await?;
-            // let ray_config = serde_yaml::to_string(&ray_config)?;
-            // let temp_dir = TempDir::new("daft-launcher")?;
-            // let mut path = temp_dir.path().to_owned();
-            // path.push("ray.yaml");
-            // fs::write(path, ray_config).await?;
-            // Command::new("ray").args(["up", ""]);
+        SubCommand::Up(ConfigPath { path }) => {
+            let temp_dir = TempDir::new("daft-launcher")?;
+            let mut ray_path = temp_dir.path().to_owned();
+            ray_path.push("ray.yaml");
+            write_ray_config(&path, ray_path).await?;
         }
     }
 

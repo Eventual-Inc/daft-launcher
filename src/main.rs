@@ -198,13 +198,16 @@ struct RayNodeConfig {
     key_name: StrRef,
     instance_type: StrRef,
     image_id: StrRef,
-    iam_instance_profile: IamInstanceProfile,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    iam_instance_profile: Option<IamInstanceProfile>,
 }
 
 #[derive(Default, Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "PascalCase")]
 struct IamInstanceProfile {
+    #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<StrRef>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     arn: Option<StrRef>,
 }
 
@@ -215,8 +218,32 @@ struct RayResources {
 }
 
 async fn read_and_convert(daft_config_path: &Path) -> anyhow::Result<RayConfig> {
-    fn convert(daft_config: DaftConfig) -> RayConfig {
-        RayConfig {
+    fn convert(daft_config: DaftConfig) -> anyhow::Result<RayConfig> {
+        let key_name = daft_config
+            .setup
+            .ssh_private_key
+            .file_stem()
+            .ok_or_else(|| anyhow::anyhow!(""))?
+            .to_str()
+            .ok_or_else(|| anyhow::anyhow!(""))?
+            .into();
+        let iam_instance_profile = if daft_config.setup.iam_instance_profile.name.is_some()
+            || daft_config.setup.iam_instance_profile.arn.is_some()
+        {
+            Some(IamInstanceProfile {
+                name: daft_config.setup.iam_instance_profile.name.clone(),
+                arn: daft_config.setup.iam_instance_profile.arn.clone(),
+            })
+        } else {
+            None
+        };
+        let node_config = RayNodeConfig {
+            key_name,
+            instance_type: daft_config.setup.instance_type.clone(),
+            image_id: daft_config.setup.image_id.clone(),
+            iam_instance_profile,
+        };
+        Ok(RayConfig {
             cluster_name: daft_config.setup.name,
             max_workers: daft_config.setup.number_of_workers,
             provider: RayProvider {
@@ -232,15 +259,7 @@ async fn read_and_convert(daft_config_path: &Path) -> anyhow::Result<RayConfig> 
                     "ray.head.default".into(),
                     RayNodeType {
                         max_workers: daft_config.setup.number_of_workers,
-                        node_config: RayNodeConfig {
-                            key_name: "a".into(),
-                            instance_type: daft_config.setup.instance_type.clone(),
-                            image_id: daft_config.setup.image_id.clone(),
-                            iam_instance_profile: IamInstanceProfile {
-                                name: daft_config.setup.iam_instance_profile.name.clone(),
-                                arn: daft_config.setup.iam_instance_profile.arn.clone(),
-                            },
-                        },
+                        node_config: node_config.clone(),
                         resources: Some(RayResources { cpu: 0 }),
                     },
                 ),
@@ -248,22 +267,14 @@ async fn read_and_convert(daft_config_path: &Path) -> anyhow::Result<RayConfig> 
                     "ray.worker.default".into(),
                     RayNodeType {
                         max_workers: daft_config.setup.number_of_workers,
-                        node_config: RayNodeConfig {
-                            key_name: "a".into(),
-                            instance_type: daft_config.setup.instance_type,
-                            image_id: daft_config.setup.image_id,
-                            iam_instance_profile: IamInstanceProfile {
-                                name: daft_config.setup.iam_instance_profile.name,
-                                arn: daft_config.setup.iam_instance_profile.arn,
-                            },
-                        },
+                        node_config,
                         resources: None,
                     },
                 ),
             ]
             .into_iter()
             .collect(),
-        }
+        })
     }
 
     let contents = fs::read_to_string(&daft_config_path)
@@ -279,7 +290,7 @@ async fn read_and_convert(daft_config_path: &Path) -> anyhow::Result<RayConfig> 
             }
         })?;
     let daft_config = toml::from_str::<DaftConfig>(&contents)?;
-    let ray_config = convert(daft_config);
+    let ray_config = convert(daft_config)?;
 
     Ok(ray_config)
 }
@@ -305,8 +316,13 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
             let _ = read_and_convert(&path).await?;
         }
         SubCommand::Export(ConfigPath { path }) => {
+            let ray_path = PathBuf::from(".ray.yaml");
+            #[cfg(not(test))]
+            if ray_path.exists() {
+                bail!("The file {ray_path:?} already exists; delete it before writing new configurations to that file");
+            }
             let ray_config = read_and_convert(&path).await?;
-            write_ray_config(ray_config, ".ray.yaml").await?;
+            write_ray_config(ray_config, ray_path).await?;
         }
         SubCommand::Up(ConfigPath { path }) => {
             let temp_dir = TempDir::new("daft-launcher")?;

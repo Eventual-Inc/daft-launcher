@@ -229,19 +229,11 @@ fn main() -> anyhow::Result<()> {
             let ray_config = dbg!(convert(daft_config));
             let contents = serde_yaml::to_string(&ray_config)?;
             let temp_dir = tempdir::TempDir::new("daft-launcher")?;
-            let mut path = dbg!(temp_dir.path()).to_owned();
+            let mut path = temp_dir.path().to_owned();
             path.push("ray.yaml");
             fs::write(path, contents)?;
         }
     }
 
     Ok(())
-}
-
-#[test]
-fn test() {
-    let x = PathRef::from(PathBuf::from("~/a/b/c"));
-    for segment in x.into_iter() {
-        dbg!(segment);
-    }
 }

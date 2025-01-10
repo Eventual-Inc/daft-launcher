@@ -11,5 +11,10 @@ version = "<VERSION>"
 provider = "aws"
 region = "us-west-2"
 
+# This is the user profile that ssh's into the head machine.
+# This value depends upon the AMI that you choose.
+# For AWS AMIs, keep it as 'ec2-user'; for Ubuntu AMIs, change it to 'ubuntu'.
+# ssh-user = "ec2-user"
+
 # Fill this out with your custom `.pem` key, or generate a new one by running `ssh-keygen -t rsa -b 2048 -m PEM -f my-key.pem`.
-# ssh-private-key = "~/.ssh/mykey.pem"
+# ssh-private-key = "~/.ssh/ronnie-keypair.pem"

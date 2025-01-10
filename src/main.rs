@@ -1,5 +1,7 @@
 use std::{
     collections::HashMap,
+    io::Error,
+    io::ErrorKind,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -151,7 +153,6 @@ struct RayConfig {
 struct RayNodeType {
     #[serde(skip_serializing_if = "Option::is_none")]
     resources: Option<RayResources>,
-    min_workers: usize,
     max_workers: usize,
 }
 
@@ -194,7 +195,6 @@ async fn write_ray_config(
                     "ray.head.default".into(),
                     RayNodeType {
                         resources: Some(RayResources { cpu: 0 }),
-                        min_workers: daft_config.setup.number_of_workers,
                         max_workers: daft_config.setup.number_of_workers,
                     },
                 ),
@@ -202,7 +202,6 @@ async fn write_ray_config(
                     "ray.worker.default".into(),
                     RayNodeType {
                         resources: None,
-                        min_workers: daft_config.setup.number_of_workers,
                         max_workers: daft_config.setup.number_of_workers,
                     },
                 ),
@@ -212,9 +211,20 @@ async fn write_ray_config(
         }
     }
 
-    let contents = fs::read_to_string(&daft_config_path).await?;
-    let daft_config = dbg!(toml::from_str::<DaftConfig>(&contents)?);
-    let ray_config = dbg!(convert(daft_config));
+    let contents = fs::read_to_string(&daft_config_path)
+        .await
+        .map_err(|error| {
+            if let ErrorKind::NotFound = error.kind() {
+                Error::new(
+                    ErrorKind::NotFound,
+                    format!("The file {daft_config_path:?} does not exist"),
+                )
+            } else {
+                error
+            }
+        })?;
+    let daft_config = toml::from_str::<DaftConfig>(&contents)?;
+    let ray_config = convert(daft_config);
     let ray_config = serde_yaml::to_string(&ray_config)?;
     fs::write(destination_path, ray_config).await?;
 
@@ -233,14 +243,13 @@ async fn main() -> anyhow::Result<()> {
             let contents = contents.replace("<VERSION>", env!("CARGO_PKG_VERSION"));
             fs::write(path, contents).await?;
         }
-        SubCommand::Export(ConfigPath { path }) => {
-            write_ray_config(&path, ".ray.yaml").await?;
-        }
+        SubCommand::Export(ConfigPath { path }) => write_ray_config(&path, ".ray.yaml").await?,
         SubCommand::Up(ConfigPath { path }) => {
             let temp_dir = TempDir::new("daft-launcher")?;
             let mut ray_path = temp_dir.path().to_owned();
             ray_path.push("ray.yaml");
             write_ray_config(&path, ray_path).await?;
+            // Command::new("ray").args(["up"]);
         }
     }
 

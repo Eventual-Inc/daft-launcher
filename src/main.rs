@@ -4,6 +4,7 @@ use anyhow::bail;
 use clap::{Parser, Subcommand};
 use semver::{Version, VersionReq};
 use serde::Deserialize;
+use serde::Serialize;
 
 type StrRef = Arc<str>;
 
@@ -96,6 +97,9 @@ struct Run {
     #[serde(default)]
     post_setup: Vec<StrRef>,
 }
+
+#[derive(Default, Debug, Serialize, Clone, PartialEq, Eq)]
+struct RayConfig;
 
 fn main() -> anyhow::Result<()> {
     let command = Command::parse();

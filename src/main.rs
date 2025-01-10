@@ -1,6 +1,5 @@
 use std::{
     collections::HashMap,
-    fs,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -9,12 +8,14 @@ use anyhow::bail;
 use clap::{Parser, Subcommand};
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
+use tempdir::TempDir;
+use tokio::{fs, process::Command};
 
 type StrRef = Arc<str>;
 type PathRef = Arc<Path>;
 
 #[derive(Debug, Parser, Clone, PartialEq, Eq)]
-struct Command {
+struct DaftLauncher {
     #[command(subcommand)]
     sub_command: SubCommand,
 
@@ -31,11 +32,11 @@ enum SubCommand {
     /// current working directory.
     Init(Init),
 
+    /// Export the daft-launcher configuration file to a ray configuration file.
+    Export(ConfigPath),
+
     /// Spin up a new cluster.
-    ///
-    /// If no configuration file path is provided, this will try to find a
-    /// ".daft.toml" in the current working directory and use that.
-    Up(Up),
+    Up(ConfigPath),
 }
 
 #[derive(Debug, Parser, Clone, PartialEq, Eq)]
@@ -43,12 +44,6 @@ struct Init {
     /// The path at which to create the config file.
     #[arg(short, long, default_value = ".daft.toml")]
     path: PathBuf,
-}
-
-#[derive(Debug, Parser, Clone, PartialEq, Eq)]
-struct Up {
-    #[clap(flatten)]
-    config: ConfigPath,
 }
 
 #[derive(Debug, Parser, Clone, PartialEq, Eq)]
@@ -177,61 +172,73 @@ struct RayAuth {
     ssh_private_key: PathRef,
 }
 
-fn convert(daft_config: DaftConfig) -> RayConfig {
-    RayConfig {
-        cluster_name: daft_config.setup.name,
-        max_workers: daft_config.setup.number_of_workers,
-        provider: RayProvider {
-            r#type: "aws".into(),
-            region: "us-west-2".into(),
-        },
-        auth: RayAuth {
-            ssh_user: daft_config.setup.ssh_user,
-            ssh_private_key: daft_config.setup.ssh_private_key,
-        },
-        available_node_types: vec![
-            (
-                "ray.head.default".into(),
-                RayNodeType {
-                    resources: Some(RayResources { cpu: 0 }),
-                    min_workers: daft_config.setup.number_of_workers,
-                    max_workers: daft_config.setup.number_of_workers,
-                },
-            ),
-            (
-                "ray.worker.default".into(),
-                RayNodeType {
-                    resources: None,
-                    min_workers: daft_config.setup.number_of_workers,
-                    max_workers: daft_config.setup.number_of_workers,
-                },
-            ),
-        ]
-        .into_iter()
-        .collect(),
+async fn get_ray_config(path: &Path) -> anyhow::Result<RayConfig> {
+    fn convert(daft_config: DaftConfig) -> RayConfig {
+        RayConfig {
+            cluster_name: daft_config.setup.name,
+            max_workers: daft_config.setup.number_of_workers,
+            provider: RayProvider {
+                r#type: "aws".into(),
+                region: "us-west-2".into(),
+            },
+            auth: RayAuth {
+                ssh_user: daft_config.setup.ssh_user,
+                ssh_private_key: daft_config.setup.ssh_private_key,
+            },
+            available_node_types: vec![
+                (
+                    "ray.head.default".into(),
+                    RayNodeType {
+                        resources: Some(RayResources { cpu: 0 }),
+                        min_workers: daft_config.setup.number_of_workers,
+                        max_workers: daft_config.setup.number_of_workers,
+                    },
+                ),
+                (
+                    "ray.worker.default".into(),
+                    RayNodeType {
+                        resources: None,
+                        min_workers: daft_config.setup.number_of_workers,
+                        max_workers: daft_config.setup.number_of_workers,
+                    },
+                ),
+            ]
+            .into_iter()
+            .collect(),
+        }
     }
+
+    let contents = fs::read_to_string(&path).await?;
+    let daft_config = dbg!(toml::from_str::<DaftConfig>(&contents)?);
+    let ray_config = dbg!(convert(daft_config));
+    Ok(ray_config)
 }
 
-fn main() -> anyhow::Result<()> {
-    let command = Command::parse();
-    match command.sub_command {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let daft_launcher = DaftLauncher::parse();
+    match daft_launcher.sub_command {
         SubCommand::Init(Init { path }) => {
             if path.exists() {
                 bail!("The path {path:?} already exists; the path given must point to a new location on your filesystem");
             };
             let contents = include_str!("template.toml");
             let contents = contents.replace("<VERSION>", env!("CARGO_PKG_VERSION"));
-            fs::write(path, contents)?;
+            fs::write(path, contents).await?;
         }
-        SubCommand::Up(Up { config }) => {
-            let contents = fs::read_to_string(&config.path)?;
-            let daft_config = dbg!(toml::from_str::<DaftConfig>(&contents)?);
-            let ray_config = dbg!(convert(daft_config));
-            let contents = serde_yaml::to_string(&ray_config)?;
-            let temp_dir = tempdir::TempDir::new("daft-launcher")?;
-            let mut path = temp_dir.path().to_owned();
-            path.push("ray.yaml");
-            fs::write(path, contents)?;
+        SubCommand::Export(ConfigPath { path }) => {
+            let ray_config = get_ray_config(&path).await?;
+            let ray_config = serde_yaml::to_string(&ray_config)?;
+            fs::write(".ray.yaml", ray_config).await?;
+        }
+        SubCommand::Up(ConfigPath { .. }) => {
+            // let ray_config = get_ray_config(&path).await?;
+            // let ray_config = serde_yaml::to_string(&ray_config)?;
+            // let temp_dir = TempDir::new("daft-launcher")?;
+            // let mut path = temp_dir.path().to_owned();
+            // path.push("ray.yaml");
+            // fs::write(path, ray_config).await?;
+            // Command::new("ray").args(["up", ""]);
         }
     }
 

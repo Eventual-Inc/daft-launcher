@@ -11,6 +11,9 @@ version = "<VERSION>"
 provider = "aws"
 region = "us-west-2"
 
+# The following configurations specify the type of servers in your cluster.
+# The machine type below is what we usually use at Eventual, and the image id is Ubuntu based.
+# If you want a smaller or bigger cluster, change the below two configurations accordingly.
 instance-type = "i3.2xlarge"
 image-id = "ami-04dd23e62ed049936"
 

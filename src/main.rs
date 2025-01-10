@@ -6,6 +6,7 @@ use std::{
     sync::Arc,
 };
 
+#[cfg(not(test))]
 use anyhow::bail;
 use clap::{Parser, Subcommand};
 use semver::{Version, VersionReq};
@@ -33,6 +34,9 @@ enum SubCommand {
     /// If no path is provided, this will create a default ".daft.toml" in the
     /// current working directory.
     Init(Init),
+
+    /// Check to make sure the daft-launcher configuration file is correct.
+    Check(ConfigPath),
 
     /// Export the daft-launcher configuration file to a ray configuration file.
     Export(ConfigPath),
@@ -75,9 +79,12 @@ struct DaftSetup {
     ssh_user: StrRef,
     #[serde(deserialize_with = "parse_ssh_private_key")]
     ssh_private_key: PathRef,
-    iam_instance_profile_arn: Option<StrRef>,
-    instance_type: Option<StrRef>,
-    image_id: Option<StrRef>,
+    #[serde(default = "default_instance_type")]
+    instance_type: StrRef,
+    #[serde(default = "default_image_id")]
+    image_id: StrRef,
+    #[serde(default)]
+    iam_instance_profile: IamInstanceProfile,
     #[serde(default)]
     dependencies: Vec<StrRef>,
 }
@@ -116,6 +123,14 @@ where
 
 fn default_number_of_workers() -> usize {
     8
+}
+
+fn default_instance_type() -> StrRef {
+    "i3.2xlarge".into()
+}
+
+fn default_image_id() -> StrRef {
+    "ami-04dd23e62ed049936".into()
 }
 
 fn parse_version_req<'de, D>(deserializer: D) -> Result<VersionReq, D::Error>
@@ -186,10 +201,11 @@ struct RayNodeConfig {
     iam_instance_profile: IamInstanceProfile,
 }
 
-#[derive(Debug, Serialize, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "PascalCase")]
 struct IamInstanceProfile {
-    arn: StrRef,
+    name: Option<StrRef>,
+    arn: Option<StrRef>,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq, Eq)]
@@ -198,10 +214,7 @@ struct RayResources {
     cpu: usize,
 }
 
-async fn write_ray_config(
-    daft_config_path: &Path,
-    destination_path: impl AsRef<Path>,
-) -> anyhow::Result<()> {
+async fn read_and_convert(daft_config_path: &Path) -> anyhow::Result<RayConfig> {
     fn convert(daft_config: DaftConfig) -> RayConfig {
         RayConfig {
             cluster_name: daft_config.setup.name,
@@ -221,9 +234,12 @@ async fn write_ray_config(
                         max_workers: daft_config.setup.number_of_workers,
                         node_config: RayNodeConfig {
                             key_name: "a".into(),
-                            instance_type: "b".into(),
-                            image_id: "c".into(),
-                            iam_instance_profile: IamInstanceProfile { arn: "d".into() },
+                            instance_type: daft_config.setup.instance_type.clone(),
+                            image_id: daft_config.setup.image_id.clone(),
+                            iam_instance_profile: IamInstanceProfile {
+                                name: daft_config.setup.iam_instance_profile.name.clone(),
+                                arn: daft_config.setup.iam_instance_profile.arn.clone(),
+                            },
                         },
                         resources: Some(RayResources { cpu: 0 }),
                     },
@@ -234,9 +250,12 @@ async fn write_ray_config(
                         max_workers: daft_config.setup.number_of_workers,
                         node_config: RayNodeConfig {
                             key_name: "a".into(),
-                            instance_type: "b".into(),
-                            image_id: "c".into(),
-                            iam_instance_profile: IamInstanceProfile { arn: "d".into() },
+                            instance_type: daft_config.setup.instance_type,
+                            image_id: daft_config.setup.image_id,
+                            iam_instance_profile: IamInstanceProfile {
+                                name: daft_config.setup.iam_instance_profile.name,
+                                arn: daft_config.setup.iam_instance_profile.arn,
+                            },
                         },
                         resources: None,
                     },
@@ -261,9 +280,13 @@ async fn write_ray_config(
         })?;
     let daft_config = toml::from_str::<DaftConfig>(&contents)?;
     let ray_config = convert(daft_config);
-    let ray_config = serde_yaml::to_string(&ray_config)?;
-    fs::write(destination_path, ray_config).await?;
 
+    Ok(ray_config)
+}
+
+async fn write_ray_config(ray_config: RayConfig, dest: impl AsRef<Path>) -> anyhow::Result<()> {
+    let ray_config = serde_yaml::to_string(&ray_config)?;
+    fs::write(dest, ray_config).await?;
     Ok(())
 }
 
@@ -273,17 +296,24 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
             #[cfg(not(test))]
             if path.exists() {
                 bail!("The path {path:?} already exists; the path given must point to a new location on your filesystem");
-            };
+            }
             let contents = include_str!("template.toml");
             let contents = contents.replace("<VERSION>", env!("CARGO_PKG_VERSION"));
             fs::write(path, contents).await?;
         }
-        SubCommand::Export(ConfigPath { path }) => write_ray_config(&path, ".ray.yaml").await?,
+        SubCommand::Check(ConfigPath { path }) => {
+            let _ = read_and_convert(&path).await?;
+        }
+        SubCommand::Export(ConfigPath { path }) => {
+            let ray_config = read_and_convert(&path).await?;
+            write_ray_config(ray_config, ".ray.yaml").await?;
+        }
         SubCommand::Up(ConfigPath { path }) => {
             let temp_dir = TempDir::new("daft-launcher")?;
             let mut ray_path = temp_dir.path().to_owned();
             ray_path.push("ray.yaml");
-            write_ray_config(&path, ray_path).await?;
+            let ray_config = read_and_convert(&path).await?;
+            write_ray_config(ray_config, ray_path).await?;
             // Command::new("ray").args(["up"]);
         }
     }
@@ -311,7 +341,7 @@ mod tests {
         .await
         .unwrap();
         run(DaftLauncher {
-            sub_command: SubCommand::Export(ConfigPath {
+            sub_command: SubCommand::Check(ConfigPath {
                 path: ".daft.toml".into(),
             }),
             verbosity: 0,

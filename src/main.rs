@@ -354,7 +354,13 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
             ray_path.push("ray.yaml");
             let ray_config = read_and_convert(&path).await?;
             write_ray_config(ray_config, &ray_path).await?;
-            Command::new("ray").arg("up").arg(ray_path).arg("-y");
+            let _ = Command::new("ray")
+                .arg("up")
+                .arg(ray_path)
+                .arg("-y")
+                .spawn()?
+                .wait_with_output()
+                .await?;
         }
     }
 

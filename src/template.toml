@@ -11,6 +11,7 @@ version = "<VERSION>"
 provider = "aws"
 region = "us-west-2"
 number-of-workers = 4
+teardown-behavior = "terminate"
 
 # The following configurations specify the type of servers in your cluster.
 # The machine type below is what we usually use at Eventual, and the image id is Ubuntu based.

@@ -78,6 +78,8 @@ struct DaftSetup {
     region: StrRef,
     #[serde(default = "default_number_of_workers")]
     number_of_workers: usize,
+    #[serde(default)]
+    teardown_behavior: TeardownBehavior,
     ssh_user: StrRef,
     #[serde(deserialize_with = "parse_ssh_private_key")]
     ssh_private_key: PathRef,
@@ -89,6 +91,23 @@ struct DaftSetup {
     iam_instance_profile: IamInstanceProfile,
     #[serde(default)]
     dependencies: Vec<StrRef>,
+}
+
+#[derive(Default, Debug, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+enum TeardownBehavior {
+    Stop,
+    #[default]
+    Terminate,
+}
+
+impl TeardownBehavior {
+    fn should_cache_stopped_nodes(&self) -> bool {
+        match self {
+            Self::Stop => true,
+            Self::Terminate => false,
+        }
+    }
 }
 
 fn parse_ssh_private_key<'de, D>(deserializer: D) -> Result<PathRef, D::Error>
@@ -179,6 +198,7 @@ struct RayConfig {
 struct RayProvider {
     r#type: StrRef,
     region: StrRef,
+    cache_stopped_nodes: bool,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq, Eq)]
@@ -252,6 +272,7 @@ async fn read_and_convert(daft_config_path: &Path) -> anyhow::Result<RayConfig> 
             provider: RayProvider {
                 r#type: "aws".into(),
                 region: "us-west-2".into(),
+                cache_stopped_nodes: daft_config.setup.teardown_behavior.should_cache_stopped_nodes(),
             },
             auth: RayAuth {
                 ssh_user: daft_config.setup.ssh_user,

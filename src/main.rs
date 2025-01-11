@@ -170,6 +170,7 @@ struct RayConfig {
     provider: RayProvider,
     auth: RayAuth,
     available_node_types: HashMap<StrRef, RayNodeType>,
+    setup_commands: Vec<StrRef>,
 }
 
 #[derive(Default, Debug, Serialize, Clone, PartialEq, Eq)]
@@ -274,6 +275,29 @@ async fn read_and_convert(daft_config_path: &Path) -> anyhow::Result<RayConfig> 
             ]
             .into_iter()
             .collect(),
+            setup_commands: {
+                let mut commands = vec![
+                    "curl -LsSf https://astral.sh/uv/install.sh | sh".into(),
+                    "uv python install 3.12".into(),
+                    "uv python pin 3.12".into(),
+                    "uv venv".into(),
+                    "echo 'source $HOME/.venv/bin/activate' >> ~/.bashrc".into(),
+                    "source ~/.bashrc".into(),
+                    "uv pip install boto3 pip ray[default] getdaft py-spy deltalake".into(),
+                ];
+                if !daft_config.setup.dependencies.is_empty() {
+                    let deps = daft_config
+                        .setup
+                        .dependencies
+                        .iter()
+                        .map(|dep| format!(r#""{dep}""#))
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    let deps = format!("uv pip install {deps}").into();
+                    commands.push(deps);
+                }
+                commands
+            },
         })
     }
 

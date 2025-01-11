@@ -122,7 +122,7 @@ where
 }
 
 fn default_number_of_workers() -> usize {
-    8
+    4
 }
 
 fn default_instance_type() -> StrRef {

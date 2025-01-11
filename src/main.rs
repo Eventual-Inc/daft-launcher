@@ -56,7 +56,7 @@ struct Init {
 struct ConfigPath {
     /// Path to configuration file.
     #[arg(short, long, default_value = ".daft.toml")]
-    path: PathBuf,
+    config: PathBuf,
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
@@ -336,10 +336,10 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
             let contents = contents.replace("<VERSION>", env!("CARGO_PKG_VERSION"));
             fs::write(path, contents).await?;
         }
-        SubCommand::Check(ConfigPath { path }) => {
+        SubCommand::Check(ConfigPath { config: path }) => {
             let _ = read_and_convert(&path).await?;
         }
-        SubCommand::Export(ConfigPath { path }) => {
+        SubCommand::Export(ConfigPath { config: path }) => {
             let ray_path = PathBuf::from(".ray.yaml");
             #[cfg(not(test))]
             if ray_path.exists() {
@@ -348,7 +348,7 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
             let ray_config = read_and_convert(&path).await?;
             write_ray_config(ray_config, ray_path).await?;
         }
-        SubCommand::Up(ConfigPath { path }) => {
+        SubCommand::Up(ConfigPath { config: path }) => {
             let temp_dir = TempDir::new("daft-launcher")?;
             let mut ray_path = temp_dir.path().to_owned();
             ray_path.push("ray.yaml");
@@ -382,7 +382,7 @@ mod tests {
         .unwrap();
         run(DaftLauncher {
             sub_command: SubCommand::Check(ConfigPath {
-                path: ".daft.toml".into(),
+                config: ".daft.toml".into(),
             }),
             verbosity: 0,
         })

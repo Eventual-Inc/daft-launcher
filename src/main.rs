@@ -48,14 +48,14 @@ enum SubCommand {
 #[derive(Debug, Parser, Clone, PartialEq, Eq)]
 struct Init {
     /// The path at which to create the config file.
-    #[arg(short, long, default_value = ".daft.toml")]
+    #[arg(default_value = ".daft.toml")]
     path: PathBuf,
 }
 
 #[derive(Debug, Parser, Clone, PartialEq, Eq)]
 struct ConfigPath {
     /// Path to configuration file.
-    #[arg(short, long, default_value = ".daft.toml")]
+    #[arg(default_value = ".daft.toml")]
     config: PathBuf,
 }
 

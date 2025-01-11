@@ -42,6 +42,9 @@ enum SubCommand {
 
     /// Spin up a new cluster.
     Up(ConfigPath),
+
+    /// Spin down a given cluster.
+    Down(ConfigPath),
 }
 
 #[derive(Debug, Parser, Clone, PartialEq, Eq)]
@@ -324,6 +327,40 @@ async fn write_ray_config(ray_config: RayConfig, dest: impl AsRef<Path>) -> anyh
     Ok(())
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SpinDirection {
+    Up,
+    Down,
+}
+
+impl SpinDirection {
+    fn as_str(&self) -> &str {
+        match self {
+            Self::Up => "up",
+            Self::Down => "down",
+        }
+    }
+}
+
+async fn manage_cluster(
+    daft_config_path: &Path,
+    spin_direction: SpinDirection,
+) -> anyhow::Result<()> {
+    let temp_dir = TempDir::new("daft-launcher")?;
+    let mut ray_path = temp_dir.path().to_owned();
+    ray_path.push("ray.yaml");
+    let ray_config = read_and_convert(daft_config_path).await?;
+    write_ray_config(ray_config, &ray_path).await?;
+    let _ = Command::new("ray")
+        .arg(spin_direction.as_str())
+        .arg(ray_path)
+        .arg("-y")
+        .spawn()?
+        .wait_with_output()
+        .await?;
+    Ok(())
+}
+
 async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
     match daft_launcher.sub_command {
         SubCommand::Init(Init { path }) => {
@@ -348,18 +385,10 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
             write_ray_config(ray_config, ray_path).await?;
         }
         SubCommand::Up(ConfigPath { config: path }) => {
-            let temp_dir = TempDir::new("daft-launcher")?;
-            let mut ray_path = temp_dir.path().to_owned();
-            ray_path.push("ray.yaml");
-            let ray_config = read_and_convert(&path).await?;
-            write_ray_config(ray_config, &ray_path).await?;
-            let _ = Command::new("ray")
-                .arg("up")
-                .arg(ray_path)
-                .arg("-y")
-                .spawn()?
-                .wait_with_output()
-                .await?;
+            manage_cluster(&path, SpinDirection::Up).await?
+        }
+        SubCommand::Down(ConfigPath { config: path }) => {
+            manage_cluster(&path, SpinDirection::Down).await?
         }
     }
 

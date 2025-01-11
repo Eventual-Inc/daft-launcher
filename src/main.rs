@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
-    io::Error,
-    io::ErrorKind,
+    io::{Error, ErrorKind},
     path::{Path, PathBuf},
     sync::Arc,
 };

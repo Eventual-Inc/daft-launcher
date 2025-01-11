@@ -10,6 +10,7 @@ name = "daft-launcher-example"
 version = "<VERSION>"
 provider = "aws"
 region = "us-west-2"
+number-of-workers = 4
 
 # The following configurations specify the type of servers in your cluster.
 # The machine type below is what we usually use at Eventual, and the image id is Ubuntu based.
@@ -25,3 +26,7 @@ ssh-user = "ubuntu"
 # Fill this out with your custom `.pem` key, or generate a new one by running `ssh-keygen -t rsa -b 2048 -m PEM -f my-key.pem`.
 # Make sure the public key is uploaded to AWS.
 ssh-private-key = "~/.ssh/my-keypair.pem"
+
+# Fill in your python dependencies here.
+# They'll be downloaded using `uv`.
+dependencies = []

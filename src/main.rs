@@ -43,8 +43,17 @@ enum SubCommand {
     /// Spin up a new cluster.
     Up(ConfigPath),
 
-    /// Spin down a given cluster.
-    Down(ConfigPath),
+    /// Spin down a given cluster and put the nodes to "sleep".
+    ///
+    /// This will *not* delete the nodes, only stop them. The nodes can be
+    /// restarted at a future time.
+    Stop(ConfigPath),
+
+    /// Spin down a given cluster and fully terminate the nodes.
+    ///
+    /// This *will* delete the nodes; they will not be accessible from here on
+    /// out.
+    Kill(ConfigPath),
 }
 
 #[derive(Debug, Parser, Clone, PartialEq, Eq)]
@@ -78,8 +87,6 @@ struct DaftSetup {
     region: StrRef,
     #[serde(default = "default_number_of_workers")]
     number_of_workers: usize,
-    #[serde(default)]
-    teardown_behavior: TeardownBehavior,
     ssh_user: StrRef,
     #[serde(deserialize_with = "parse_ssh_private_key")]
     ssh_private_key: PathRef,
@@ -91,23 +98,6 @@ struct DaftSetup {
     iam_instance_profile: IamInstanceProfile,
     #[serde(default)]
     dependencies: Vec<StrRef>,
-}
-
-#[derive(Default, Debug, Deserialize, Clone, Copy, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
-enum TeardownBehavior {
-    Stop,
-    #[default]
-    Terminate,
-}
-
-impl TeardownBehavior {
-    fn should_cache_stopped_nodes(&self) -> bool {
-        match self {
-            Self::Stop => true,
-            Self::Terminate => false,
-        }
-    }
 }
 
 fn parse_ssh_private_key<'de, D>(deserializer: D) -> Result<PathRef, D::Error>
@@ -240,8 +230,20 @@ struct RayResources {
     cpu: usize,
 }
 
-async fn read_and_convert(daft_config_path: &Path) -> anyhow::Result<RayConfig> {
-    fn convert(daft_config: DaftConfig) -> anyhow::Result<RayConfig> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TeardownBehaviour {
+    Stop,
+    Kill,
+}
+
+async fn read_and_convert(
+    daft_config_path: &Path,
+    teardown_behaviour: Option<TeardownBehaviour>,
+) -> anyhow::Result<RayConfig> {
+    fn convert(
+        daft_config: DaftConfig,
+        teardown_behaviour: Option<TeardownBehaviour>,
+    ) -> anyhow::Result<RayConfig> {
         let key_name = daft_config
             .setup
             .ssh_private_key
@@ -272,7 +274,10 @@ async fn read_and_convert(daft_config_path: &Path) -> anyhow::Result<RayConfig> 
             provider: RayProvider {
                 r#type: "aws".into(),
                 region: "us-west-2".into(),
-                cache_stopped_nodes: daft_config.setup.teardown_behavior.should_cache_stopped_nodes(),
+                cache_stopped_nodes: match teardown_behaviour {
+                    Some(TeardownBehaviour::Stop) | None => true,
+                    Some(TeardownBehaviour::Kill) => false,
+                },
             },
             auth: RayAuth {
                 ssh_user: daft_config.setup.ssh_user,
@@ -337,7 +342,7 @@ async fn read_and_convert(daft_config_path: &Path) -> anyhow::Result<RayConfig> 
             }
         })?;
     let daft_config = toml::from_str::<DaftConfig>(&contents)?;
-    let ray_config = convert(daft_config)?;
+    let ray_config = convert(daft_config, teardown_behaviour)?;
 
     Ok(ray_config)
 }
@@ -366,11 +371,12 @@ impl SpinDirection {
 async fn manage_cluster(
     daft_config_path: &Path,
     spin_direction: SpinDirection,
+    teardown_behaviour: Option<TeardownBehaviour>,
 ) -> anyhow::Result<()> {
     let temp_dir = TempDir::new("daft-launcher")?;
     let mut ray_path = temp_dir.path().to_owned();
     ray_path.push("ray.yaml");
-    let ray_config = read_and_convert(daft_config_path).await?;
+    let ray_config = read_and_convert(daft_config_path, teardown_behaviour).await?;
     write_ray_config(ray_config, &ray_path).await?;
     let _ = Command::new("ray")
         .arg(spin_direction.as_str())
@@ -394,7 +400,7 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
             fs::write(path, contents).await?;
         }
         SubCommand::Check(ConfigPath { config: path }) => {
-            let _ = read_and_convert(&path).await?;
+            let _ = read_and_convert(&path, None).await?;
         }
         SubCommand::Export(ConfigPath { config: path }) => {
             let ray_path = PathBuf::from(".ray.yaml");
@@ -402,14 +408,17 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
             if ray_path.exists() {
                 bail!("The file {ray_path:?} already exists; delete it before writing new configurations to that file");
             }
-            let ray_config = read_and_convert(&path).await?;
+            let ray_config = read_and_convert(&path, None).await?;
             write_ray_config(ray_config, ray_path).await?;
         }
         SubCommand::Up(ConfigPath { config: path }) => {
-            manage_cluster(&path, SpinDirection::Up).await?
+            manage_cluster(&path, SpinDirection::Up, None).await?
         }
-        SubCommand::Down(ConfigPath { config: path }) => {
-            manage_cluster(&path, SpinDirection::Down).await?
+        SubCommand::Stop(ConfigPath { config: path }) => {
+            manage_cluster(&path, SpinDirection::Down, Some(TeardownBehaviour::Stop)).await?
+        }
+        SubCommand::Kill(ConfigPath { config: path }) => {
+            manage_cluster(&path, SpinDirection::Down, Some(TeardownBehaviour::Kill)).await?
         }
     }
 

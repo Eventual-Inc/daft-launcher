@@ -75,6 +75,9 @@ struct Init {
 
 #[derive(Debug, Parser, Clone, PartialEq, Eq)]
 struct List {
+    #[clap(flatten)]
+    config_path: ConfigPath,
+
     /// The region which to list all the available clusters for.
     #[arg(default_value = "us-west-2")]
     region: StrRef,
@@ -259,9 +262,9 @@ struct RayResources {
 async fn read_and_convert(
     daft_config_path: &Path,
     teardown_behaviour: Option<TeardownBehaviour>,
-) -> anyhow::Result<RayConfig> {
+) -> anyhow::Result<(DaftConfig, RayConfig)> {
     fn convert(
-        daft_config: DaftConfig,
+        daft_config: &DaftConfig,
         teardown_behaviour: Option<TeardownBehaviour>,
     ) -> anyhow::Result<RayConfig> {
         let key_name = daft_config
@@ -289,7 +292,7 @@ async fn read_and_convert(
             iam_instance_profile,
         };
         Ok(RayConfig {
-            cluster_name: daft_config.setup.name,
+            cluster_name: daft_config.setup.name.clone(),
             max_workers: daft_config.setup.number_of_workers,
             provider: RayProvider {
                 r#type: "aws".into(),
@@ -298,8 +301,8 @@ async fn read_and_convert(
                     .map(TeardownBehaviour::to_cache_stopped_nodes),
             },
             auth: RayAuth {
-                ssh_user: daft_config.setup.ssh_user,
-                ssh_private_key: daft_config.setup.ssh_private_key,
+                ssh_user: daft_config.setup.ssh_user.clone(),
+                ssh_private_key: daft_config.setup.ssh_private_key.clone(),
             },
             available_node_types: vec![
                 (
@@ -360,9 +363,9 @@ async fn read_and_convert(
             }
         })?;
     let daft_config = toml::from_str::<DaftConfig>(&contents)?;
-    let ray_config = convert(daft_config, teardown_behaviour)?;
+    let ray_config = convert(&daft_config, teardown_behaviour)?;
 
-    Ok(ray_config)
+    Ok((daft_config, ray_config))
 }
 
 async fn write_ray_config(ray_config: RayConfig, dest: impl AsRef<Path>) -> anyhow::Result<()> {
@@ -533,26 +536,33 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
             let contents = contents.replace("<VERSION>", env!("CARGO_PKG_VERSION"));
             fs::write(path, contents).await?;
         }
-        SubCommand::Check(ConfigPath { config: path }) => {
-            let _ = read_and_convert(&path, None).await?;
+        SubCommand::Check(ConfigPath { config }) => {
+            let _ = read_and_convert(&config, None).await?;
         }
-        SubCommand::Export(ConfigPath { config: path }) => {
-            let ray_config = read_and_convert(&path, None).await?;
+        SubCommand::Export(ConfigPath { config }) => {
+            let (_, ray_config) = read_and_convert(&config, Some(TeardownBehaviour::Stop)).await?;
             let ray_config_str = serde_yaml::to_string(&ray_config)?;
             println!("{ray_config_str}");
         }
-        SubCommand::Up(ConfigPath { config: path }) => {
+        SubCommand::Up(ConfigPath { config }) => {
             let (_, ray_path) = create_temp_ray_file()?;
-            let ray_config = read_and_convert(&path, None).await?;
+            let (_, ray_config) = read_and_convert(&config, Some(TeardownBehaviour::Stop)).await?;
             write_ray_config(ray_config, &ray_path).await?;
             assert_is_logged_in_with_aws().await?;
             run_ray_command(SpinDirection::Up, ray_path).await?;
         }
         SubCommand::List(List {
+            config_path,
             region,
             head,
             running,
         }) => {
+            let region = if config_path.config.exists() {
+                let (daft_config, _) = read_and_convert(&config_path.config, None).await?;
+                daft_config.setup.region
+            } else {
+                region
+            };
             assert_is_logged_in_with_aws().await?;
             let instances = get_ray_clusters_from_aws(region).await?;
             for instance in instances.iter().filter(|instance| {
@@ -567,16 +577,16 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
                 println!("{instance:?}");
             }
         }
-        SubCommand::Stop(ConfigPath { config: path }) => {
+        SubCommand::Stop(ConfigPath { config }) => {
             let (_, ray_path) = create_temp_ray_file()?;
-            let ray_config = read_and_convert(&path, Some(TeardownBehaviour::Stop)).await?;
+            let (_, ray_config) = read_and_convert(&config, Some(TeardownBehaviour::Stop)).await?;
             write_ray_config(ray_config, &ray_path).await?;
             assert_is_logged_in_with_aws().await?;
             run_ray_command(SpinDirection::Down, ray_path).await?;
         }
-        SubCommand::Kill(ConfigPath { config: path }) => {
+        SubCommand::Kill(ConfigPath { config }) => {
             let (_, ray_path) = create_temp_ray_file()?;
-            let ray_config = read_and_convert(&path, Some(TeardownBehaviour::Kill)).await?;
+            let (_, ray_config) = read_and_convert(&config, Some(TeardownBehaviour::Kill)).await?;
             write_ray_config(ray_config, &ray_path).await?;
             assert_is_logged_in_with_aws().await?;
             run_ray_command(SpinDirection::Down, ray_path).await?;

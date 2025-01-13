@@ -43,6 +43,11 @@ enum SubCommand {
     /// Spin up a new cluster.
     Up(ConfigPath),
 
+    /// List all Ray clusters in your AWS account.
+    ///
+    /// This will *only* list clusters that have been spun up by Ray.
+    List,
+
     /// Spin down a given cluster and put the nodes to "sleep".
     ///
     /// This will *not* delete the nodes, only stop them. The nodes can be
@@ -231,21 +236,6 @@ struct RayResources {
     cpu: usize,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum TeardownBehaviour {
-    Stop,
-    Kill,
-}
-
-impl TeardownBehaviour {
-    fn to_cache_stopped_nodes(self) -> bool {
-        match self {
-            Self::Stop => true,
-            Self::Kill => false,
-        }
-    }
-}
-
 async fn read_and_convert(
     daft_config_path: &Path,
     teardown_behaviour: Option<TeardownBehaviour>,
@@ -376,24 +366,61 @@ impl SpinDirection {
     }
 }
 
-async fn manage_cluster(
-    daft_config_path: &Path,
-    spin_direction: SpinDirection,
-    teardown_behaviour: Option<TeardownBehaviour>,
-) -> anyhow::Result<()> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TeardownBehaviour {
+    Stop,
+    Kill,
+}
+
+impl TeardownBehaviour {
+    fn to_cache_stopped_nodes(self) -> bool {
+        match self {
+            Self::Stop => true,
+            Self::Kill => false,
+        }
+    }
+}
+
+fn create_temp_ray_file() -> anyhow::Result<(TempDir, PathRef)> {
     let temp_dir = TempDir::new("daft-launcher")?;
     let mut ray_path = temp_dir.path().to_owned();
     ray_path.push("ray.yaml");
-    let ray_config = read_and_convert(daft_config_path, teardown_behaviour).await?;
-    write_ray_config(ray_config, &ray_path).await?;
+    let ray_path = Arc::from(ray_path);
+    Ok((temp_dir, ray_path))
+}
+
+async fn run_ray_command(
+    spin_direction: SpinDirection,
+    ray_path: impl AsRef<Path>,
+) -> anyhow::Result<()> {
     let _ = Command::new("ray")
         .arg(spin_direction.as_str())
-        .arg(ray_path)
+        .arg(ray_path.as_ref())
         .arg("-y")
         .spawn()?
         .wait_with_output()
         .await?;
     Ok(())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct AwsInstance;
+
+async fn get_ray_clusters_from_aws() -> anyhow::Result<Vec<AwsInstance>> {
+    Ok(vec![])
+}
+
+async fn assert_is_logged_in_with_aws() -> anyhow::Result<()> {
+    let sdk_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
+        .region(aws_config::meta::region::RegionProviderChain::default_provider())
+        .load()
+        .await;
+    let client = aws_sdk_sts::Client::new(&sdk_config);
+    if client.get_caller_identity().send().await.is_ok() {
+        Ok(())
+    } else {
+        anyhow::bail!("You are not logged in with the AWS cli tool; please authenticate with it first before re-running")
+    }
 }
 
 async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
@@ -416,13 +443,32 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
             println!("{ray_config_str}");
         }
         SubCommand::Up(ConfigPath { config: path }) => {
-            manage_cluster(&path, SpinDirection::Up, None).await?
+            let (_, ray_path) = create_temp_ray_file()?;
+            let ray_config = read_and_convert(&path, None).await?;
+            write_ray_config(ray_config, &ray_path).await?;
+            assert_is_logged_in_with_aws().await?;
+            run_ray_command(SpinDirection::Up, ray_path).await?;
+        }
+        SubCommand::List => {
+            assert_is_logged_in_with_aws().await?;
+            let instances = get_ray_clusters_from_aws().await?;
+            for instance in instances {
+                println!("{instance:?}");
+            }
         }
         SubCommand::Stop(ConfigPath { config: path }) => {
-            manage_cluster(&path, SpinDirection::Down, Some(TeardownBehaviour::Stop)).await?
+            let (_, ray_path) = create_temp_ray_file()?;
+            let ray_config = read_and_convert(&path, Some(TeardownBehaviour::Stop)).await?;
+            write_ray_config(ray_config, &ray_path).await?;
+            assert_is_logged_in_with_aws().await?;
+            run_ray_command(SpinDirection::Down, ray_path).await?;
         }
         SubCommand::Kill(ConfigPath { config: path }) => {
-            manage_cluster(&path, SpinDirection::Down, Some(TeardownBehaviour::Kill)).await?
+            let (_, ray_path) = create_temp_ray_file()?;
+            let ray_config = read_and_convert(&path, Some(TeardownBehaviour::Kill)).await?;
+            write_ray_config(ray_config, &ray_path).await?;
+            assert_is_logged_in_with_aws().await?;
+            run_ray_command(SpinDirection::Down, ray_path).await?;
         }
     }
 

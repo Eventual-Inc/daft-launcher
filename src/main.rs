@@ -13,6 +13,9 @@ use aws_config::{BehaviorVersion, Region};
 use aws_sdk_ec2::types::InstanceStateName;
 use aws_sdk_ec2::Client;
 use clap::{Parser, Subcommand};
+use comfy_table::{
+    modifiers, presets, Attribute, Cell, CellAlignment, Color, ContentArrangement, Table,
+};
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use tempdir::TempDir;
@@ -567,17 +570,54 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
             };
             assert_is_logged_in_with_aws().await?;
             let instances = get_ray_clusters_from_aws(region).await?;
+            let mut table = Table::default();
+            table
+                .load_preset(presets::UTF8_FULL)
+                .apply_modifier(modifiers::UTF8_ROUND_CORNERS)
+                .apply_modifier(modifiers::UTF8_SOLID_INNER_BORDERS)
+                .set_content_arrangement(ContentArrangement::DynamicFullWidth)
+                .set_header(["Name", "Instance ID", "Status", "IPv4"].map(|header| {
+                    Cell::new(header)
+                        .set_alignment(CellAlignment::Center)
+                        .add_attribute(Attribute::Bold)
+                }));
             for instance in instances.iter().filter(|instance| {
                 if running && instance.state != Some(InstanceStateName::Running) {
                     return false;
                 } else if head && instance.node_type != NodeType::Head {
                     return false;
                 };
-
                 true
             }) {
-                println!("{instance:?}");
+                let status = instance.state.as_ref().map_or_else(
+                    || Cell::new("n/a").add_attribute(Attribute::Dim),
+                    |status| {
+                        let cell = Cell::new(status);
+                        match status {
+                            InstanceStateName::Running => cell.fg(Color::Green),
+                            InstanceStateName::Pending => cell.fg(Color::Yellow),
+                            InstanceStateName::ShuttingDown | InstanceStateName::Stopping => {
+                                cell.fg(Color::DarkYellow)
+                            }
+                            InstanceStateName::Stopped | InstanceStateName::Terminated => {
+                                cell.fg(Color::Red)
+                            }
+                            _ => cell,
+                        }
+                    },
+                );
+                let ipv4 = instance
+                    .public_ipv4_address
+                    .as_ref()
+                    .map_or("n/a".into(), ToString::to_string);
+                table.add_row(vec![
+                    Cell::new(instance.regular_name.to_string()).fg(Color::Cyan),
+                    Cell::new(&*instance.instance_id),
+                    status,
+                    Cell::new(ipv4),
+                ]);
             }
+            println!("{table}");
         }
         SubCommand::Stop(ConfigPath { config }) => {
             let (_, ray_path) = create_temp_ray_file()?;

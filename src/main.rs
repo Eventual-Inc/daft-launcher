@@ -43,8 +43,17 @@ enum SubCommand {
     /// Spin up a new cluster.
     Up(ConfigPath),
 
-    /// Spin down a given cluster.
-    Down(ConfigPath),
+    /// Spin down a given cluster and put the nodes to "sleep".
+    ///
+    /// This will *not* delete the nodes, only stop them. The nodes can be
+    /// restarted at a future time.
+    Stop(ConfigPath),
+
+    /// Spin down a given cluster and fully terminate the nodes.
+    ///
+    /// This *will* delete the nodes; they will not be accessible from here on
+    /// out.
+    Kill(ConfigPath),
 }
 
 #[derive(Debug, Parser, Clone, PartialEq, Eq)]
@@ -179,6 +188,8 @@ struct RayConfig {
 struct RayProvider {
     r#type: StrRef,
     region: StrRef,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cache_stopped_nodes: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq, Eq)]
@@ -220,8 +231,29 @@ struct RayResources {
     cpu: usize,
 }
 
-async fn read_and_convert(daft_config_path: &Path) -> anyhow::Result<RayConfig> {
-    fn convert(daft_config: DaftConfig) -> anyhow::Result<RayConfig> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TeardownBehaviour {
+    Stop,
+    Kill,
+}
+
+impl TeardownBehaviour {
+    fn to_cache_stopped_nodes(self) -> bool {
+        match self {
+            Self::Stop => true,
+            Self::Kill => false,
+        }
+    }
+}
+
+async fn read_and_convert(
+    daft_config_path: &Path,
+    teardown_behaviour: Option<TeardownBehaviour>,
+) -> anyhow::Result<RayConfig> {
+    fn convert(
+        daft_config: DaftConfig,
+        teardown_behaviour: Option<TeardownBehaviour>,
+    ) -> anyhow::Result<RayConfig> {
         let key_name = daft_config
             .setup
             .ssh_private_key
@@ -252,6 +284,8 @@ async fn read_and_convert(daft_config_path: &Path) -> anyhow::Result<RayConfig> 
             provider: RayProvider {
                 r#type: "aws".into(),
                 region: "us-west-2".into(),
+                cache_stopped_nodes: teardown_behaviour
+                    .map(TeardownBehaviour::to_cache_stopped_nodes),
             },
             auth: RayAuth {
                 ssh_user: daft_config.setup.ssh_user,
@@ -316,7 +350,7 @@ async fn read_and_convert(daft_config_path: &Path) -> anyhow::Result<RayConfig> 
             }
         })?;
     let daft_config = toml::from_str::<DaftConfig>(&contents)?;
-    let ray_config = convert(daft_config)?;
+    let ray_config = convert(daft_config, teardown_behaviour)?;
 
     Ok(ray_config)
 }
@@ -345,11 +379,12 @@ impl SpinDirection {
 async fn manage_cluster(
     daft_config_path: &Path,
     spin_direction: SpinDirection,
+    teardown_behaviour: Option<TeardownBehaviour>,
 ) -> anyhow::Result<()> {
     let temp_dir = TempDir::new("daft-launcher")?;
     let mut ray_path = temp_dir.path().to_owned();
     ray_path.push("ray.yaml");
-    let ray_config = read_and_convert(daft_config_path).await?;
+    let ray_config = read_and_convert(daft_config_path, teardown_behaviour).await?;
     write_ray_config(ray_config, &ray_path).await?;
     let _ = Command::new("ray")
         .arg(spin_direction.as_str())
@@ -373,22 +408,21 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
             fs::write(path, contents).await?;
         }
         SubCommand::Check(ConfigPath { config: path }) => {
-            let _ = read_and_convert(&path).await?;
+            let _ = read_and_convert(&path, None).await?;
         }
         SubCommand::Export(ConfigPath { config: path }) => {
-            let ray_path = PathBuf::from(".ray.yaml");
-            #[cfg(not(test))]
-            if ray_path.exists() {
-                bail!("The file {ray_path:?} already exists; delete it before writing new configurations to that file");
-            }
-            let ray_config = read_and_convert(&path).await?;
-            write_ray_config(ray_config, ray_path).await?;
+            let ray_config = read_and_convert(&path, None).await?;
+            let ray_config_str = serde_yaml::to_string(&ray_config)?;
+            println!("{ray_config_str}");
         }
         SubCommand::Up(ConfigPath { config: path }) => {
-            manage_cluster(&path, SpinDirection::Up).await?
+            manage_cluster(&path, SpinDirection::Up, None).await?
         }
-        SubCommand::Down(ConfigPath { config: path }) => {
-            manage_cluster(&path, SpinDirection::Down).await?
+        SubCommand::Stop(ConfigPath { config: path }) => {
+            manage_cluster(&path, SpinDirection::Down, Some(TeardownBehaviour::Stop)).await?
+        }
+        SubCommand::Kill(ConfigPath { config: path }) => {
+            manage_cluster(&path, SpinDirection::Down, Some(TeardownBehaviour::Kill)).await?
         }
     }
 

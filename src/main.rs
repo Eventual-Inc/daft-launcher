@@ -1,12 +1,17 @@
 use std::{
     collections::HashMap,
     io::{Error, ErrorKind},
+    net::Ipv4Addr,
     path::{Path, PathBuf},
+    str::FromStr,
     sync::Arc,
 };
 
 #[cfg(not(test))]
 use anyhow::bail;
+use aws_config::{BehaviorVersion, Region};
+use aws_sdk_ec2::types::InstanceStateName;
+use aws_sdk_ec2::Client;
 use clap::{Parser, Subcommand};
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
@@ -46,7 +51,7 @@ enum SubCommand {
     /// List all Ray clusters in your AWS account.
     ///
     /// This will *only* list clusters that have been spun up by Ray.
-    List,
+    List(List),
 
     /// Spin down a given cluster and put the nodes to "sleep".
     ///
@@ -66,6 +71,21 @@ struct Init {
     /// The path at which to create the config file.
     #[arg(default_value = ".daft.toml")]
     path: PathBuf,
+}
+
+#[derive(Debug, Parser, Clone, PartialEq, Eq)]
+struct List {
+    /// The region which to list all the available clusters for.
+    #[arg(default_value = "us-west-2")]
+    region: StrRef,
+
+    /// Only list the head nodes.
+    #[arg(long)]
+    head: bool,
+
+    /// Only list the running instances.
+    #[arg(long)]
+    running: bool,
 }
 
 #[derive(Debug, Parser, Clone, PartialEq, Eq)]
@@ -403,11 +423,90 @@ async fn run_ray_command(
     Ok(())
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct AwsInstance;
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AwsInstance {
+    instance_id: StrRef,
+    regular_name: StrRef,
+    ray_name: StrRef,
+    key_pair_name: Option<StrRef>,
+    public_ipv4_address: Option<Ipv4Addr>,
+    state: Option<InstanceStateName>,
+    node_type: NodeType,
+}
 
-async fn get_ray_clusters_from_aws() -> anyhow::Result<Vec<AwsInstance>> {
-    Ok(vec![])
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NodeType {
+    Head,
+    Worker,
+}
+
+impl FromStr for NodeType {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "head" => Ok(NodeType::Head),
+            "worker" => Ok(NodeType::Worker),
+            _ => anyhow::bail!("Unrecognized node type: {}", s),
+        }
+    }
+}
+
+async fn get_ray_clusters_from_aws(region: StrRef) -> anyhow::Result<Vec<AwsInstance>> {
+    let region = Region::new(region.to_string());
+    let sdk_config = aws_config::defaults(BehaviorVersion::latest())
+        .region(region)
+        .load()
+        .await;
+    let client = Client::new(&sdk_config);
+    let instances = client.describe_instances().send().await?;
+    let reservations = instances.reservations.unwrap_or_default();
+    let instance_states = reservations
+        .iter()
+        .filter_map(|reservation| reservation.instances.as_ref())
+        .flatten()
+        .filter_map(|instance| {
+            instance.tags.as_ref().map(|tags| {
+                (
+                    instance,
+                    tags.iter().filter_map(|tag| tag.key().zip(tag.value())),
+                )
+            })
+        })
+        .filter_map(|(instance, tags)| {
+            let mut ray_name = None;
+            let mut regular_name = None;
+            let mut node_type = None;
+            for (key, value) in tags {
+                if key == "Name" {
+                    ray_name = Some(value.into());
+                } else if key == "ray-cluster-name" {
+                    regular_name = Some(value.into());
+                } else if key == "ray-node-type" {
+                    node_type = value.parse().ok();
+                }
+            }
+            let ray_name = ray_name?;
+            let regular_name = regular_name?;
+            let instance_id = instance.instance_id.as_deref()?.into();
+            let node_type = node_type?;
+            Some(AwsInstance {
+                instance_id,
+                regular_name,
+                ray_name,
+                key_pair_name: instance.key_name().map(Into::into),
+                public_ipv4_address: instance
+                    .public_ip_address()
+                    .and_then(|ip_addr| ip_addr.parse().ok()),
+                state: instance
+                    .state()
+                    .and_then(|instance_state| instance_state.name())
+                    .cloned(),
+                node_type,
+            })
+        })
+        .collect();
+    Ok(instance_states)
 }
 
 async fn assert_is_logged_in_with_aws() -> anyhow::Result<()> {
@@ -449,10 +548,22 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
             assert_is_logged_in_with_aws().await?;
             run_ray_command(SpinDirection::Up, ray_path).await?;
         }
-        SubCommand::List => {
+        SubCommand::List(List {
+            region,
+            head,
+            running,
+        }) => {
             assert_is_logged_in_with_aws().await?;
-            let instances = get_ray_clusters_from_aws().await?;
-            for instance in instances {
+            let instances = get_ray_clusters_from_aws(region).await?;
+            for instance in instances.iter().filter(|instance| {
+                if running && instance.state != Some(InstanceStateName::Running) {
+                    return false;
+                } else if head && instance.node_type != NodeType::Head {
+                    return false;
+                };
+
+                true
+            }) {
                 println!("{instance:?}");
             }
         }

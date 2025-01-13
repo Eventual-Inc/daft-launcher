@@ -79,8 +79,8 @@ struct List {
     config_path: ConfigPath,
 
     /// The region which to list all the available clusters for.
-    #[arg(default_value = "us-west-2")]
-    region: StrRef,
+    #[arg(long)]
+    region: Option<StrRef>,
 
     /// Only list the head nodes.
     #[arg(long)]
@@ -557,11 +557,13 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
             head,
             running,
         }) => {
-            let region = if config_path.config.exists() {
+            let region = if let Some(region) = region {
+                region
+            } else if config_path.config.exists() {
                 let (daft_config, _) = read_and_convert(&config_path.config, None).await?;
                 daft_config.setup.region
             } else {
-                region
+                "us-west-2".into()
             };
             assert_is_logged_in_with_aws().await?;
             let instances = get_ray_clusters_from_aws(region).await?;

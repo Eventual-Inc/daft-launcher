@@ -188,7 +188,8 @@ struct RayConfig {
 struct RayProvider {
     r#type: StrRef,
     region: StrRef,
-    cache_stopped_nodes: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cache_stopped_nodes: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq, Eq)]
@@ -236,6 +237,15 @@ enum TeardownBehaviour {
     Kill,
 }
 
+impl TeardownBehaviour {
+    fn to_cache_stopped_nodes(self) -> bool {
+        match self {
+            Self::Stop => true,
+            Self::Kill => false,
+        }
+    }
+}
+
 async fn read_and_convert(
     daft_config_path: &Path,
     teardown_behaviour: Option<TeardownBehaviour>,
@@ -274,10 +284,8 @@ async fn read_and_convert(
             provider: RayProvider {
                 r#type: "aws".into(),
                 region: "us-west-2".into(),
-                cache_stopped_nodes: match teardown_behaviour {
-                    Some(TeardownBehaviour::Stop) | None => true,
-                    Some(TeardownBehaviour::Kill) => false,
-                },
+                cache_stopped_nodes: teardown_behaviour
+                    .map(TeardownBehaviour::to_cache_stopped_nodes),
             },
             auth: RayAuth {
                 ssh_user: daft_config.setup.ssh_user,
@@ -403,13 +411,9 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
             let _ = read_and_convert(&path, None).await?;
         }
         SubCommand::Export(ConfigPath { config: path }) => {
-            let ray_path = PathBuf::from(".ray.yaml");
-            #[cfg(not(test))]
-            if ray_path.exists() {
-                bail!("The file {ray_path:?} already exists; delete it before writing new configurations to that file");
-            }
             let ray_config = read_and_convert(&path, None).await?;
-            write_ray_config(ray_config, ray_path).await?;
+            let ray_config_str = serde_yaml::to_string(&ray_config)?;
+            println!("{ray_config_str}");
         }
         SubCommand::Up(ConfigPath { config: path }) => {
             manage_cluster(&path, SpinDirection::Up, None).await?

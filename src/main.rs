@@ -3,8 +3,10 @@ use std::{
     io::{Error, ErrorKind},
     net::Ipv4Addr,
     path::{Path, PathBuf},
+    process::Stdio,
     str::FromStr,
     sync::Arc,
+    time::Duration,
 };
 
 #[cfg(not(test))]
@@ -19,7 +21,12 @@ use comfy_table::{
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use tempdir::TempDir;
-use tokio::{fs, process::Command};
+use tokio::{
+    fs,
+    io::{AsyncReadExt, AsyncWriteExt, BufReader},
+    process::{Child, Command},
+    time::sleep,
+};
 
 type StrRef = Arc<str>;
 type PathRef = Arc<Path>;
@@ -102,6 +109,7 @@ struct Submit {
     config_path: ConfigPath,
 
     /// The name of the job to run.
+    #[arg(long)]
     job_name: StrRef,
 }
 
@@ -113,6 +121,7 @@ struct ConfigPath {
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 struct DaftConfig {
     setup: DaftSetup,
     #[serde(default)]
@@ -152,7 +161,7 @@ where
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 struct DaftSetup {
     name: StrRef,
     #[serde(deserialize_with = "parse_version_req")]
@@ -168,8 +177,7 @@ struct DaftSetup {
     instance_type: StrRef,
     #[serde(default = "default_image_id")]
     image_id: StrRef,
-    #[serde(default)]
-    iam_instance_profile: IamInstanceProfile,
+    iam_instance_profile_name: Option<StrRef>,
     #[serde(default)]
     dependencies: Vec<StrRef>,
 }
@@ -229,7 +237,9 @@ where
     let version_req = raw
         .parse::<VersionReq>()
         .map_err(serde::de::Error::custom)?;
-    let current_version = env!("CARGO_PKG_VERSION").parse::<Version>().unwrap();
+    let current_version = env!("CARGO_PKG_VERSION")
+        .parse::<Version>()
+        .expect("CARGO_PKG_VERSION must exist");
     if version_req.matches(&current_version) {
         Ok(version_req)
     } else {
@@ -238,12 +248,13 @@ where
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 enum DaftProvider {
     Aws,
 }
 
 #[derive(Default, Debug, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 struct DaftRun {
     #[serde(default)]
     pre_setup_commands: Vec<StrRef>,
@@ -299,13 +310,10 @@ struct RayNodeConfig {
     iam_instance_profile: Option<IamInstanceProfile>,
 }
 
-#[derive(Default, Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "PascalCase")]
 struct IamInstanceProfile {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    name: Option<StrRef>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    arn: Option<StrRef>,
+    name: StrRef,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq, Eq)]
@@ -330,16 +338,11 @@ async fn read_and_convert(
             .to_str()
             .ok_or_else(|| anyhow::anyhow!(""))?
             .into();
-        let iam_instance_profile = if daft_config.setup.iam_instance_profile.name.is_some()
-            || daft_config.setup.iam_instance_profile.arn.is_some()
-        {
-            Some(IamInstanceProfile {
-                name: daft_config.setup.iam_instance_profile.name.clone(),
-                arn: daft_config.setup.iam_instance_profile.arn.clone(),
-            })
-        } else {
-            None
-        };
+        let iam_instance_profile = daft_config
+            .setup
+            .iam_instance_profile_name
+            .clone()
+            .map(|name| IamInstanceProfile { name });
         let node_config = RayNodeConfig {
             key_name,
             instance_type: daft_config.setup.instance_type.clone(),
@@ -467,7 +470,7 @@ fn create_temp_ray_file() -> anyhow::Result<(TempDir, PathRef)> {
     Ok((temp_dir, ray_path))
 }
 
-async fn run_ray_command(
+async fn run_ray_up_or_down_command(
     spin_direction: SpinDirection,
     ray_path: impl AsRef<Path>,
 ) -> anyhow::Result<()> {
@@ -567,6 +570,57 @@ async fn get_ray_clusters_from_aws(region: StrRef) -> anyhow::Result<Vec<AwsInst
     Ok(instance_states)
 }
 
+fn print_instances(instances: &[AwsInstance], head: bool, running: bool) {
+    let mut table = Table::default();
+    table
+        .load_preset(presets::UTF8_FULL)
+        .apply_modifier(modifiers::UTF8_ROUND_CORNERS)
+        .apply_modifier(modifiers::UTF8_SOLID_INNER_BORDERS)
+        .set_content_arrangement(ContentArrangement::DynamicFullWidth)
+        .set_header(["Name", "Instance ID", "Status", "IPv4"].map(|header| {
+            Cell::new(header)
+                .set_alignment(CellAlignment::Center)
+                .add_attribute(Attribute::Bold)
+        }));
+    for instance in instances.iter().filter(|instance| {
+        if head && instance.node_type != NodeType::Head {
+            return false;
+        } else if running && instance.state != Some(InstanceStateName::Running) {
+            return false;
+        };
+        true
+    }) {
+        let status = instance.state.as_ref().map_or_else(
+            || Cell::new("n/a").add_attribute(Attribute::Dim),
+            |status| {
+                let cell = Cell::new(status);
+                match status {
+                    InstanceStateName::Running => cell.fg(Color::Green),
+                    InstanceStateName::Pending => cell.fg(Color::Yellow),
+                    InstanceStateName::ShuttingDown | InstanceStateName::Stopping => {
+                        cell.fg(Color::DarkYellow)
+                    }
+                    InstanceStateName::Stopped | InstanceStateName::Terminated => {
+                        cell.fg(Color::Red)
+                    }
+                    _ => cell,
+                }
+            },
+        );
+        let ipv4 = instance
+            .public_ipv4_address
+            .as_ref()
+            .map_or("n/a".into(), ToString::to_string);
+        table.add_row(vec![
+            Cell::new(instance.regular_name.to_string()).fg(Color::Cyan),
+            Cell::new(&*instance.instance_id),
+            status,
+            Cell::new(ipv4),
+        ]);
+    }
+    println!("{table}");
+}
+
 async fn assert_is_logged_in_with_aws() -> anyhow::Result<()> {
     let sdk_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
         .region(aws_config::meta::region::RegionProviderChain::default_provider())
@@ -578,6 +632,68 @@ async fn assert_is_logged_in_with_aws() -> anyhow::Result<()> {
     } else {
         anyhow::bail!("You are not logged in with the AWS cli tool; please authenticate with it first before re-running")
     }
+}
+
+async fn get_region(region: Option<StrRef>, config: impl AsRef<Path>) -> anyhow::Result<StrRef> {
+    let config = config.as_ref();
+    Ok(if let Some(region) = region {
+        region
+    } else if config.exists() {
+        let (daft_config, _) = read_and_convert(&config, None).await?;
+        daft_config.setup.region
+    } else {
+        "us-west-2".into()
+    })
+}
+
+async fn start_ssh_port_forward(
+    user: &str,
+    addr: Ipv4Addr,
+    ssh_private_key: &Path,
+) -> anyhow::Result<Child> {
+    let child = Command::new("ssh")
+        .arg("-N")
+        .arg("-i")
+        .arg(ssh_private_key)
+        .arg("-L")
+        .arg("8265:localhost:8265")
+        .arg(dbg!(format!("{user}@{addr}")))
+        .arg("-vvv")
+        .kill_on_drop(true)
+        .spawn()?;
+    Ok(child)
+}
+
+async fn get_head_node_ip(ray_path: impl AsRef<Path>) -> anyhow::Result<Ipv4Addr> {
+    let mut ray_command = Command::new("ray")
+        .arg("get-head-ip")
+        .arg(ray_path.as_ref())
+        .stdout(Stdio::piped())
+        .spawn()?;
+
+    let mut tail_command = Command::new("tail")
+        .args(["-n", "1"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()?;
+
+    let mut writer = tail_command.stdin.take().expect("stdin must exist");
+
+    tokio::spawn(async move {
+        let mut reader = BufReader::new(ray_command.stdout.take().expect("stdout must exist"));
+        let mut buffer = Vec::new();
+        reader.read_to_end(&mut buffer).await?;
+        writer.write_all(&buffer).await?;
+        Ok::<_, anyhow::Error>(())
+    });
+    let output = tail_command.wait_with_output().await?;
+    if !output.status.success() {
+        anyhow::bail!("Failed to fetch ip address of head node");
+    };
+    let addr = String::from_utf8_lossy(&output.stdout)
+        .trim()
+        .parse::<Ipv4Addr>()?;
+    Ok(addr)
 }
 
 async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
@@ -600,11 +716,12 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
             println!("{ray_config_str}");
         }
         SubCommand::Up(ConfigPath { config }) => {
-            let (_temp_dir, ray_path) = create_temp_ray_file()?;
             let (_, ray_config) = read_and_convert(&config, Some(TeardownBehaviour::Stop)).await?;
-            write_ray_config(ray_config, &ray_path).await?;
             assert_is_logged_in_with_aws().await?;
-            run_ray_command(SpinDirection::Up, ray_path).await?;
+
+            let (_temp_dir, ray_path) = create_temp_ray_file()?;
+            write_ray_config(ray_config, &ray_path).await?;
+            run_ray_up_or_down_command(SpinDirection::Up, ray_path).await?;
         }
         SubCommand::List(List {
             config_path,
@@ -612,88 +729,69 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
             head,
             running,
         }) => {
-            let region = if let Some(region) = region {
-                region
-            } else if config_path.config.exists() {
-                let (daft_config, _) = read_and_convert(&config_path.config, None).await?;
-                daft_config.setup.region
-            } else {
-                "us-west-2".into()
-            };
             assert_is_logged_in_with_aws().await?;
+
+            let region = get_region(region, &config_path.config).await?;
             let instances = get_ray_clusters_from_aws(region).await?;
-            let mut table = Table::default();
-            table
-                .load_preset(presets::UTF8_FULL)
-                .apply_modifier(modifiers::UTF8_ROUND_CORNERS)
-                .apply_modifier(modifiers::UTF8_SOLID_INNER_BORDERS)
-                .set_content_arrangement(ContentArrangement::DynamicFullWidth)
-                .set_header(["Name", "Instance ID", "Status", "IPv4"].map(|header| {
-                    Cell::new(header)
-                        .set_alignment(CellAlignment::Center)
-                        .add_attribute(Attribute::Bold)
-                }));
-            for instance in instances.iter().filter(|instance| {
-                if running && instance.state != Some(InstanceStateName::Running) {
-                    return false;
-                } else if head && instance.node_type != NodeType::Head {
-                    return false;
-                };
-                true
-            }) {
-                let status = instance.state.as_ref().map_or_else(
-                    || Cell::new("n/a").add_attribute(Attribute::Dim),
-                    |status| {
-                        let cell = Cell::new(status);
-                        match status {
-                            InstanceStateName::Running => cell.fg(Color::Green),
-                            InstanceStateName::Pending => cell.fg(Color::Yellow),
-                            InstanceStateName::ShuttingDown | InstanceStateName::Stopping => {
-                                cell.fg(Color::DarkYellow)
-                            }
-                            InstanceStateName::Stopped | InstanceStateName::Terminated => {
-                                cell.fg(Color::Red)
-                            }
-                            _ => cell,
-                        }
-                    },
-                );
-                let ipv4 = instance
-                    .public_ipv4_address
-                    .as_ref()
-                    .map_or("n/a".into(), ToString::to_string);
-                table.add_row(vec![
-                    Cell::new(instance.regular_name.to_string()).fg(Color::Cyan),
-                    Cell::new(&*instance.instance_id),
-                    status,
-                    Cell::new(ipv4),
-                ]);
-            }
-            println!("{table}");
+            print_instances(&instances, head, running);
         }
         SubCommand::Submit(Submit {
             config_path,
             job_name,
         }) => {
-            let (_temp_dir, ray_path) = create_temp_ray_file()?;
-            let (_, ray_config) = read_and_convert(&config_path.config, None).await?;
-            write_ray_config(ray_config, &ray_path).await?;
+            let (daft_config, ray_config) = read_and_convert(&config_path.config, None).await?;
             assert_is_logged_in_with_aws().await?;
-            todo!()
+            let daft_job = daft_config
+                .jobs
+                .get(&job_name)
+                .ok_or_else(|| anyhow::anyhow!("A job with the name {job_name} was not found"))?;
+
+            let (_temp_dir, ray_path) = create_temp_ray_file()?;
+            write_ray_config(ray_config, &ray_path).await?;
+            let addr = get_head_node_ip(ray_path).await?;
+            let _child = start_ssh_port_forward(
+                daft_config.setup.ssh_user.as_ref(),
+                addr,
+                daft_config.setup.ssh_private_key.as_ref(),
+            )
+            .await?;
+
+            // Wait 500ms for the ssh port-forward to establish.
+            //
+            // This is a little hacky; a better solution would be to enable verbose ssh-logging and
+            // parse the stdout output to observe when the port-forward is properly established.
+            // However, this janky approach suffices as well...
+            sleep(Duration::from_millis(500)).await;
+
+            let exit_status = Command::new("ray")
+                .env("PYTHONUNBUFFERED", "1")
+                .args(["job", "submit", "--address", "http://localhost:8265"])
+                .arg("--working-dir")
+                .arg(daft_job.working_dir.as_ref())
+                .arg("--")
+                .args(daft_job.command.split(' '))
+                .spawn()?
+                .wait()
+                .await?;
+            if !exit_status.success() {
+                anyhow::bail!("Failed to submit job to the ray cluster");
+            };
         }
         SubCommand::Stop(ConfigPath { config }) => {
-            let (_temp_dir, ray_path) = create_temp_ray_file()?;
             let (_, ray_config) = read_and_convert(&config, Some(TeardownBehaviour::Stop)).await?;
-            write_ray_config(ray_config, &ray_path).await?;
             assert_is_logged_in_with_aws().await?;
-            run_ray_command(SpinDirection::Down, ray_path).await?;
+
+            let (_temp_dir, ray_path) = create_temp_ray_file()?;
+            write_ray_config(ray_config, &ray_path).await?;
+            run_ray_up_or_down_command(SpinDirection::Down, ray_path).await?;
         }
         SubCommand::Kill(ConfigPath { config }) => {
-            let (_temp_dir, ray_path) = create_temp_ray_file()?;
             let (_, ray_config) = read_and_convert(&config, Some(TeardownBehaviour::Kill)).await?;
-            write_ray_config(ray_config, &ray_path).await?;
             assert_is_logged_in_with_aws().await?;
-            run_ray_command(SpinDirection::Down, ray_path).await?;
+
+            let (_temp_dir, ray_path) = create_temp_ray_file()?;
+            write_ray_config(ray_config, &ray_path).await?;
+            run_ray_up_or_down_command(SpinDirection::Down, ray_path).await?;
         }
     }
 

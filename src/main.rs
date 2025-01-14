@@ -56,6 +56,8 @@ enum SubCommand {
     /// This will *only* list clusters that have been spun up by Ray.
     List(List),
 
+    Submit(Submit),
+
     /// Spin down a given cluster and put the nodes to "sleep".
     ///
     /// This will *not* delete the nodes, only stop them. The nodes can be
@@ -92,6 +94,15 @@ struct List {
     /// Only list the running instances.
     #[arg(long)]
     running: bool,
+}
+
+#[derive(Debug, Parser, Clone, PartialEq, Eq)]
+struct Submit {
+    #[clap(flatten)]
+    config_path: ConfigPath,
+
+    /// The name of the job to run.
+    job_name: StrRef,
 }
 
 #[derive(Debug, Parser, Clone, PartialEq, Eq)]
@@ -659,6 +670,16 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
                 ]);
             }
             println!("{table}");
+        }
+        SubCommand::Submit(Submit {
+            config_path,
+            job_name,
+        }) => {
+            let (_temp_dir, ray_path) = create_temp_ray_file()?;
+            let (_, ray_config) = read_and_convert(&config_path.config, None).await?;
+            write_ray_config(ray_config, &ray_path).await?;
+            assert_is_logged_in_with_aws().await?;
+            todo!()
         }
         SubCommand::Stop(ConfigPath { config }) => {
             let (_, ray_path) = create_temp_ray_file()?;

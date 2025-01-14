@@ -106,6 +106,38 @@ struct DaftConfig {
     setup: DaftSetup,
     #[serde(default)]
     run: DaftRun,
+    #[serde(rename = "job", deserialize_with = "parse_jobs")]
+    jobs: HashMap<StrRef, DaftJob>,
+}
+
+fn parse_jobs<'de, D>(deserializer: D) -> Result<HashMap<StrRef, DaftJob>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
+    #[serde(rename_all = "kebab-case")]
+    struct Job {
+        name: StrRef,
+        command: StrRef,
+        working_dir: PathRef,
+    }
+
+    let jobs: Vec<Job> = Deserialize::deserialize(deserializer)?;
+    let jobs = jobs
+        .into_iter()
+        .map(|job| {
+            let working_dir = expand_and_check_path(job.working_dir)?;
+            Ok((
+                job.name,
+                DaftJob {
+                    command: job.command,
+                    working_dir,
+                },
+            ))
+        })
+        .collect::<anyhow::Result<_>>()
+        .map_err(serde::de::Error::custom)?;
+    Ok(jobs)
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
@@ -136,6 +168,11 @@ where
     D: serde::Deserializer<'de>,
 {
     let path: PathRef = Deserialize::deserialize(deserializer)?;
+    let path = expand_and_check_path(path).map_err(serde::de::Error::custom)?;
+    Ok(path)
+}
+
+fn expand_and_check_path(path: PathRef) -> anyhow::Result<PathRef> {
     let path = if path.starts_with("~") {
         let mut home = PathBuf::from(env!("HOME"));
         for segment in path.into_iter().skip(1) {
@@ -156,9 +193,7 @@ where
         if path.exists() {
             Ok(path)
         } else {
-            Err(serde::de::Error::custom(format!(
-                "The path, {path:?}, does not exist"
-            )))
+            anyhow::bail!("The path, {path:?}, does not exist")
         }
     }
 }
@@ -203,6 +238,12 @@ struct DaftRun {
     pre_setup_commands: Vec<StrRef>,
     #[serde(default)]
     post_setup_commands: Vec<StrRef>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DaftJob {
+    command: StrRef,
+    working_dir: PathRef,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq, Eq)]

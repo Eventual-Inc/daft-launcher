@@ -25,8 +25,8 @@ use tokio::{
     fs,
     io::{AsyncReadExt, AsyncWriteExt, BufReader},
     process::{Child, Command},
-    time::sleep,
 };
+use tokio::{io::AsyncBufReadExt, time::timeout};
 
 type StrRef = Arc<str>;
 type PathRef = Arc<Path>;
@@ -656,8 +656,9 @@ async fn start_ssh_port_forward(
         .arg(ssh_private_key)
         .arg("-L")
         .arg("8265:localhost:8265")
-        .arg(dbg!(format!("{user}@{addr}")))
-        .arg("-vvv")
+        .arg(format!("{user}@{addr}"))
+        .arg("-v")
+        .stderr(Stdio::piped())
         .kill_on_drop(true)
         .spawn()?;
     Ok(child)
@@ -748,19 +749,36 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
             let (_temp_dir, ray_path) = create_temp_ray_file()?;
             write_ray_config(ray_config, &ray_path).await?;
             let addr = get_head_node_ip(ray_path).await?;
-            let _child = start_ssh_port_forward(
+            let mut child = start_ssh_port_forward(
                 daft_config.setup.ssh_user.as_ref(),
                 addr,
                 daft_config.setup.ssh_private_key.as_ref(),
             )
             .await?;
 
-            // Wait 500ms for the ssh port-forward to establish.
+            // We wait for the ssh port-forwarding process to write a specific string to the
+            // output.
             //
-            // This is a little hacky; a better solution would be to enable verbose ssh-logging and
-            // parse the stdout output to observe when the port-forward is properly established.
-            // However, this janky approach suffices as well...
-            sleep(Duration::from_millis(500)).await;
+            // This is a little hacky (and maybe even incorrect across platforms) since we are just
+            // parsing the output and observing if a specific string has been printed. It may be
+            // incorrect across platforms because the SSH standard does *not* specify a standard
+            // "success-message" to printout if the ssh port-forward was successful.
+            timeout(Duration::from_secs(5), async move {
+                let mut lines =
+                    BufReader::new(child.stderr.take().expect("stderr must exist")).lines();
+                loop {
+                    let Some(line) = lines.next_line().await? else {
+                        anyhow::bail!("Failed to establish ssh port-forward to {addr}");
+                    };
+                    if line.starts_with(format!("Authenticated to {addr}").as_str()) {
+                        break Ok(());
+                    }
+                }
+            })
+            .await
+            .map_err(|_| {
+                anyhow::anyhow!("Establishing an ssh port-forward to {addr} timed out")
+            })??;
 
             let exit_status = Command::new("ray")
                 .env("PYTHONUNBUFFERED", "1")

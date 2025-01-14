@@ -600,7 +600,7 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
             println!("{ray_config_str}");
         }
         SubCommand::Up(ConfigPath { config }) => {
-            let (_, ray_path) = create_temp_ray_file()?;
+            let (_temp_dir, ray_path) = create_temp_ray_file()?;
             let (_, ray_config) = read_and_convert(&config, Some(TeardownBehaviour::Stop)).await?;
             write_ray_config(ray_config, &ray_path).await?;
             assert_is_logged_in_with_aws().await?;
@@ -682,14 +682,14 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
             todo!()
         }
         SubCommand::Stop(ConfigPath { config }) => {
-            let (_, ray_path) = create_temp_ray_file()?;
+            let (_temp_dir, ray_path) = create_temp_ray_file()?;
             let (_, ray_config) = read_and_convert(&config, Some(TeardownBehaviour::Stop)).await?;
             write_ray_config(ray_config, &ray_path).await?;
             assert_is_logged_in_with_aws().await?;
             run_ray_command(SpinDirection::Down, ray_path).await?;
         }
         SubCommand::Kill(ConfigPath { config }) => {
-            let (_, ray_path) = create_temp_ray_file()?;
+            let (_temp_dir, ray_path) = create_temp_ray_file()?;
             let (_, ray_config) = read_and_convert(&config, Some(TeardownBehaviour::Kill)).await?;
             write_ray_config(ray_config, &ray_path).await?;
             assert_is_logged_in_with_aws().await?;

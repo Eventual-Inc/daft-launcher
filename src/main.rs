@@ -105,12 +105,11 @@ struct List {
 
 #[derive(Debug, Parser, Clone, PartialEq, Eq)]
 struct Submit {
+    /// The name of the job to run.
+    job_name: StrRef,
+
     #[clap(flatten)]
     config_path: ConfigPath,
-
-    /// The name of the job to run.
-    #[arg(long)]
-    job_name: StrRef,
 }
 
 #[derive(Debug, Parser, Clone, PartialEq, Eq)]

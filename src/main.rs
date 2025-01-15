@@ -72,6 +72,9 @@ enum SubCommand {
     /// Ray cluster.
     Connect(Connect),
 
+    /// SSH into the head of the remote Ray cluster.
+    Ssh(ConfigPath),
+
     /// Submit a SQL query string to the Ray cluster.
     ///
     /// This is executed using Daft's SQL API support.
@@ -720,6 +723,25 @@ async fn get_head_node_ip(ray_path: impl AsRef<Path>) -> anyhow::Result<Ipv4Addr
     Ok(addr)
 }
 
+async fn ssh(ray_path: impl AsRef<Path>, daft_config: &DaftConfig) -> anyhow::Result<()> {
+    let user = daft_config.setup.ssh_user.as_ref();
+    let addr = get_head_node_ip(ray_path).await?;
+    let exit_status = Command::new("ssh")
+        .arg("-i")
+        .arg(daft_config.setup.ssh_private_key.as_ref())
+        .arg(format!("{user}@{addr}"))
+        .kill_on_drop(true)
+        .spawn()?
+        .wait()
+        .await?;
+
+    if exit_status.success() {
+        Ok(())
+    } else {
+        Err(anyhow::anyhow!("Failed to submit job to the ray cluster"))
+    }
+}
+
 async fn establish_ssh_portforward(
     ray_path: impl AsRef<Path>,
     daft_config: &DaftConfig,
@@ -857,6 +879,14 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
                 .await?
                 .wait_with_output()
                 .await?;
+        }
+        SubCommand::Ssh(ConfigPath { config }) => {
+            let (daft_config, ray_config) = read_and_convert(&config, None).await?;
+            assert_is_logged_in_with_aws().await?;
+
+            let (_temp_dir, ray_path) = create_temp_ray_file()?;
+            write_ray_config(ray_config, &ray_path).await?;
+            ssh(ray_path, &daft_config).await?;
         }
         SubCommand::Sql(Sql { sql, config_path }) => {
             let (daft_config, ray_config) = read_and_convert(&config_path.config, None).await?;

@@ -69,6 +69,9 @@ enum SubCommand {
     /// file.
     Submit(Submit),
 
+    /// Establish an ssh port-forward connection from your local machine to the Ray cluster.
+    Connect(Connect),
+
     /// Spin down a given cluster and put the nodes to "sleep".
     ///
     /// This will *not* delete the nodes, only stop them. The nodes can be
@@ -111,6 +114,16 @@ struct List {
 struct Submit {
     /// The name of the job to run.
     job_name: StrRef,
+
+    #[clap(flatten)]
+    config_path: ConfigPath,
+}
+
+#[derive(Debug, Parser, Clone, PartialEq, Eq)]
+struct Connect {
+    /// The local port to connect to the remote Ray cluster.
+    #[arg(long, default_value = "8265")]
+    port: u16,
 
     #[clap(flatten)]
     config_path: ConfigPath,
@@ -649,25 +662,6 @@ async fn get_region(region: Option<StrRef>, config: impl AsRef<Path>) -> anyhow:
     })
 }
 
-async fn start_ssh_port_forward(
-    user: &str,
-    addr: Ipv4Addr,
-    ssh_private_key: &Path,
-) -> anyhow::Result<Child> {
-    let child = Command::new("ssh")
-        .arg("-N")
-        .arg("-i")
-        .arg(ssh_private_key)
-        .arg("-L")
-        .arg("8265:localhost:8265")
-        .arg(format!("{user}@{addr}"))
-        .arg("-v")
-        .stderr(Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()?;
-    Ok(child)
-}
-
 async fn get_head_node_ip(ray_path: impl AsRef<Path>) -> anyhow::Result<Ipv4Addr> {
     let mut ray_command = Command::new("ray")
         .arg("get-head-ip")
@@ -698,6 +692,53 @@ async fn get_head_node_ip(ray_path: impl AsRef<Path>) -> anyhow::Result<Ipv4Addr
         .trim()
         .parse::<Ipv4Addr>()?;
     Ok(addr)
+}
+
+async fn establish_ssh_portforward(
+    ray_path: impl AsRef<Path>,
+    daft_config: &DaftConfig,
+    port: Option<u16>,
+) -> anyhow::Result<Child> {
+    let user = daft_config.setup.ssh_user.as_ref();
+    let addr = get_head_node_ip(ray_path).await?;
+    let port = port.unwrap_or(8265);
+    let mut child = Command::new("ssh")
+        .arg("-N")
+        .arg("-i")
+        .arg(daft_config.setup.ssh_private_key.as_ref())
+        .arg("-L")
+        .arg(format!("{port}:localhost:8265"))
+        .arg(format!("{user}@{addr}"))
+        .arg("-v")
+        .stderr(Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()?;
+
+    // We wait for the ssh port-forwarding process to write a specific string to the
+    // output.
+    //
+    // This is a little hacky (and maybe even incorrect across platforms) since we are just
+    // parsing the output and observing if a specific string has been printed. It may be
+    // incorrect across platforms because the SSH standard does *not* specify a standard
+    // "success-message" to printout if the ssh port-forward was successful.
+    timeout(Duration::from_secs(5), {
+        let stderr = child.stderr.take().expect("stderr must exist");
+        async move {
+            let mut lines = BufReader::new(stderr).lines();
+            loop {
+                let Some(line) = lines.next_line().await? else {
+                    anyhow::bail!("Failed to establish ssh port-forward to {addr}");
+                };
+                if line.starts_with(format!("Authenticated to {addr}").as_str()) {
+                    break Ok(());
+                }
+            }
+        }
+    })
+    .await
+    .map_err(|_| anyhow::anyhow!("Establishing an ssh port-forward to {addr} timed out"))??;
+
+    Ok(child)
 }
 
 async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
@@ -752,37 +793,7 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
 
             let (_temp_dir, ray_path) = create_temp_ray_file()?;
             write_ray_config(ray_config, &ray_path).await?;
-            let addr = get_head_node_ip(ray_path).await?;
-            let mut child = start_ssh_port_forward(
-                daft_config.setup.ssh_user.as_ref(),
-                addr,
-                daft_config.setup.ssh_private_key.as_ref(),
-            )
-            .await?;
-
-            // We wait for the ssh port-forwarding process to write a specific string to the
-            // output.
-            //
-            // This is a little hacky (and maybe even incorrect across platforms) since we are just
-            // parsing the output and observing if a specific string has been printed. It may be
-            // incorrect across platforms because the SSH standard does *not* specify a standard
-            // "success-message" to printout if the ssh port-forward was successful.
-            timeout(Duration::from_secs(5), async move {
-                let mut lines =
-                    BufReader::new(child.stderr.take().expect("stderr must exist")).lines();
-                loop {
-                    let Some(line) = lines.next_line().await? else {
-                        anyhow::bail!("Failed to establish ssh port-forward to {addr}");
-                    };
-                    if line.starts_with(format!("Authenticated to {addr}").as_str()) {
-                        break Ok(());
-                    }
-                }
-            })
-            .await
-            .map_err(|_| {
-                anyhow::anyhow!("Establishing an ssh port-forward to {addr} timed out")
-            })??;
+            let _child = establish_ssh_portforward(ray_path, &daft_config, None).await?;
 
             let exit_status = Command::new("ray")
                 .env("PYTHONUNBUFFERED", "1")
@@ -797,6 +808,17 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
             if !exit_status.success() {
                 anyhow::bail!("Failed to submit job to the ray cluster");
             };
+        }
+        SubCommand::Connect(Connect { port, config_path }) => {
+            let (daft_config, ray_config) = read_and_convert(&config_path.config, None).await?;
+            assert_is_logged_in_with_aws().await?;
+
+            let (_temp_dir, ray_path) = create_temp_ray_file()?;
+            write_ray_config(ray_config, &ray_path).await?;
+            let _ = establish_ssh_portforward(ray_path, &daft_config, Some(port))
+                .await?
+                .wait_with_output()
+                .await?;
         }
         SubCommand::Stop(ConfigPath { config }) => {
             let (_, ray_config) = read_and_convert(&config, Some(TeardownBehaviour::Stop)).await?;

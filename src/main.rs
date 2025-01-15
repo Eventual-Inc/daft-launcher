@@ -52,7 +52,7 @@ enum SubCommand {
     /// Check to make sure the daft-launcher configuration file is correct.
     Check(ConfigPath),
 
-    /// Export the daft-launcher configuration file to a ray configuration file.
+    /// Export the daft-launcher configuration file to a Ray configuration file.
     Export(ConfigPath),
 
     /// Spin up a new cluster.
@@ -63,6 +63,10 @@ enum SubCommand {
     /// This will *only* list clusters that have been spun up by Ray.
     List(List),
 
+    /// Submit a job to the Ray cluster.
+    ///
+    /// The configurations of the job should be placed inside of your daft-launcher configuration
+    /// file.
     Submit(Submit),
 
     /// Spin down a given cluster and put the nodes to "sleep".

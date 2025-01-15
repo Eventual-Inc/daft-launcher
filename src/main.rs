@@ -99,9 +99,6 @@ struct Init {
 
 #[derive(Debug, Parser, Clone, PartialEq, Eq)]
 struct List {
-    #[clap(flatten)]
-    config_path: ConfigPath,
-
     /// The region which to list all the available clusters for.
     #[arg(long)]
     region: Option<StrRef>,
@@ -113,6 +110,9 @@ struct List {
     /// Only list the running instances.
     #[arg(long)]
     running: bool,
+
+    #[clap(flatten)]
+    config_path: ConfigPath,
 }
 
 #[derive(Debug, Parser, Clone, PartialEq, Eq)]
@@ -843,11 +843,7 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
             let _child = establish_ssh_portforward(ray_path, &daft_config, None).await?;
             submit(
                 daft_job.working_dir.as_ref(),
-                daft_job
-                    .command
-                    .as_ref()
-                    .split(' ')
-                    .collect::<Vec<_>>(),
+                daft_job.command.as_ref().split(' ').collect::<Vec<_>>(),
             )
             .await?;
         }
@@ -871,11 +867,7 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
             let _child = establish_ssh_portforward(ray_path, &daft_config, None).await?;
             let (temp_sql_dir, sql_path) = create_temp_file("sql.py")?;
             fs::write(sql_path, include_str!("sql.py")).await?;
-            submit(
-                temp_sql_dir.path(),
-                vec!["python", "sql.py", sql.as_ref()],
-            )
-            .await?;
+            submit(temp_sql_dir.path(), vec!["python", "sql.py", sql.as_ref()]).await?;
         }
         SubCommand::Stop(ConfigPath { config }) => {
             let (_, ray_config) = read_and_convert(&config, Some(TeardownBehaviour::Stop)).await?;

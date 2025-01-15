@@ -349,10 +349,18 @@ async fn read_and_convert(
         let key_name = daft_config
             .setup
             .ssh_private_key
+            .clone()
             .file_stem()
-            .ok_or_else(|| anyhow::anyhow!(""))?
+            .ok_or_else(|| {
+                anyhow::anyhow!(r#"Private key doesn't have a name of the format "name.ext""#)
+            })?
             .to_str()
-            .ok_or_else(|| anyhow::anyhow!(""))?
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "The file {:?} does not a valid UTF-8 name",
+                    daft_config.setup.ssh_private_key,
+                )
+            })?
             .into();
         let iam_instance_profile = daft_config
             .setup

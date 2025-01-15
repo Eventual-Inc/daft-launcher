@@ -11,3 +11,11 @@ build-backend = "maturin"
 
 [tool.maturin]
 bindings = "bin"
+
+[tool.pyright]
+# typeCheckingMode = "off"
+venv = ".venv"
+venvPath = "."
+
+[[tool.pyright.executionEnvironments]]
+root = "examples"

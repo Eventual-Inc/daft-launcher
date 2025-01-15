@@ -12,8 +12,7 @@ use std::{
 #[cfg(not(test))]
 use anyhow::bail;
 use aws_config::{BehaviorVersion, Region};
-use aws_sdk_ec2::types::InstanceStateName;
-use aws_sdk_ec2::Client;
+use aws_sdk_ec2::{types::InstanceStateName, Client};
 use clap::{Parser, Subcommand};
 use comfy_table::{
     modifiers, presets, Attribute, Cell, CellAlignment, Color, ContentArrangement, Table,
@@ -23,10 +22,10 @@ use serde::{Deserialize, Serialize};
 use tempdir::TempDir;
 use tokio::{
     fs,
-    io::{AsyncReadExt, AsyncWriteExt, BufReader},
+    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     process::{Child, Command},
+    time::timeout,
 };
-use tokio::{io::AsyncBufReadExt, time::timeout};
 
 type StrRef = Arc<str>;
 type PathRef = Arc<Path>;
@@ -65,11 +64,12 @@ enum SubCommand {
 
     /// Submit a job to the Ray cluster.
     ///
-    /// The configurations of the job should be placed inside of your daft-launcher configuration
-    /// file.
+    /// The configurations of the job should be placed inside of your
+    /// daft-launcher configuration file.
     Submit(Submit),
 
-    /// Establish an ssh port-forward connection from your local machine to the Ray cluster.
+    /// Establish an ssh port-forward connection from your local machine to the
+    /// Ray cluster.
     Connect(Connect),
 
     /// Spin down a given cluster and put the nodes to "sleep".
@@ -717,10 +717,11 @@ async fn establish_ssh_portforward(
     // We wait for the ssh port-forwarding process to write a specific string to the
     // output.
     //
-    // This is a little hacky (and maybe even incorrect across platforms) since we are just
-    // parsing the output and observing if a specific string has been printed. It may be
-    // incorrect across platforms because the SSH standard does *not* specify a standard
-    // "success-message" to printout if the ssh port-forward was successful.
+    // This is a little hacky (and maybe even incorrect across platforms) since we
+    // are just parsing the output and observing if a specific string has been
+    // printed. It may be incorrect across platforms because the SSH standard
+    // does *not* specify a standard "success-message" to printout if the ssh
+    // port-forward was successful.
     timeout(Duration::from_secs(5), {
         let stderr = child.stderr.take().expect("stderr must exist");
         async move {

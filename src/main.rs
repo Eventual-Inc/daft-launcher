@@ -738,7 +738,7 @@ async fn ssh(ray_path: impl AsRef<Path>, daft_config: &DaftConfig) -> anyhow::Re
     if exit_status.success() {
         Ok(())
     } else {
-        Err(anyhow::anyhow!("Failed to submit job to the ray cluster"))
+        Err(anyhow::anyhow!("Failed to ssh into the ray cluster"))
     }
 }
 

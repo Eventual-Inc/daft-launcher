@@ -551,6 +551,15 @@ pub enum NodeType {
     Worker,
 }
 
+impl NodeType {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Head => "head",
+            Self::Worker => "worker",
+        }
+    }
+}
+
 impl FromStr for NodeType {
     type Err = anyhow::Error;
 
@@ -632,11 +641,13 @@ fn format_table(
         .apply_modifier(modifiers::UTF8_ROUND_CORNERS)
         .apply_modifier(modifiers::UTF8_SOLID_INNER_BORDERS)
         .set_content_arrangement(ContentArrangement::DynamicFullWidth)
-        .set_header(["Name", "Instance ID", "Status", "IPv4"].map(|header| {
-            Cell::new(header)
-                .set_alignment(CellAlignment::Center)
-                .add_attribute(Attribute::Bold)
-        }));
+        .set_header(
+            ["Name", "Instance ID", "Node Type", "Status", "IPv4"].map(|header| {
+                Cell::new(header)
+                    .set_alignment(CellAlignment::Center)
+                    .add_attribute(Attribute::Bold)
+            }),
+        );
     let regex = regex.as_deref().map(Regex::new).transpose()?;
     for instance in instances.iter().filter(|instance| {
         if head && instance.node_type != NodeType::Head {
@@ -674,7 +685,8 @@ fn format_table(
             .map_or("n/a".into(), ToString::to_string);
         table.add_row(vec![
             Cell::new(instance.regular_name.to_string()).fg(Color::Cyan),
-            Cell::new(&*instance.instance_id),
+            Cell::new(instance.instance_id.as_ref()),
+            Cell::new(instance.node_type.as_str()),
             status,
             Cell::new(ipv4),
         ]);

@@ -17,6 +17,7 @@ use clap::{Parser, Subcommand};
 use comfy_table::{
     modifiers, presets, Attribute, Cell, CellAlignment, Color, ContentArrangement, Table,
 };
+use regex::Regex;
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use tempdir::TempDir;
@@ -103,6 +104,9 @@ struct Init {
 
 #[derive(Debug, Parser, Clone, PartialEq, Eq)]
 struct List {
+    /// A regex to filter for the Ray clusters which match the given name.
+    regex: Option<StrRef>,
+
     /// The region which to list all the available clusters for.
     #[arg(long)]
     region: Option<StrRef>,
@@ -616,7 +620,12 @@ async fn get_ray_clusters_from_aws(region: StrRef) -> anyhow::Result<Vec<AwsInst
     Ok(instance_states)
 }
 
-fn print_instances(instances: &[AwsInstance], head: bool, running: bool) {
+fn format_table(
+    instances: &[AwsInstance],
+    regex: Option<StrRef>,
+    head: bool,
+    running: bool,
+) -> anyhow::Result<Table> {
     let mut table = Table::default();
     table
         .load_preset(presets::UTF8_FULL)
@@ -628,11 +637,17 @@ fn print_instances(instances: &[AwsInstance], head: bool, running: bool) {
                 .set_alignment(CellAlignment::Center)
                 .add_attribute(Attribute::Bold)
         }));
+    let regex = regex.as_deref().map(Regex::new).transpose()?;
     for instance in instances.iter().filter(|instance| {
         if head && instance.node_type != NodeType::Head {
             return false;
         } else if running && instance.state != Some(InstanceStateName::Running) {
             return false;
+        };
+        if let Some(regex) = regex.as_ref() {
+            if !regex.is_match(&instance.regular_name) {
+                return false;
+            };
         };
         true
     }) {
@@ -664,7 +679,7 @@ fn print_instances(instances: &[AwsInstance], head: bool, running: bool) {
             Cell::new(ipv4),
         ]);
     }
-    println!("{table}");
+    Ok(table)
 }
 
 async fn assert_is_logged_in_with_aws() -> anyhow::Result<()> {
@@ -839,6 +854,7 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
             run_ray_up_or_down_command(SpinDirection::Up, ray_path).await?;
         }
         SubCommand::List(List {
+            regex,
             config_path,
             region,
             head,
@@ -848,7 +864,8 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
 
             let region = get_region(region, &config_path.config).await?;
             let instances = get_ray_clusters_from_aws(region).await?;
-            print_instances(&instances, head, running);
+            let table = format_table(&instances, regex, head, running)?;
+            println!("{table}");
         }
         SubCommand::Submit(Submit {
             config_path,

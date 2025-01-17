@@ -1,0 +1,17 @@
+# This is a default configuration file that you can use to connect to an existing Kubernetes cluster running Ray (BYOC).
+# Change up some of the configurations in here, and then run `daft up`.
+#
+# For more information on the availale commands and configuration options, visit [here](https://eventual-inc.github.io/daft-launcher).
+#
+# Happy daft-ing!
+
+[setup]
+provider = "k8s"
+
+# They'll be downloaded using `uv`.
+dependencies = []
+
+[[job]]
+name = "my-job"
+command = "python hello_daft.py"
+working-dir = "working-dir"

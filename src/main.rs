@@ -31,6 +31,7 @@ type StrRef = Arc<str>;
 type PathRef = Arc<Path>;
 
 #[derive(Debug, Parser, Clone, PartialEq, Eq)]
+#[command(name = env!("CARGO_PKG_NAME"), version = env!("CARGO_PKG_VERSION"), about = env!("CARGO_PKG_DESCRIPTION"))]
 struct DaftLauncher {
     #[command(subcommand)]
     sub_command: SubCommand,

@@ -1,6 +1,6 @@
 [project]
 name = "daft-launcher"
-dependencies = ["ray[default]", "boto3"]
+dependencies = ["ray[default]", "maturin>=1.0,<2.0"]
 license = { file = "LICENSE" }
 requires-python = ">=3.9"
 dynamic = ["version"]

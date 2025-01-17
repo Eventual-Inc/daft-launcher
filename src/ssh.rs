@@ -53,13 +53,13 @@ async fn generate_ssh_command(
 
     command
         .arg("-i")
-        .arg(daft_config.setup.ssh_private_key.as_ref());
+        .arg(daft_config.setup.ssh_private_key.as_ref())
+        .arg("-o")
+        .arg("StrictHostKeyChecking=no");
 
     if let Some(portforward) = portforward {
         command
             .arg("-N")
-            .arg("-o")
-            .arg("StrictHostKeyChecking=no")
             .arg("-L")
             .arg(format!("{portforward}:localhost:8265"));
     };

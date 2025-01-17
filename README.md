@@ -82,10 +82,11 @@ daft up
 daft list
 
 # submit a directory and command to run on the cluster
-daft submit --working-dir $WORKING_DIR -- command arg0 arg1 ...
+# (where `my-job-name` should be an entry in your .daft.toml file)
+daft submit my-job-name
 
 # run a direct SQL query on daft
-daft sql -- 'SELECT * FROM my_table WHERE column = "value"'
+daft sql "SELECT * FROM my_table WHERE column = 'value'"
 
 # finally, once you're done, spin the cluster down
 daft down

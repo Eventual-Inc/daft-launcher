@@ -343,6 +343,18 @@ struct RayResources {
     cpu: usize,
 }
 
+fn default_setup_commands() -> Vec<StrRef> {
+    vec![
+        "curl -LsSf https://astral.sh/uv/install.sh | sh".into(),
+        "uv python install 3.12".into(),
+        "uv python pin 3.12".into(),
+        "uv venv".into(),
+        "echo 'source $HOME/.venv/bin/activate' >> ~/.bashrc".into(),
+        "source ~/.bashrc".into(),
+        "uv pip install boto3 pip ray[default] getdaft py-spy deltalake".into(),
+    ]
+}
+
 fn convert(
     daft_config: &DaftConfig,
     teardown_behaviour: Option<TeardownBehaviour>,
@@ -379,7 +391,7 @@ fn convert(
         max_workers: daft_config.setup.number_of_workers,
         provider: RayProvider {
             r#type: "aws".into(),
-            region: "us-west-2".into(),
+            region: daft_config.setup.region.clone(),
             cache_stopped_nodes: teardown_behaviour.map(TeardownBehaviour::to_cache_stopped_nodes),
         },
         auth: RayAuth {
@@ -390,7 +402,7 @@ fn convert(
             (
                 "ray.head.default".into(),
                 RayNodeType {
-                    max_workers: daft_config.setup.number_of_workers,
+                    max_workers: 0,
                     node_config: node_config.clone(),
                     resources: Some(RayResources { cpu: 0 }),
                 },
@@ -407,15 +419,7 @@ fn convert(
         .into_iter()
         .collect(),
         setup_commands: {
-            let mut commands = vec![
-                "curl -LsSf https://astral.sh/uv/install.sh | sh".into(),
-                "uv python install 3.12".into(),
-                "uv python pin 3.12".into(),
-                "uv venv".into(),
-                "echo 'source $HOME/.venv/bin/activate' >> ~/.bashrc".into(),
-                "source ~/.bashrc".into(),
-                "uv pip install boto3 pip ray[default] getdaft py-spy deltalake".into(),
-            ];
+            let mut commands = default_setup_commands();
             if !daft_config.setup.dependencies.is_empty() {
                 let deps = daft_config
                     .setup

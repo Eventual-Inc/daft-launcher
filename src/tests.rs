@@ -61,12 +61,13 @@ async fn test_check() {
 fn simple_config() -> (DaftConfig, Option<TeardownBehaviour>, RayConfig) {
     let test_name: StrRef = "test".into();
     let ssh_private_key: PathRef = Arc::from(PathBuf::from("testkey.pem"));
+    let number_of_workers = 4;
     let daft_config = DaftConfig {
         setup: DaftSetup {
             name: test_name.clone(),
             version: "0.0.0".parse().unwrap(),
             region: test_name.clone(),
-            number_of_workers: 0,
+            number_of_workers,
             ssh_user: test_name.clone(),
             ssh_private_key: ssh_private_key.clone(),
             instance_type: test_name.clone(),
@@ -77,10 +78,18 @@ fn simple_config() -> (DaftConfig, Option<TeardownBehaviour>, RayConfig) {
         run: vec![],
         jobs: HashMap::default(),
     };
+    let node_config = RayNodeConfig {
+        key_name: "testkey".into(),
+        instance_type: test_name.clone(),
+        image_id: test_name.clone(),
+        iam_instance_profile: Some(RayIamInstanceProfile {
+            name: test_name.clone(),
+        }),
+    };
 
     let ray_config = RayConfig {
         cluster_name: test_name.clone(),
-        max_workers: 1,
+        max_workers: number_of_workers,
         provider: RayProvider {
             r#type: "aws".into(),
             region: test_name.clone(),
@@ -90,24 +99,27 @@ fn simple_config() -> (DaftConfig, Option<TeardownBehaviour>, RayConfig) {
             ssh_user: test_name.clone(),
             ssh_private_key,
         },
-        available_node_types: vec![(
-            "ray.head.default".into(),
-            RayNodeType {
-                max_workers: 1,
-                node_config: RayNodeConfig {
-                    key_name: "testkey".into(),
-                    instance_type: test_name.clone(),
-                    image_id: test_name.clone(),
-                    iam_instance_profile: Some(RayIamInstanceProfile {
-                        name: test_name.clone(),
-                    }),
+        available_node_types: vec![
+            (
+                "ray.head.default".into(),
+                RayNodeType {
+                    max_workers: 0,
+                    node_config: node_config.clone(),
+                    resources: Some(RayResources { cpu: 0 }),
                 },
-                resources: Some(RayResources { cpu: 0 }),
-            },
-        )]
+            ),
+            (
+                "ray.worker.default".into(),
+                RayNodeType {
+                    max_workers: number_of_workers,
+                    node_config,
+                    resources: None,
+                },
+            ),
+        ]
         .into_iter()
         .collect(),
-        setup_commands: vec![],
+        setup_commands: default_setup_commands(),
     };
 
     (daft_config, None, ray_config)

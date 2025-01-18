@@ -13,7 +13,6 @@ build-backend = "maturin"
 bindings = "bin"
 
 [tool.pyright]
-# typeCheckingMode = "off"
 venv = ".venv"
 venvPath = "."
 

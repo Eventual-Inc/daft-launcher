@@ -328,12 +328,12 @@ struct RayNodeConfig {
     instance_type: StrRef,
     image_id: StrRef,
     #[serde(skip_serializing_if = "Option::is_none")]
-    iam_instance_profile: Option<IamInstanceProfile>,
+    iam_instance_profile: Option<RayIamInstanceProfile>,
 }
 
 #[derive(Default, Debug, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "PascalCase")]
-struct IamInstanceProfile {
+struct RayIamInstanceProfile {
     name: StrRef,
 }
 
@@ -367,7 +367,7 @@ fn convert(
         .setup
         .iam_instance_profile_name
         .clone()
-        .map(|name| IamInstanceProfile { name });
+        .map(|name| RayIamInstanceProfile { name });
     let node_config = RayNodeConfig {
         key_name,
         instance_type: daft_config.setup.instance_type.clone(),

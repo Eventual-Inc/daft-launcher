@@ -59,14 +59,58 @@ async fn test_check() {
 
 #[rstest::fixture]
 fn simple_config() -> (DaftConfig, Option<TeardownBehaviour>, RayConfig) {
-    // let daft_config = DaftConfig {
-    //     setup: DaftSetup,
-    //     run: DaftRun,
-    //     jobs: HashMap::default(),
-    // };
-    // let ray_config = Ra {};
+    let test_name: StrRef = "test".into();
+    let ssh_private_key: PathRef = Arc::from(PathBuf::from("testkey.pem"));
+    let daft_config = DaftConfig {
+        setup: DaftSetup {
+            name: test_name.clone(),
+            version: "0.0.0".parse().unwrap(),
+            region: test_name.clone(),
+            number_of_workers: 0,
+            ssh_user: test_name.clone(),
+            ssh_private_key: ssh_private_key.clone(),
+            instance_type: test_name.clone(),
+            image_id: test_name.clone(),
+            iam_instance_profile_name: Some(test_name.clone()),
+            dependencies: vec![],
+        },
+        run: vec![],
+        jobs: HashMap::default(),
+    };
 
-    todo!()
+    let ray_config = RayConfig {
+        cluster_name: test_name.clone(),
+        max_workers: 1,
+        provider: RayProvider {
+            r#type: "aws".into(),
+            region: test_name.clone(),
+            cache_stopped_nodes: None,
+        },
+        auth: RayAuth {
+            ssh_user: test_name.clone(),
+            ssh_private_key,
+        },
+        available_node_types: vec![(
+            "ray.head.default".into(),
+            RayNodeType {
+                max_workers: 1,
+                node_config: RayNodeConfig {
+                    key_name: "testkey".into(),
+                    instance_type: test_name.clone(),
+                    image_id: test_name.clone(),
+                    iam_instance_profile: Some(RayIamInstanceProfile {
+                        name: test_name.clone(),
+                    }),
+                },
+                resources: Some(RayResources { cpu: 0 }),
+            },
+        )]
+        .into_iter()
+        .collect(),
+        setup_commands: vec![],
+    };
+
+    (daft_config, None, ray_config)
 }
 
 #[rstest::rstest]

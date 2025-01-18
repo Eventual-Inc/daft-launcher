@@ -13,6 +13,6 @@ __pycache__
 # editors
 .zed
 
-# daft related
+# daft-launcher related
 .daft.toml
 .ray.yaml

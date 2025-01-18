@@ -9,6 +9,8 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
+    thread::{sleep, spawn},
+    time::Duration,
 };
 
 #[cfg(not(test))]
@@ -134,6 +136,10 @@ struct Connect {
     /// The local port to connect to the remote Ray cluster.
     #[arg(long, default_value = "8265")]
     port: u16,
+
+    /// Prevent the dashboard from opening automatically.
+    #[arg(long)]
+    no_dashboard: bool,
 
     #[clap(flatten)]
     config_path: ConfigPath,
@@ -784,16 +790,36 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
             )
             .await?;
         }
-        SubCommand::Connect(Connect { port, config_path }) => {
+        SubCommand::Connect(Connect {
+            port,
+            no_dashboard,
+            config_path,
+        }) => {
             let (daft_config, ray_config) = read_and_convert(&config_path.config, None).await?;
             assert_is_logged_in_with_aws().await?;
 
             let (_temp_dir, ray_path) = create_temp_ray_file()?;
             write_ray_config(ray_config, &ray_path).await?;
+            let open_join_handle = if !no_dashboard {
+                Some(spawn(|| {
+                    sleep(Duration::from_millis(500));
+                    open::that("http://localhost:8265")?;
+                    Ok::<_, anyhow::Error>(())
+                }))
+            } else {
+                None
+            };
+
             let _ = ssh::ssh_portforward(ray_path, &daft_config, Some(port))
                 .await?
                 .wait_with_output()
                 .await?;
+
+            if let Some(open_join_handle) = open_join_handle {
+                open_join_handle
+                    .join()
+                    .map_err(|_| anyhow::anyhow!("Failed to join browser-opening thread"))??;
+            };
         }
         SubCommand::Ssh(ConfigPath { config }) => {
             let (daft_config, ray_config) = read_and_convert(&config, None).await?;

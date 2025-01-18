@@ -29,7 +29,10 @@ async fn test_init() {
     let (_temp_dir, path) = get_path().await;
 
     run(DaftLauncher {
-        sub_command: SubCommand::Init(Init { path: path.clone() }),
+        sub_command: SubCommand::Init(Init {
+            init_provider: InitProvider::Aws,
+            path: path.clone(),
+        }),
         verbosity: 0,
     })
     .await
@@ -46,7 +49,10 @@ async fn test_check() {
     let (_temp_dir, path) = get_path().await;
 
     run(DaftLauncher {
-        sub_command: SubCommand::Init(Init { path: path.clone() }),
+        sub_command: SubCommand::Init(Init {
+            init_provider: InitProvider::K8s,
+            path: path.clone(),
+        }),
         verbosity: 0,
     })
     .await
@@ -78,7 +84,7 @@ fn test_conversion(
         RayConfig,
     ),
 ) {
-    let actual = convert(&daft_config, teardown_behaviour).unwrap();
+    let actual = convert_to_ray_config(&daft_config, teardown_behaviour).unwrap();
     assert_eq!(actual, expected);
 }
 
@@ -123,23 +129,25 @@ pub fn simple_config() -> (DaftConfig, Option<TeardownBehaviour>, RayConfig) {
             requires: "=1.2.3".parse().unwrap(),
             python_version: "3.12".parse().unwrap(),
             ray_version: "2.34".parse().unwrap(),
-            region: test_name.clone(),
-            number_of_workers,
-            ssh_user: test_name.clone(),
-            ssh_private_key: ssh_private_key.clone(),
-            instance_type: test_name.clone(),
-            image_id: test_name.clone(),
-            iam_instance_profile_name: Some(test_name.clone()),
-            dependencies: vec![],
+            provider_config: ProviderConfig::Aws(AwsConfig {
+                region: test_name.clone(),
+                number_of_workers,
+                ssh_user: test_name.clone(),
+                ssh_private_key: ssh_private_key.clone(),
+                instance_type: test_name.clone(),
+                image_id: test_name.clone(),
+                iam_instance_profile_name: Some(test_name.clone()),
+                dependencies: vec![],
+                run: vec![],
+            }),
         },
-        run: vec![],
         jobs: HashMap::default(),
     };
     let node_config = RayNodeConfig {
         key_name: "testkey".into(),
         instance_type: test_name.clone(),
         image_id: test_name.clone(),
-        iam_instance_profile: Some(RayIamInstanceProfile {
+        iam_instance_profile: Some(IamInstanceProfile {
             name: test_name.clone(),
         }),
     };

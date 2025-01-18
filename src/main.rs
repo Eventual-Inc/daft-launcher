@@ -771,8 +771,8 @@ async fn submit(working_dir: &Path, command_segments: impl AsRef<[&str]>) -> any
     }
 }
 
-async fn get_python_version_from_env() -> anyhow::Result<Versioning> {
-    let output = Command::new("python")
+async fn get_version_from_env(bin: &str, prefix: &str) -> anyhow::Result<Versioning> {
+    let output = Command::new(bin)
         .arg("--version")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -782,34 +782,24 @@ async fn get_python_version_from_env() -> anyhow::Result<Versioning> {
 
     if output.status.success() {
         let version = String::from_utf8(output.stdout)?
-            .strip_prefix("Python ")
-            .ok_or_else(|| anyhow::anyhow!("Could not parse python version"))?
+            .strip_prefix(prefix)
+            .ok_or_else(|| anyhow::anyhow!("Could not parse {bin} version"))?
             .trim()
             .parse()?;
         Ok(version)
     } else {
-        Err(anyhow::anyhow!("Failed to find python executable"))
+        Err(anyhow::anyhow!("Failed to find {bin} executable"))
     }
 }
-async fn get_ray_version_from_env() -> anyhow::Result<Versioning> {
-    let output = Command::new("ray")
-        .arg("--version")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()?
-        .wait_with_output()
-        .await?;
 
-    if output.status.success() {
-        let version = String::from_utf8(output.stdout)?
-            .strip_prefix("ray, version ")
-            .ok_or_else(|| anyhow::anyhow!("Could not parse ray version"))?
-            .trim()
-            .parse()?;
-        Ok(version)
-    } else {
-        Err(anyhow::anyhow!("Failed to find ray executable"))
-    }
+async fn get_python_version_from_env() -> anyhow::Result<Versioning> {
+    let python_version = get_version_from_env("python", "Python ").await?;
+    Ok(python_version)
+}
+
+async fn get_ray_version_from_env() -> anyhow::Result<Versioning> {
+    let python_version = get_version_from_env("ray", "ray, version ").await?;
+    Ok(python_version)
 }
 
 async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {

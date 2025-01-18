@@ -7,6 +7,7 @@ use std::{
     io::{Error, ErrorKind},
     net::Ipv4Addr,
     path::{Path, PathBuf},
+    process::Stdio,
     str::FromStr,
     sync::Arc,
     thread::{sleep, spawn},
@@ -207,10 +208,10 @@ struct DaftSetup {
     name: StrRef,
     #[serde(deserialize_with = "parse_daft_launcher_requirement")]
     requires: Requirement,
-    #[serde(default, deserialize_with = "parse_python_requirement")]
-    requires_python: Option<Requirement>,
-    #[serde(default, deserialize_with = "parse_ray_requirement")]
-    requires_ray: Option<Requirement>,
+    #[serde(deserialize_with = "parse_python_requirement")]
+    requires_python: Requirement,
+    #[serde(deserialize_with = "parse_ray_requirement")]
+    requires_ray: Requirement,
     region: StrRef,
     #[serde(default = "default_number_of_workers")]
     number_of_workers: usize,
@@ -273,7 +274,7 @@ fn default_image_id() -> StrRef {
     "ami-04dd23e62ed049936".into()
 }
 
-fn parse_python_requirement<'de, D>(deserializer: D) -> Result<Option<Requirement>, D::Error>
+fn parse_python_requirement<'de, D>(deserializer: D) -> Result<Requirement, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -286,19 +287,19 @@ where
         .expect("Parsing a static, constant version should always succeed");
 
     if requirement.matches(&minimum_python_version) {
-        Ok(Some(requirement))
+        Ok(requirement)
     } else {
         Err(serde::de::Error::custom(format!("The minimum supported python version is {minimum_python_version}, but your configuration file requested python version {requirement}")))
     }
 }
 
-fn parse_ray_requirement<'de, D>(deserializer: D) -> Result<Option<Requirement>, D::Error>
+fn parse_ray_requirement<'de, D>(deserializer: D) -> Result<Requirement, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
     let raw: StrRef = Deserialize::deserialize(deserializer)?;
     let requirement = raw.parse().map_err(serde::de::Error::custom)?;
-    Ok(Some(requirement))
+    Ok(requirement)
 }
 
 fn parse_daft_launcher_requirement<'de, D>(deserializer: D) -> Result<Requirement, D::Error>
@@ -380,42 +381,26 @@ struct RayResources {
 }
 
 fn generate_setup_commands(
-    python_requirement: Option<Requirement>,
-    ray_requirement: Option<Requirement>,
+    python_requirement: Requirement,
+    ray_requirement: Requirement,
     dependencies: &[StrRef],
 ) -> Vec<StrRef> {
-    let mut commands = vec!["curl -LsSf https://astral.sh/uv/install.sh | sh".into()];
+    let python_version = python_requirement
+        .version
+        .expect("Version should always be available");
+    let ray_version = ray_requirement
+        .version
+        .expect("Version should always be available");
 
-    match python_requirement {
-        Some(python_requirement) => {
-            let python_version = python_requirement
-                .version
-                .expect("Version should always be available");
-            commands.extend([
-                format!("uv python install {python_version}").into(),
-                format!("uv python pin {python_version}").into(),
-            ]);
-        }
-        None => commands.push("uv python install".into()),
-    }
-
-    commands.extend([
+    let mut commands = vec![
+        "curl -LsSf https://astral.sh/uv/install.sh | sh".into(),
+        format!("uv python install {python_version}").into(),
+        format!("uv python pin {python_version}").into(),
         "uv venv".into(),
         "echo 'source $HOME/.venv/bin/activate' >> ~/.bashrc".into(),
         "source ~/.bashrc".into(),
-    ]);
-
-    let ray_install = match ray_requirement {
-        Some(ray_requirement) => format!(
-            r#""ray[default]=={}""#,
-            ray_requirement
-                .version
-                .expect("Version should always be available")
-        ),
-        None => "ray[default]".to_string(),
-    };
-    commands
-        .push(format!("uv pip install boto3 pip py-spy deltalake getdaft {ray_install}").into());
+        format!("uv pip install boto3 pip py-spy deltalake getdaft {ray_version}").into(),
+    ];
 
     if !dependencies.is_empty() {
         let deps = dependencies
@@ -790,6 +775,47 @@ async fn submit(working_dir: &Path, command_segments: impl AsRef<[&str]>) -> any
     }
 }
 
+async fn get_python_version_from_env() -> anyhow::Result<Versioning> {
+    let output = Command::new("python")
+        .arg("--version")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?
+        .wait_with_output()
+        .await?;
+
+    if output.status.success() {
+        let version = String::from_utf8(output.stdout)?
+            .strip_prefix("Python ")
+            .ok_or_else(|| anyhow::anyhow!("Could not parse python version"))?
+            .trim()
+            .parse()?;
+        Ok(version)
+    } else {
+        Err(anyhow::anyhow!("Failed to find python executable"))
+    }
+}
+async fn get_ray_version_from_env() -> anyhow::Result<Versioning> {
+    let output = Command::new("ray")
+        .arg("--version")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?
+        .wait_with_output()
+        .await?;
+
+    if output.status.success() {
+        let version = String::from_utf8(output.stdout)?
+            .strip_prefix("ray, version ")
+            .ok_or_else(|| anyhow::anyhow!("Could not parse ray version"))?
+            .trim()
+            .parse()?;
+        Ok(version)
+    } else {
+        Err(anyhow::anyhow!("Failed to find ray executable"))
+    }
+}
+
 async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
     match daft_launcher.sub_command {
         SubCommand::Init(Init { path }) => {
@@ -798,7 +824,16 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
                 bail!("The path {path:?} already exists; the path given must point to a new location on your filesystem");
             }
             let contents = include_str!("template.toml");
-            let contents = contents.replace("<REQUIRES>", concat!("=", env!("CARGO_PKG_VERSION")));
+            let contents = contents
+                .replace("<REQUIRES>", concat!("=", env!("CARGO_PKG_VERSION")))
+                .replace(
+                    "<REQUIRES-PYTHON>",
+                    &format!("={}", get_python_version_from_env().await?),
+                )
+                .replace(
+                    "<REQUIRES-RAY>",
+                    &format!("={}", get_ray_version_from_env().await?),
+                );
             fs::write(path, contents).await?;
         }
         SubCommand::Check(ConfigPath { config }) => {

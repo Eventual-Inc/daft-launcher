@@ -83,24 +83,24 @@ fn test_conversion(
 }
 
 #[rstest::rstest]
-#[case(None, None, vec![], vec![
-    "curl -LsSf https://astral.sh/uv/install.sh | sh".into(),
-    "uv python install".into(),
-    "uv venv".into(),
-    "echo 'source $HOME/.venv/bin/activate' >> ~/.bashrc".into(),
-    "source ~/.bashrc".into(),
-    "uv pip install boto3 pip py-spy deltalake getdaft ray[default]".into(),
-])]
-#[case(Some("=3.9".parse().unwrap()), None, vec![], vec![
-    "curl -LsSf https://astral.sh/uv/install.sh | sh".into(),
-    "uv python install 3.9".into(),
-    "uv python pin 3.9".into(),
-    "uv venv".into(),
-    "echo 'source $HOME/.venv/bin/activate' >> ~/.bashrc".into(),
-    "source ~/.bashrc".into(),
-    "uv pip install boto3 pip py-spy deltalake getdaft ray[default]".into(),
-])]
-#[case(None, Some("=2.34".parse().unwrap()), vec![], vec![
+// #[case(None, None, vec![], vec![
+//     "curl -LsSf https://astral.sh/uv/install.sh | sh".into(),
+//     "uv python install".into(),
+//     "uv venv".into(),
+//     "echo 'source $HOME/.venv/bin/activate' >> ~/.bashrc".into(),
+//     "source ~/.bashrc".into(),
+//     "uv pip install boto3 pip py-spy deltalake getdaft ray[default]".into(),
+// ])]
+// #[case(Some("=3.9".parse().unwrap()), None, vec![], vec![
+//     "curl -LsSf https://astral.sh/uv/install.sh | sh".into(),
+//     "uv python install 3.9".into(),
+//     "uv python pin 3.9".into(),
+//     "uv venv".into(),
+//     "echo 'source $HOME/.venv/bin/activate' >> ~/.bashrc".into(),
+//     "source ~/.bashrc".into(),
+//     "uv pip install boto3 pip py-spy deltalake getdaft ray[default]".into(),
+// ])]
+#[case("=3.9".parse().unwrap(), "=2.34".parse().unwrap(), vec![], vec![
     "curl -LsSf https://astral.sh/uv/install.sh | sh".into(),
     "uv python install".into(),
     "uv venv".into(),
@@ -108,7 +108,7 @@ fn test_conversion(
     "source ~/.bashrc".into(),
     r#"uv pip install boto3 pip py-spy deltalake getdaft "ray[default]==2.34""#.into(),
 ])]
-#[case(None, None, vec!["requests==0.0.0".into()], vec![
+#[case("=3.9".parse().unwrap(), "=2.34".parse().unwrap(), vec!["requests==0.0.0".into()], vec![
     "curl -LsSf https://astral.sh/uv/install.sh | sh".into(),
     "uv python install".into(),
     "uv venv".into(),
@@ -118,8 +118,8 @@ fn test_conversion(
     r#"uv pip install "requests==0.0.0""#.into(),
 ])]
 fn test_generate_setup_commands(
-    #[case] python_version: Option<Requirement>,
-    #[case] ray_version: Option<Requirement>,
+    #[case] python_version: Requirement,
+    #[case] ray_version: Requirement,
     #[case] dependencies: Vec<StrRef>,
     #[case] expected: Vec<StrRef>,
 ) {
@@ -136,8 +136,8 @@ pub fn simple_config() -> (DaftConfig, Option<TeardownBehaviour>, RayConfig) {
         setup: DaftSetup {
             name: test_name.clone(),
             requires: "=1.2.3".parse().unwrap(),
-            requires_python: Some("=3.12".parse().unwrap()),
-            requires_ray: Some("=2.34".parse().unwrap()),
+            requires_python: "=3.12".parse().unwrap(),
+            requires_ray: "=2.34".parse().unwrap(),
             region: test_name.clone(),
             number_of_workers,
             ssh_user: test_name.clone(),

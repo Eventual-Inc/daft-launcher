@@ -7,7 +7,7 @@
 
 [setup]
 name = "daft-launcher-example"
-version = "<VERSION>"
+requires = "<REQUIRES>"
 region = "us-west-2"
 number-of-workers = 4
 

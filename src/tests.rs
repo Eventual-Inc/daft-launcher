@@ -91,7 +91,7 @@ fn test_conversion(
     "source ~/.bashrc".into(),
     "uv pip install boto3 pip py-spy deltalake getdaft ray[default]".into(),
 ])]
-#[case(Some("3.9".into()), None, vec![], vec![
+#[case(Some("=3.9".parse().unwrap()), None, vec![], vec![
     "curl -LsSf https://astral.sh/uv/install.sh | sh".into(),
     "uv python install 3.9".into(),
     "uv python pin 3.9".into(),
@@ -100,7 +100,7 @@ fn test_conversion(
     "source ~/.bashrc".into(),
     "uv pip install boto3 pip py-spy deltalake getdaft ray[default]".into(),
 ])]
-#[case(None, Some("2.34".into()), vec![], vec![
+#[case(None, Some("=2.34".parse().unwrap()), vec![], vec![
     "curl -LsSf https://astral.sh/uv/install.sh | sh".into(),
     "uv python install".into(),
     "uv venv".into(),
@@ -118,8 +118,8 @@ fn test_conversion(
     r#"uv pip install "requests==0.0.0""#.into(),
 ])]
 fn test_generate_setup_commands(
-    #[case] python_version: Option<StrRef>,
-    #[case] ray_version: Option<StrRef>,
+    #[case] python_version: Option<Requirement>,
+    #[case] ray_version: Option<Requirement>,
     #[case] dependencies: Vec<StrRef>,
     #[case] expected: Vec<StrRef>,
 ) {
@@ -135,9 +135,9 @@ pub fn simple_config() -> (DaftConfig, Option<TeardownBehaviour>, RayConfig) {
     let daft_config = DaftConfig {
         setup: DaftSetup {
             name: test_name.clone(),
-            version: "1.2.3".parse().unwrap(),
-            python_version: Some("3.12".into()),
-            ray_version: Some("2.34".into()),
+            requires: "=1.2.3".parse().unwrap(),
+            requires_python: Some("=3.12".parse().unwrap()),
+            requires_ray: Some("=2.34".parse().unwrap()),
             region: test_name.clone(),
             number_of_workers,
             ssh_user: test_name.clone(),

@@ -22,10 +22,10 @@ use comfy_table::{
     modifiers, presets, Attribute, Cell, CellAlignment, Color, ContentArrangement, Table,
 };
 use regex::Regex;
-use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use tempdir::TempDir;
 use tokio::{fs, process::Command};
+use versions::{Requirement, Versioning};
 
 type StrRef = Arc<str>;
 type PathRef = Arc<Path>;
@@ -205,12 +205,12 @@ where
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 struct DaftSetup {
     name: StrRef,
-    #[serde(deserialize_with = "parse_daft_launcher_version")]
-    version: VersionReq,
-    #[serde(default, deserialize_with = "parse_optional_soft_version_req")]
-    python_version: Option<StrRef>,
-    #[serde(default, deserialize_with = "parse_optional_soft_version_req")]
-    ray_version: Option<StrRef>,
+    #[serde(deserialize_with = "parse_daft_launcher_requirement")]
+    requires: Requirement,
+    #[serde(default, deserialize_with = "parse_python_requirement")]
+    requires_python: Option<Requirement>,
+    #[serde(default, deserialize_with = "parse_ray_requirement")]
+    requires_ray: Option<Requirement>,
     region: StrRef,
     #[serde(default = "default_number_of_workers")]
     number_of_workers: usize,
@@ -273,36 +273,49 @@ fn default_image_id() -> StrRef {
     "ami-04dd23e62ed049936".into()
 }
 
-fn parse_optional_soft_version_req<'de, D>(deserializer: D) -> Result<Option<StrRef>, D::Error>
+fn parse_python_requirement<'de, D>(deserializer: D) -> Result<Option<Requirement>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
     let raw: StrRef = Deserialize::deserialize(deserializer)?;
-
-    // Just ensure that the string can be parsed into a `VersionReq`, but return the
-    // raw string anyways.
-    let _ = raw
-        .parse::<VersionReq>()
+    let requirement = raw
+        .parse::<Requirement>()
         .map_err(serde::de::Error::custom)?;
+    let minimum_python_version = "3.9"
+        .parse::<Versioning>()
+        .expect("Parsing a static, constant version should always succeed");
 
-    Ok(Some(raw))
+    if requirement.matches(&minimum_python_version) {
+        Ok(Some(requirement))
+    } else {
+        Err(serde::de::Error::custom(format!("The minimum supported python version is {minimum_python_version}, but your configuration file requested python version {requirement}")))
+    }
 }
 
-fn parse_daft_launcher_version<'de, D>(deserializer: D) -> Result<VersionReq, D::Error>
+fn parse_ray_requirement<'de, D>(deserializer: D) -> Result<Option<Requirement>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
     let raw: StrRef = Deserialize::deserialize(deserializer)?;
-    let version_req = raw
-        .parse::<VersionReq>()
+    let requirement = raw.parse().map_err(serde::de::Error::custom)?;
+    Ok(Some(requirement))
+}
+
+fn parse_daft_launcher_requirement<'de, D>(deserializer: D) -> Result<Requirement, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw: StrRef = Deserialize::deserialize(deserializer)?;
+    let requested_requirement = raw
+        .parse::<Requirement>()
         .map_err(serde::de::Error::custom)?;
     let current_version = env!("CARGO_PKG_VERSION")
-        .parse::<Version>()
+        .parse::<Versioning>()
         .expect("CARGO_PKG_VERSION must exist");
-    if version_req.matches(&current_version) {
-        Ok(version_req)
+    if requested_requirement.matches(&current_version) {
+        Ok(requested_requirement)
     } else {
-        Err(serde::de::Error::custom(format!("You're running daft-launcher version {current_version}, but your configuration file requires version {version_req}")))
+        Err(serde::de::Error::custom(format!("You're running daft-launcher version {current_version}, but your configuration file requires version {requested_requirement}")))
     }
 }
 
@@ -367,14 +380,17 @@ struct RayResources {
 }
 
 fn generate_setup_commands(
-    python_version: Option<StrRef>,
-    ray_version: Option<StrRef>,
+    python_requirement: Option<Requirement>,
+    ray_requirement: Option<Requirement>,
     dependencies: &[StrRef],
 ) -> Vec<StrRef> {
     let mut commands = vec!["curl -LsSf https://astral.sh/uv/install.sh | sh".into()];
 
-    match python_version {
-        Some(python_version) => {
+    match python_requirement {
+        Some(python_requirement) => {
+            let python_version = python_requirement
+                .version
+                .expect("Version should always be available");
             commands.extend([
                 format!("uv python install {python_version}").into(),
                 format!("uv python pin {python_version}").into(),
@@ -389,8 +405,13 @@ fn generate_setup_commands(
         "source ~/.bashrc".into(),
     ]);
 
-    let ray_install = match ray_version {
-        Some(ray_version) => format!(r#""ray[default]=={ray_version}""#),
+    let ray_install = match ray_requirement {
+        Some(ray_requirement) => format!(
+            r#""ray[default]=={}""#,
+            ray_requirement
+                .version
+                .expect("Version should always be available")
+        ),
         None => "ray[default]".to_string(),
     };
     commands
@@ -473,8 +494,8 @@ fn convert(
         .into_iter()
         .collect(),
         setup_commands: generate_setup_commands(
-            daft_config.setup.python_version.clone(),
-            daft_config.setup.ray_version.clone(),
+            daft_config.setup.requires_python.clone(),
+            daft_config.setup.requires_ray.clone(),
             daft_config.setup.dependencies.as_ref(),
         ),
     })
@@ -777,7 +798,7 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
                 bail!("The path {path:?} already exists; the path given must point to a new location on your filesystem");
             }
             let contents = include_str!("template.toml");
-            let contents = contents.replace("<VERSION>", env!("CARGO_PKG_VERSION"));
+            let contents = contents.replace("<REQUIRES>", concat!("=", env!("CARGO_PKG_VERSION")));
             fs::write(path, contents).await?;
         }
         SubCommand::Check(ConfigPath { config }) => {

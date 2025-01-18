@@ -1,4 +1,3 @@
-- [ ] Enable users to specify Ray and python version.
 - [ ] Make `daft up` block until *all* worker nodes are up.
 - [ ] Open up the default browser, create a new tab, and point it towards `localhost:8265` after running `daft connect`.
 - [ ] Add ability to upload a custom daft wheel when initializing a cluster (rather than installing a released daft version).

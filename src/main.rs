@@ -205,7 +205,6 @@ struct DaftSetup {
     python_version: Option<StrRef>,
     #[serde(default, deserialize_with = "parse_optional_soft_version_req")]
     ray_version: Option<StrRef>,
-    daft_wheel: Option<StrRef>,
     region: StrRef,
     #[serde(default = "default_number_of_workers")]
     number_of_workers: usize,
@@ -364,7 +363,6 @@ struct RayResources {
 fn generate_setup_commands(
     python_version: Option<StrRef>,
     ray_version: Option<StrRef>,
-    daft_wheel: Option<StrRef>,
 ) -> Vec<StrRef> {
     let mut commands = vec!["curl -LsSf https://astral.sh/uv/install.sh | sh".into()];
 
@@ -388,12 +386,7 @@ fn generate_setup_commands(
         Some(ray_version) => format!(r#""ray[default]=={ray_version}""#),
         None => "ray[default]".to_string(),
     };
-    commands.push(format!("uv pip install boto3 pip py-spy deltalake {ray_install}").into());
-
-    match daft_wheel {
-        Some(daft_wheel) => commands.push(format!("uv pip install {daft_wheel}").into()),
-        None => commands.push("uv pip install getdaft".into()),
-    }
+    commands.push(format!("uv pip install boto3 pip py-spy deltalake getdaft {ray_install}").into());
 
     commands
 }
@@ -465,7 +458,6 @@ fn convert(
             let mut commands = generate_setup_commands(
                 daft_config.setup.python_version.clone(),
                 daft_config.setup.ray_version.clone(),
-                daft_config.setup.daft_wheel.clone(),
             );
             if !daft_config.setup.dependencies.is_empty() {
                 let deps = daft_config

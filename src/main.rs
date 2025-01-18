@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use std::{
     collections::HashMap,
     io::{Error, ErrorKind},
@@ -158,9 +161,9 @@ struct ConfigPath {
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 struct DaftConfig {
     setup: DaftSetup,
-    #[serde(default)]
-    run: DaftRun,
-    #[serde(rename = "job", deserialize_with = "parse_jobs")]
+    // #[serde(default)]
+    // run: DaftRun,
+    #[serde(default, rename = "job", deserialize_with = "parse_jobs")]
     jobs: HashMap<StrRef, DaftJob>,
 }
 
@@ -356,100 +359,99 @@ struct RayResources {
     cpu: usize,
 }
 
+fn convert(
+    daft_config: &DaftConfig,
+    teardown_behaviour: Option<TeardownBehaviour>,
+) -> anyhow::Result<RayConfig> {
+    let key_name = daft_config
+        .setup
+        .ssh_private_key
+        .clone()
+        .file_stem()
+        .ok_or_else(|| {
+            anyhow::anyhow!(r#"Private key doesn't have a name of the format "name.ext""#)
+        })?
+        .to_str()
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "The file {:?} does not a valid UTF-8 name",
+                daft_config.setup.ssh_private_key,
+            )
+        })?
+        .into();
+    let iam_instance_profile = daft_config
+        .setup
+        .iam_instance_profile_name
+        .clone()
+        .map(|name| IamInstanceProfile { name });
+    let node_config = RayNodeConfig {
+        key_name,
+        instance_type: daft_config.setup.instance_type.clone(),
+        image_id: daft_config.setup.image_id.clone(),
+        iam_instance_profile,
+    };
+    Ok(RayConfig {
+        cluster_name: daft_config.setup.name.clone(),
+        max_workers: daft_config.setup.number_of_workers,
+        provider: RayProvider {
+            r#type: "aws".into(),
+            region: "us-west-2".into(),
+            cache_stopped_nodes: teardown_behaviour.map(TeardownBehaviour::to_cache_stopped_nodes),
+        },
+        auth: RayAuth {
+            ssh_user: daft_config.setup.ssh_user.clone(),
+            ssh_private_key: daft_config.setup.ssh_private_key.clone(),
+        },
+        available_node_types: vec![
+            (
+                "ray.head.default".into(),
+                RayNodeType {
+                    max_workers: daft_config.setup.number_of_workers,
+                    node_config: node_config.clone(),
+                    resources: Some(RayResources { cpu: 0 }),
+                },
+            ),
+            (
+                "ray.worker.default".into(),
+                RayNodeType {
+                    max_workers: daft_config.setup.number_of_workers,
+                    node_config,
+                    resources: None,
+                },
+            ),
+        ]
+        .into_iter()
+        .collect(),
+        setup_commands: {
+            let mut commands = vec![
+                "curl -LsSf https://astral.sh/uv/install.sh | sh".into(),
+                "uv python install 3.12".into(),
+                "uv python pin 3.12".into(),
+                "uv venv".into(),
+                "echo 'source $HOME/.venv/bin/activate' >> ~/.bashrc".into(),
+                "source ~/.bashrc".into(),
+                "uv pip install boto3 pip ray[default] getdaft py-spy deltalake".into(),
+            ];
+            if !daft_config.setup.dependencies.is_empty() {
+                let deps = daft_config
+                    .setup
+                    .dependencies
+                    .iter()
+                    .map(|dep| format!(r#""{dep}""#))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                let deps = format!("uv pip install {deps}").into();
+                commands.push(deps);
+            }
+            commands
+        },
+    })
+}
+
 async fn read_and_convert(
     daft_config_path: &Path,
     teardown_behaviour: Option<TeardownBehaviour>,
 ) -> anyhow::Result<(DaftConfig, RayConfig)> {
-    fn convert(
-        daft_config: &DaftConfig,
-        teardown_behaviour: Option<TeardownBehaviour>,
-    ) -> anyhow::Result<RayConfig> {
-        let key_name = daft_config
-            .setup
-            .ssh_private_key
-            .clone()
-            .file_stem()
-            .ok_or_else(|| {
-                anyhow::anyhow!(r#"Private key doesn't have a name of the format "name.ext""#)
-            })?
-            .to_str()
-            .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "The file {:?} does not a valid UTF-8 name",
-                    daft_config.setup.ssh_private_key,
-                )
-            })?
-            .into();
-        let iam_instance_profile = daft_config
-            .setup
-            .iam_instance_profile_name
-            .clone()
-            .map(|name| IamInstanceProfile { name });
-        let node_config = RayNodeConfig {
-            key_name,
-            instance_type: daft_config.setup.instance_type.clone(),
-            image_id: daft_config.setup.image_id.clone(),
-            iam_instance_profile,
-        };
-        Ok(RayConfig {
-            cluster_name: daft_config.setup.name.clone(),
-            max_workers: daft_config.setup.number_of_workers,
-            provider: RayProvider {
-                r#type: "aws".into(),
-                region: "us-west-2".into(),
-                cache_stopped_nodes: teardown_behaviour
-                    .map(TeardownBehaviour::to_cache_stopped_nodes),
-            },
-            auth: RayAuth {
-                ssh_user: daft_config.setup.ssh_user.clone(),
-                ssh_private_key: daft_config.setup.ssh_private_key.clone(),
-            },
-            available_node_types: vec![
-                (
-                    "ray.head.default".into(),
-                    RayNodeType {
-                        max_workers: daft_config.setup.number_of_workers,
-                        node_config: node_config.clone(),
-                        resources: Some(RayResources { cpu: 0 }),
-                    },
-                ),
-                (
-                    "ray.worker.default".into(),
-                    RayNodeType {
-                        max_workers: daft_config.setup.number_of_workers,
-                        node_config,
-                        resources: None,
-                    },
-                ),
-            ]
-            .into_iter()
-            .collect(),
-            setup_commands: {
-                let mut commands = vec![
-                    "curl -LsSf https://astral.sh/uv/install.sh | sh".into(),
-                    "uv python install 3.12".into(),
-                    "uv python pin 3.12".into(),
-                    "uv venv".into(),
-                    "echo 'source $HOME/.venv/bin/activate' >> ~/.bashrc".into(),
-                    "source ~/.bashrc".into(),
-                    "uv pip install boto3 pip ray[default] getdaft py-spy deltalake".into(),
-                ];
-                if !daft_config.setup.dependencies.is_empty() {
-                    let deps = daft_config
-                        .setup
-                        .dependencies
-                        .iter()
-                        .map(|dep| format!(r#""{dep}""#))
-                        .collect::<Vec<_>>()
-                        .join(" ");
-                    let deps = format!("uv pip install {deps}").into();
-                    commands.push(deps);
-                }
-                commands
-            },
-        })
-    }
-
     let contents = fs::read_to_string(&daft_config_path)
         .await
         .map_err(|error| {
@@ -924,29 +926,4 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     run(DaftLauncher::parse()).await
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_init_and_export() {
-        run(DaftLauncher {
-            sub_command: SubCommand::Init(Init {
-                path: ".daft.toml".into(),
-            }),
-            verbosity: 0,
-        })
-        .await
-        .unwrap();
-        run(DaftLauncher {
-            sub_command: SubCommand::Check(ConfigPath {
-                config: ".daft.toml".into(),
-            }),
-            verbosity: 0,
-        })
-        .await
-        .unwrap();
-    }
 }

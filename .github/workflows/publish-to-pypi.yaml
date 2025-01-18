@@ -9,26 +9,21 @@ jobs:
   build-and-publish:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out the code
+      - name: Checkout code
         uses: actions/checkout@v3
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.12"
-
-      - name: Install build dependencies
+      - name: Install uv
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
-          uv venv
+          uv python install
+      - name: Install build dependencies
+        run: |
+          uv v
           source .venv/bin/activate
           uv pip install twine
-
       - name: Build the package
         run: |
           source .venv/bin/activate
           uv build
-
       - name: Publish to PyPI
         env:
           TWINE_USERNAME: "__token__"

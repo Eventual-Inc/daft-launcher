@@ -1,9 +1,11 @@
 [project]
 name = "daft-launcher"
 dependencies = ["ray[default]", "maturin>=1.0,<2.0"]
-license = { file = "LICENSE" }
 requires-python = ">=3.9"
 dynamic = ["version"]
+
+[project.license]
+file = "LICENSE"
 
 [build-system]
 requires = ["maturin>=1.0,<2.0"]

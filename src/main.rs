@@ -1,3 +1,4 @@
+mod ssh;
 #[cfg(test)]
 mod tests;
 
@@ -6,10 +7,8 @@ use std::{
     io::{Error, ErrorKind},
     net::Ipv4Addr,
     path::{Path, PathBuf},
-    process::Stdio,
     str::FromStr,
     sync::Arc,
-    time::Duration,
 };
 
 #[cfg(not(test))]
@@ -20,15 +19,11 @@ use clap::{Parser, Subcommand};
 use comfy_table::{
     modifiers, presets, Attribute, Cell, CellAlignment, Color, ContentArrangement, Table,
 };
+use regex::Regex;
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use tempdir::TempDir;
-use tokio::{
-    fs,
-    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
-    process::{Child, Command},
-    time::timeout,
-};
+use tokio::{fs, process::Command};
 
 type StrRef = Arc<str>;
 type PathRef = Arc<Path>;
@@ -106,6 +101,9 @@ struct Init {
 
 #[derive(Debug, Parser, Clone, PartialEq, Eq)]
 struct List {
+    /// A regex to filter for the Ray clusters which match the given name.
+    regex: Option<StrRef>,
+
     /// The region which to list all the available clusters for.
     #[arg(long)]
     region: Option<StrRef>,
@@ -537,6 +535,15 @@ pub enum NodeType {
     Worker,
 }
 
+impl NodeType {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Head => "head",
+            Self::Worker => "worker",
+        }
+    }
+}
+
 impl FromStr for NodeType {
     type Err = anyhow::Error;
 
@@ -606,23 +613,36 @@ async fn get_ray_clusters_from_aws(region: StrRef) -> anyhow::Result<Vec<AwsInst
     Ok(instance_states)
 }
 
-fn print_instances(instances: &[AwsInstance], head: bool, running: bool) {
+fn format_table(
+    instances: &[AwsInstance],
+    regex: Option<StrRef>,
+    head: bool,
+    running: bool,
+) -> anyhow::Result<Table> {
     let mut table = Table::default();
     table
         .load_preset(presets::UTF8_FULL)
         .apply_modifier(modifiers::UTF8_ROUND_CORNERS)
         .apply_modifier(modifiers::UTF8_SOLID_INNER_BORDERS)
         .set_content_arrangement(ContentArrangement::DynamicFullWidth)
-        .set_header(["Name", "Instance ID", "Status", "IPv4"].map(|header| {
-            Cell::new(header)
-                .set_alignment(CellAlignment::Center)
-                .add_attribute(Attribute::Bold)
-        }));
+        .set_header(
+            ["Name", "Instance ID", "Node Type", "Status", "IPv4"].map(|header| {
+                Cell::new(header)
+                    .set_alignment(CellAlignment::Center)
+                    .add_attribute(Attribute::Bold)
+            }),
+        );
+    let regex = regex.as_deref().map(Regex::new).transpose()?;
     for instance in instances.iter().filter(|instance| {
         if head && instance.node_type != NodeType::Head {
             return false;
         } else if running && instance.state != Some(InstanceStateName::Running) {
             return false;
+        };
+        if let Some(regex) = regex.as_ref() {
+            if !regex.is_match(&instance.regular_name) {
+                return false;
+            };
         };
         true
     }) {
@@ -649,12 +669,13 @@ fn print_instances(instances: &[AwsInstance], head: bool, running: bool) {
             .map_or("n/a".into(), ToString::to_string);
         table.add_row(vec![
             Cell::new(instance.regular_name.to_string()).fg(Color::Cyan),
-            Cell::new(&*instance.instance_id),
+            Cell::new(instance.instance_id.as_ref()),
+            Cell::new(instance.node_type.as_str()),
             status,
             Cell::new(ipv4),
         ]);
     }
-    println!("{table}");
+    Ok(table)
 }
 
 async fn assert_is_logged_in_with_aws() -> anyhow::Result<()> {
@@ -680,105 +701,6 @@ async fn get_region(region: Option<StrRef>, config: impl AsRef<Path>) -> anyhow:
     } else {
         "us-west-2".into()
     })
-}
-
-async fn get_head_node_ip(ray_path: impl AsRef<Path>) -> anyhow::Result<Ipv4Addr> {
-    let mut ray_command = Command::new("ray")
-        .arg("get-head-ip")
-        .arg(ray_path.as_ref())
-        .stdout(Stdio::piped())
-        .spawn()?;
-
-    let mut tail_command = Command::new("tail")
-        .args(["-n", "1"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()?;
-
-    let mut writer = tail_command.stdin.take().expect("stdin must exist");
-
-    tokio::spawn(async move {
-        let mut reader = BufReader::new(ray_command.stdout.take().expect("stdout must exist"));
-        let mut buffer = Vec::new();
-        reader.read_to_end(&mut buffer).await?;
-        writer.write_all(&buffer).await?;
-        Ok::<_, anyhow::Error>(())
-    });
-    let output = tail_command.wait_with_output().await?;
-    if !output.status.success() {
-        anyhow::bail!("Failed to fetch ip address of head node");
-    };
-    let addr = String::from_utf8_lossy(&output.stdout)
-        .trim()
-        .parse::<Ipv4Addr>()?;
-    Ok(addr)
-}
-
-async fn ssh(ray_path: impl AsRef<Path>, daft_config: &DaftConfig) -> anyhow::Result<()> {
-    let user = daft_config.setup.ssh_user.as_ref();
-    let addr = get_head_node_ip(ray_path).await?;
-    let exit_status = Command::new("ssh")
-        .arg("-i")
-        .arg(daft_config.setup.ssh_private_key.as_ref())
-        .arg(format!("{user}@{addr}"))
-        .kill_on_drop(true)
-        .spawn()?
-        .wait()
-        .await?;
-
-    if exit_status.success() {
-        Ok(())
-    } else {
-        Err(anyhow::anyhow!("Failed to ssh into the ray cluster"))
-    }
-}
-
-async fn establish_ssh_portforward(
-    ray_path: impl AsRef<Path>,
-    daft_config: &DaftConfig,
-    port: Option<u16>,
-) -> anyhow::Result<Child> {
-    let user = daft_config.setup.ssh_user.as_ref();
-    let addr = get_head_node_ip(ray_path).await?;
-    let port = port.unwrap_or(8265);
-    let mut child = Command::new("ssh")
-        .arg("-N")
-        .arg("-i")
-        .arg(daft_config.setup.ssh_private_key.as_ref())
-        .arg("-L")
-        .arg(format!("{port}:localhost:8265"))
-        .arg(format!("{user}@{addr}"))
-        .arg("-v")
-        .stderr(Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()?;
-
-    // We wait for the ssh port-forwarding process to write a specific string to the
-    // output.
-    //
-    // This is a little hacky (and maybe even incorrect across platforms) since we
-    // are just parsing the output and observing if a specific string has been
-    // printed. It may be incorrect across platforms because the SSH standard
-    // does *not* specify a standard "success-message" to printout if the ssh
-    // port-forward was successful.
-    timeout(Duration::from_secs(5), {
-        let stderr = child.stderr.take().expect("stderr must exist");
-        async move {
-            let mut lines = BufReader::new(stderr).lines();
-            loop {
-                let Some(line) = lines.next_line().await? else {
-                    anyhow::bail!("Failed to establish ssh port-forward to {addr}");
-                };
-                if line.starts_with(format!("Authenticated to {addr}").as_str()) {
-                    break Ok(());
-                }
-            }
-        }
-    })
-    .await
-    .map_err(|_| anyhow::anyhow!("Establishing an ssh port-forward to {addr} timed out"))??;
-
-    Ok(child)
 }
 
 async fn submit(working_dir: &Path, command_segments: impl AsRef<[&str]>) -> anyhow::Result<()> {
@@ -829,6 +751,7 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
             run_ray_up_or_down_command(SpinDirection::Up, ray_path).await?;
         }
         SubCommand::List(List {
+            regex,
             config_path,
             region,
             head,
@@ -838,7 +761,8 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
 
             let region = get_region(region, &config_path.config).await?;
             let instances = get_ray_clusters_from_aws(region).await?;
-            print_instances(&instances, head, running);
+            let table = format_table(&instances, regex, head, running)?;
+            println!("{table}");
         }
         SubCommand::Submit(Submit {
             config_path,
@@ -853,7 +777,7 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
 
             let (_temp_dir, ray_path) = create_temp_ray_file()?;
             write_ray_config(ray_config, &ray_path).await?;
-            let _child = establish_ssh_portforward(ray_path, &daft_config, None).await?;
+            let _child = ssh::ssh_portforward(ray_path, &daft_config, None).await?;
             submit(
                 daft_job.working_dir.as_ref(),
                 daft_job.command.as_ref().split(' ').collect::<Vec<_>>(),
@@ -866,7 +790,7 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
 
             let (_temp_dir, ray_path) = create_temp_ray_file()?;
             write_ray_config(ray_config, &ray_path).await?;
-            let _ = establish_ssh_portforward(ray_path, &daft_config, Some(port))
+            let _ = ssh::ssh_portforward(ray_path, &daft_config, Some(port))
                 .await?
                 .wait_with_output()
                 .await?;
@@ -877,7 +801,7 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
 
             let (_temp_dir, ray_path) = create_temp_ray_file()?;
             write_ray_config(ray_config, &ray_path).await?;
-            ssh(ray_path, &daft_config).await?;
+            ssh::ssh(ray_path, &daft_config).await?;
         }
         SubCommand::Sql(Sql { sql, config_path }) => {
             let (daft_config, ray_config) = read_and_convert(&config_path.config, None).await?;
@@ -885,7 +809,7 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
 
             let (_temp_dir, ray_path) = create_temp_ray_file()?;
             write_ray_config(ray_config, &ray_path).await?;
-            let _child = establish_ssh_portforward(ray_path, &daft_config, None).await?;
+            let _child = ssh::ssh_portforward(ray_path, &daft_config, None).await?;
             let (temp_sql_dir, sql_path) = create_temp_file("sql.py")?;
             fs::write(sql_path, include_str!("sql.py")).await?;
             submit(temp_sql_dir.path(), vec!["python", "sql.py", sql.as_ref()]).await?;

@@ -392,7 +392,10 @@ fn generate_setup_commands(
         "uv venv".into(),
         "echo 'source $HOME/.venv/bin/activate' >> ~/.bashrc".into(),
         "source ~/.bashrc".into(),
-        format!(r#"uv pip install boto3 pip py-spy deltalake getdaft "ray[default]=={ray_version}""#).into(),
+        format!(
+            r#"uv pip install boto3 pip py-spy deltalake getdaft "ray[default]=={ray_version}""#
+        )
+        .into(),
     ];
 
     if !dependencies.is_empty() {

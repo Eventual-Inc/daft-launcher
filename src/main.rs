@@ -369,6 +369,7 @@ struct RayResources {
 fn generate_setup_commands(
     python_version: Option<StrRef>,
     ray_version: Option<StrRef>,
+    dependencies: &[StrRef],
 ) -> Vec<StrRef> {
     let mut commands = vec!["curl -LsSf https://astral.sh/uv/install.sh | sh".into()];
 
@@ -392,7 +393,18 @@ fn generate_setup_commands(
         Some(ray_version) => format!(r#""ray[default]=={ray_version}""#),
         None => "ray[default]".to_string(),
     };
-    commands.push(format!("uv pip install boto3 pip py-spy deltalake getdaft {ray_install}").into());
+    commands
+        .push(format!("uv pip install boto3 pip py-spy deltalake getdaft {ray_install}").into());
+
+    if !dependencies.is_empty() {
+        let deps = dependencies
+            .iter()
+            .map(|dep| format!(r#""{dep}""#))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let deps = format!("uv pip install {deps}").into();
+        commands.push(deps);
+    }
 
     commands
 }
@@ -460,24 +472,11 @@ fn convert(
         ]
         .into_iter()
         .collect(),
-        setup_commands: {
-            let mut commands = generate_setup_commands(
-                daft_config.setup.python_version.clone(),
-                daft_config.setup.ray_version.clone(),
-            );
-            if !daft_config.setup.dependencies.is_empty() {
-                let deps = daft_config
-                    .setup
-                    .dependencies
-                    .iter()
-                    .map(|dep| format!(r#""{dep}""#))
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                let deps = format!("uv pip install {deps}").into();
-                commands.push(deps);
-            }
-            commands
-        },
+        setup_commands: generate_setup_commands(
+            daft_config.setup.python_version.clone(),
+            daft_config.setup.ray_version.clone(),
+            daft_config.setup.dependencies.as_ref(),
+        ),
     })
 }
 

@@ -83,7 +83,7 @@ fn test_conversion(
 }
 
 #[rstest::rstest]
-#[case(None, None, vec![
+#[case(None, None, vec![], vec![
     "curl -LsSf https://astral.sh/uv/install.sh | sh".into(),
     "uv python install".into(),
     "uv venv".into(),
@@ -91,7 +91,7 @@ fn test_conversion(
     "source ~/.bashrc".into(),
     "uv pip install boto3 pip py-spy deltalake getdaft ray[default]".into(),
 ])]
-#[case(Some("3.9".into()), None, vec![
+#[case(Some("3.9".into()), None, vec![], vec![
     "curl -LsSf https://astral.sh/uv/install.sh | sh".into(),
     "uv python install 3.9".into(),
     "uv python pin 3.9".into(),
@@ -100,7 +100,7 @@ fn test_conversion(
     "source ~/.bashrc".into(),
     "uv pip install boto3 pip py-spy deltalake getdaft ray[default]".into(),
 ])]
-#[case(None, Some("2.34".into()), vec![
+#[case(None, Some("2.34".into()), vec![], vec![
     "curl -LsSf https://astral.sh/uv/install.sh | sh".into(),
     "uv python install".into(),
     "uv venv".into(),
@@ -108,20 +108,22 @@ fn test_conversion(
     "source ~/.bashrc".into(),
     r#"uv pip install boto3 pip py-spy deltalake getdaft "ray[default]==2.34""#.into(),
 ])]
-#[case(None, None, vec![
+#[case(None, None, vec!["requests==0.0.0".into()], vec![
     "curl -LsSf https://astral.sh/uv/install.sh | sh".into(),
     "uv python install".into(),
     "uv venv".into(),
     "echo 'source $HOME/.venv/bin/activate' >> ~/.bashrc".into(),
     "source ~/.bashrc".into(),
     "uv pip install boto3 pip py-spy deltalake getdaft ray[default]".into(),
+    r#"uv pip install "requests==0.0.0""#.into(),
 ])]
 fn test_generate_setup_commands(
     #[case] python_version: Option<StrRef>,
     #[case] ray_version: Option<StrRef>,
+    #[case] dependencies: Vec<StrRef>,
     #[case] expected: Vec<StrRef>,
 ) {
-    let actual = generate_setup_commands(python_version, ray_version);
+    let actual = generate_setup_commands(python_version, ray_version, dependencies.as_slice());
     assert_eq!(actual, expected);
 }
 

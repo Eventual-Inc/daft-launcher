@@ -1,5 +1,6 @@
-use super::*;
 use tokio::fs;
+
+use super::*;
 
 fn not_found_okay(result: std::io::Result<()>) -> std::io::Result<()> {
     match result {
@@ -19,9 +20,10 @@ async fn get_path() -> (TempDir, PathBuf) {
 /// This tests the creation of a daft-launcher configuration file.
 ///
 /// # Note
-/// This does *not* check the contents of the newly created configuration file. The reason is
-/// because we perform some minor templatization of the `template.toml` file before writing it.
-/// Thus, the outputted configuration file does not *exactly* match the original `template.toml` file.
+/// This does *not* check the contents of the newly created configuration file.
+/// The reason is because we perform some minor templatization of the
+/// `template.toml` file before writing it. Thus, the outputted configuration
+/// file does not *exactly* match the original `template.toml` file.
 #[tokio::test]
 async fn test_init() {
     let (_temp_dir, path) = get_path().await;
@@ -37,8 +39,8 @@ async fn test_init() {
     assert!(path.is_file());
 }
 
-/// Tests to make sure that `daft check` properly asserts the schema of the newly created
-/// daft-launcher configuration file.
+/// Tests to make sure that `daft check` properly asserts the schema of the
+/// newly created daft-launcher configuration file.
 #[tokio::test]
 async fn test_check() {
     let (_temp_dir, path) = get_path().await;

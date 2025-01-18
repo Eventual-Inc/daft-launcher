@@ -208,10 +208,10 @@ struct DaftSetup {
     name: StrRef,
     #[serde(deserialize_with = "parse_daft_launcher_requirement")]
     requires: Requirement,
-    #[serde(deserialize_with = "parse_python_requirement")]
-    requires_python: Requirement,
-    #[serde(deserialize_with = "parse_ray_requirement")]
-    requires_ray: Requirement,
+    #[serde(deserialize_with = "parse_python_version")]
+    python_version: Versioning,
+    #[serde(deserialize_with = "parse_ray_version")]
+    ray_version: Versioning,
     region: StrRef,
     #[serde(default = "default_number_of_workers")]
     number_of_workers: usize,
@@ -274,32 +274,32 @@ fn default_image_id() -> StrRef {
     "ami-04dd23e62ed049936".into()
 }
 
-fn parse_python_requirement<'de, D>(deserializer: D) -> Result<Requirement, D::Error>
+fn parse_python_version<'de, D>(deserializer: D) -> Result<Versioning, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
     let raw: StrRef = Deserialize::deserialize(deserializer)?;
-    let requirement = raw
-        .parse::<Requirement>()
-        .map_err(serde::de::Error::custom)?;
-    let minimum_python_version = "3.9"
+    let requested_py_version = raw
         .parse::<Versioning>()
+        .map_err(serde::de::Error::custom)?;
+    let minimum_py_requirement = ">=3.9"
+        .parse::<Requirement>()
         .expect("Parsing a static, constant version should always succeed");
 
-    if requirement.matches(&minimum_python_version) {
-        Ok(requirement)
+    if minimum_py_requirement.matches(&requested_py_version) {
+        Ok(requested_py_version)
     } else {
-        Err(serde::de::Error::custom(format!("The minimum supported python version is {minimum_python_version}, but your configuration file requested python version {requirement}")))
+        Err(serde::de::Error::custom(format!("The minimum supported python version is {minimum_py_requirement}, but your configuration file requested python version {requested_py_version}")))
     }
 }
 
-fn parse_ray_requirement<'de, D>(deserializer: D) -> Result<Requirement, D::Error>
+fn parse_ray_version<'de, D>(deserializer: D) -> Result<Versioning, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
     let raw: StrRef = Deserialize::deserialize(deserializer)?;
-    let requirement = raw.parse().map_err(serde::de::Error::custom)?;
-    Ok(requirement)
+    let version = raw.parse().map_err(serde::de::Error::custom)?;
+    Ok(version)
 }
 
 fn parse_daft_launcher_requirement<'de, D>(deserializer: D) -> Result<Requirement, D::Error>
@@ -381,17 +381,10 @@ struct RayResources {
 }
 
 fn generate_setup_commands(
-    python_requirement: Requirement,
-    ray_requirement: Requirement,
+    python_version: Versioning,
+    ray_version: Versioning,
     dependencies: &[StrRef],
 ) -> Vec<StrRef> {
-    let python_version = python_requirement
-        .version
-        .expect("Version should always be available");
-    let ray_version = ray_requirement
-        .version
-        .expect("Version should always be available");
-
     let mut commands = vec![
         "curl -LsSf https://astral.sh/uv/install.sh | sh".into(),
         format!("uv python install {python_version}").into(),
@@ -399,7 +392,7 @@ fn generate_setup_commands(
         "uv venv".into(),
         "echo 'source $HOME/.venv/bin/activate' >> ~/.bashrc".into(),
         "source ~/.bashrc".into(),
-        format!("uv pip install boto3 pip py-spy deltalake getdaft {ray_version}").into(),
+        format!(r#"uv pip install boto3 pip py-spy deltalake getdaft "ray[default]=={ray_version}""#).into(),
     ];
 
     if !dependencies.is_empty() {
@@ -479,8 +472,8 @@ fn convert(
         .into_iter()
         .collect(),
         setup_commands: generate_setup_commands(
-            daft_config.setup.requires_python.clone(),
-            daft_config.setup.requires_ray.clone(),
+            daft_config.setup.python_version.clone(),
+            daft_config.setup.ray_version.clone(),
             daft_config.setup.dependencies.as_ref(),
         ),
     })
@@ -825,14 +818,14 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
             }
             let contents = include_str!("template.toml");
             let contents = contents
-                .replace("<REQUIRES>", concat!("=", env!("CARGO_PKG_VERSION")))
+                .replace("<requires>", concat!("=", env!("CARGO_PKG_VERSION")))
                 .replace(
-                    "<REQUIRES-PYTHON>",
-                    &format!("={}", get_python_version_from_env().await?),
+                    "<python-version>",
+                    get_python_version_from_env().await?.to_string().as_str(),
                 )
                 .replace(
-                    "<REQUIRES-RAY>",
-                    &format!("={}", get_ray_version_from_env().await?),
+                    "<ray-version>",
+                    get_ray_version_from_env().await?.to_string().as_str(),
                 );
             fs::write(path, contents).await?;
         }

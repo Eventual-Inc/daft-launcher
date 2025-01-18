@@ -7,9 +7,9 @@
 
 [setup]
 name = "daft-launcher-example"
-requires = "<REQUIRES>"
-requires-python = "<REQUIRES-PYTHON>"
-requires-ray = "<REQUIRES-RAY>"
+requires = "<requires>"
+python-version = "<python-version>"
+ray-version = "<ray-version>"
 region = "us-west-2"
 number-of-workers = 4
 

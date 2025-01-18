@@ -19,6 +19,7 @@ semver = { version = "1.0", features = ["serde"] }
 serde = { version = "1.0", features = ["derive", "rc"] }
 comfy-table = "7.1.1"
 regex = "1.11.1"
+open = "5.3.2"
 
 [dev-dependencies]
 rstest = "0.24.0"

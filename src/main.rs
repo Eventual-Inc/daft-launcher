@@ -9,6 +9,8 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
+    thread::{sleep, spawn},
+    time::Duration,
 };
 
 #[cfg(not(test))]
@@ -790,10 +792,18 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
 
             let (_temp_dir, ray_path) = create_temp_ray_file()?;
             write_ray_config(ray_config, &ray_path).await?;
+            let open_join_handle = spawn(|| {
+                sleep(Duration::from_millis(500));
+                open::that("http://localhost:8265")?;
+                Ok::<_, anyhow::Error>(())
+            });
             let _ = ssh::ssh_portforward(ray_path, &daft_config, Some(port))
                 .await?
                 .wait_with_output()
                 .await?;
+            open_join_handle
+                .join()
+                .map_err(|_| anyhow::anyhow!("Failed to join browser-opening thread"))??;
         }
         SubCommand::Ssh(ConfigPath { config }) => {
             let (daft_config, ray_config) = read_and_convert(&config, None).await?;

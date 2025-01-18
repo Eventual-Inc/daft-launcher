@@ -3,11 +3,13 @@
 #
 # For more information on the availale commands and configuration options, visit [here](https://eventual-inc.github.io/daft-launcher).
 #
-# Happy daft-ing!
+# Happy daft-ing 🚀!
 
 [setup]
 name = "daft-launcher-example"
-version = "<VERSION>"
+requires = "<requires>"
+python-version = "<python-version>"
+ray-version = "<ray-version>"
 region = "us-west-2"
 number-of-workers = 4
 

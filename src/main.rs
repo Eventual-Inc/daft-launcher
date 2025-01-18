@@ -7,6 +7,7 @@ use std::{
     io::{Error, ErrorKind},
     net::Ipv4Addr,
     path::{Path, PathBuf},
+    process::Stdio,
     str::FromStr,
     sync::Arc,
     thread::{sleep, spawn},
@@ -22,10 +23,10 @@ use comfy_table::{
     modifiers, presets, Attribute, Cell, CellAlignment, Color, ContentArrangement, Table,
 };
 use regex::Regex;
-use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use tempdir::TempDir;
 use tokio::{fs, process::Command};
+use versions::{Requirement, Versioning};
 
 type StrRef = Arc<str>;
 type PathRef = Arc<Path>;
@@ -205,8 +206,12 @@ where
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 struct DaftSetup {
     name: StrRef,
-    #[serde(deserialize_with = "parse_version_req")]
-    version: VersionReq,
+    #[serde(deserialize_with = "parse_daft_launcher_requirement")]
+    requires: Requirement,
+    #[serde(deserialize_with = "parse_python_version")]
+    python_version: Versioning,
+    #[serde(deserialize_with = "parse_ray_version")]
+    ray_version: Versioning,
     region: StrRef,
     #[serde(default = "default_number_of_workers")]
     number_of_workers: usize,
@@ -269,21 +274,49 @@ fn default_image_id() -> StrRef {
     "ami-04dd23e62ed049936".into()
 }
 
-fn parse_version_req<'de, D>(deserializer: D) -> Result<VersionReq, D::Error>
+fn parse_python_version<'de, D>(deserializer: D) -> Result<Versioning, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
     let raw: StrRef = Deserialize::deserialize(deserializer)?;
-    let version_req = raw
-        .parse::<VersionReq>()
+    let requested_py_version = raw
+        .parse::<Versioning>()
+        .map_err(serde::de::Error::custom)?;
+    let minimum_py_requirement = ">=3.9"
+        .parse::<Requirement>()
+        .expect("Parsing a static, constant version should always succeed");
+
+    if minimum_py_requirement.matches(&requested_py_version) {
+        Ok(requested_py_version)
+    } else {
+        Err(serde::de::Error::custom(format!("The minimum supported python version is {minimum_py_requirement}, but your configuration file requested python version {requested_py_version}")))
+    }
+}
+
+fn parse_ray_version<'de, D>(deserializer: D) -> Result<Versioning, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw: StrRef = Deserialize::deserialize(deserializer)?;
+    let version = raw.parse().map_err(serde::de::Error::custom)?;
+    Ok(version)
+}
+
+fn parse_daft_launcher_requirement<'de, D>(deserializer: D) -> Result<Requirement, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw: StrRef = Deserialize::deserialize(deserializer)?;
+    let requested_requirement = raw
+        .parse::<Requirement>()
         .map_err(serde::de::Error::custom)?;
     let current_version = env!("CARGO_PKG_VERSION")
-        .parse::<Version>()
+        .parse::<Versioning>()
         .expect("CARGO_PKG_VERSION must exist");
-    if version_req.matches(&current_version) {
-        Ok(version_req)
+    if requested_requirement.matches(&current_version) {
+        Ok(requested_requirement)
     } else {
-        Err(serde::de::Error::custom(format!("You're running daft-launcher version {current_version}, but your configuration file requires version {version_req}")))
+        Err(serde::de::Error::custom(format!("You're running daft-launcher version {current_version}, but your configuration file requires version {requested_requirement}")))
     }
 }
 
@@ -347,16 +380,35 @@ struct RayResources {
     cpu: usize,
 }
 
-fn default_setup_commands() -> Vec<StrRef> {
-    vec![
+fn generate_setup_commands(
+    python_version: Versioning,
+    ray_version: Versioning,
+    dependencies: &[StrRef],
+) -> Vec<StrRef> {
+    let mut commands = vec![
         "curl -LsSf https://astral.sh/uv/install.sh | sh".into(),
-        "uv python install 3.12".into(),
-        "uv python pin 3.12".into(),
+        format!("uv python install {python_version}").into(),
+        format!("uv python pin {python_version}").into(),
         "uv venv".into(),
         "echo 'source $HOME/.venv/bin/activate' >> ~/.bashrc".into(),
         "source ~/.bashrc".into(),
-        "uv pip install boto3 pip ray[default] getdaft py-spy deltalake".into(),
-    ]
+        format!(
+            r#"uv pip install boto3 pip py-spy deltalake getdaft "ray[default]=={ray_version}""#
+        )
+        .into(),
+    ];
+
+    if !dependencies.is_empty() {
+        let deps = dependencies
+            .iter()
+            .map(|dep| format!(r#""{dep}""#))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let deps = format!("uv pip install {deps}").into();
+        commands.push(deps);
+    }
+
+    commands
 }
 
 fn convert(
@@ -422,21 +474,11 @@ fn convert(
         ]
         .into_iter()
         .collect(),
-        setup_commands: {
-            let mut commands = default_setup_commands();
-            if !daft_config.setup.dependencies.is_empty() {
-                let deps = daft_config
-                    .setup
-                    .dependencies
-                    .iter()
-                    .map(|dep| format!(r#""{dep}""#))
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                let deps = format!("uv pip install {deps}").into();
-                commands.push(deps);
-            }
-            commands
-        },
+        setup_commands: generate_setup_commands(
+            daft_config.setup.python_version.clone(),
+            daft_config.setup.ray_version.clone(),
+            daft_config.setup.dependencies.as_ref(),
+        ),
     })
 }
 
@@ -729,6 +771,37 @@ async fn submit(working_dir: &Path, command_segments: impl AsRef<[&str]>) -> any
     }
 }
 
+async fn get_version_from_env(bin: &str, prefix: &str) -> anyhow::Result<Versioning> {
+    let output = Command::new(bin)
+        .arg("--version")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?
+        .wait_with_output()
+        .await?;
+
+    if output.status.success() {
+        let version = String::from_utf8(output.stdout)?
+            .strip_prefix(prefix)
+            .ok_or_else(|| anyhow::anyhow!("Could not parse {bin} version"))?
+            .trim()
+            .parse()?;
+        Ok(version)
+    } else {
+        Err(anyhow::anyhow!("Failed to find {bin} executable"))
+    }
+}
+
+async fn get_python_version_from_env() -> anyhow::Result<Versioning> {
+    let python_version = get_version_from_env("python", "Python ").await?;
+    Ok(python_version)
+}
+
+async fn get_ray_version_from_env() -> anyhow::Result<Versioning> {
+    let python_version = get_version_from_env("ray", "ray, version ").await?;
+    Ok(python_version)
+}
+
 async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
     match daft_launcher.sub_command {
         SubCommand::Init(Init { path }) => {
@@ -737,7 +810,16 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
                 bail!("The path {path:?} already exists; the path given must point to a new location on your filesystem");
             }
             let contents = include_str!("template.toml");
-            let contents = contents.replace("<VERSION>", env!("CARGO_PKG_VERSION"));
+            let contents = contents
+                .replace("<requires>", concat!("=", env!("CARGO_PKG_VERSION")))
+                .replace(
+                    "<python-version>",
+                    get_python_version_from_env().await?.to_string().as_str(),
+                )
+                .replace(
+                    "<ray-version>",
+                    get_ray_version_from_env().await?.to_string().as_str(),
+                );
             fs::write(path, contents).await?;
         }
         SubCommand::Check(ConfigPath { config }) => {

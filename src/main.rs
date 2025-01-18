@@ -176,7 +176,7 @@ struct Connect {
     #[arg(long, default_value = "8265")]
     port: u16,
 
-    /// Don't open the dashboard automatically.
+    /// Prevent the dashboard from opening automatically.
     #[arg(long)]
     no_dashboard: bool,
 

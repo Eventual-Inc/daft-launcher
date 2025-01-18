@@ -8,7 +8,6 @@
 [setup]
 name = "daft-launcher-example"
 version = "<VERSION>"
-provider = "aws"
 region = "us-west-2"
 number-of-workers = 4
 

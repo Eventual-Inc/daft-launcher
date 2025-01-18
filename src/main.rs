@@ -158,7 +158,7 @@ struct ConfigPath {
 struct DaftConfig {
     setup: DaftSetup,
     #[serde(default)]
-    run: DaftRun,
+    run: Vec<StrRef>,
     #[serde(rename = "job", deserialize_with = "parse_jobs")]
     jobs: HashMap<StrRef, DaftJob>,
 }
@@ -199,7 +199,6 @@ struct DaftSetup {
     name: StrRef,
     #[serde(deserialize_with = "parse_version_req")]
     version: VersionReq,
-    provider: DaftProvider,
     region: StrRef,
     #[serde(default = "default_number_of_workers")]
     number_of_workers: usize,
@@ -278,21 +277,6 @@ where
     } else {
         Err(serde::de::Error::custom(format!("You're running daft-launcher version {current_version}, but your configuration file requires version {version_req}")))
     }
-}
-
-#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-enum DaftProvider {
-    Aws,
-}
-
-#[derive(Default, Debug, Deserialize, Clone, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-struct DaftRun {
-    #[serde(default)]
-    pre_setup_commands: Vec<StrRef>,
-    #[serde(default)]
-    post_setup_commands: Vec<StrRef>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -444,6 +428,7 @@ async fn read_and_convert(
                     let deps = format!("uv pip install {deps}").into();
                     commands.push(deps);
                 }
+                commands.extend(daft_config.run.iter().map(Clone::clone));
                 commands
             },
         })

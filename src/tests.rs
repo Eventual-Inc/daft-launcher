@@ -59,8 +59,31 @@ async fn test_check() {
     .unwrap();
 }
 
+/// This tests the core conversion functionality, from a `DaftConfig` to a
+/// `RayConfig`.
+///
+/// # Note
+/// Fields which expect a filesystem path (i.e., "ssh_private_key" and
+/// "job.working_dir") are not checked for existence. Therefore, you can really
+/// put any value in there and this test will pass.
+///
+/// This is because the point of this test is not to check for existence, but
+/// rather to test the mapping from `DaftConfig` to `RayConfig`.
+#[rstest::rstest]
+#[case(simple_config())]
+fn test_conversion(
+    #[case] (daft_config, teardown_behaviour, expected): (
+        DaftConfig,
+        Option<TeardownBehaviour>,
+        RayConfig,
+    ),
+) {
+    let actual = convert(&daft_config, teardown_behaviour).unwrap();
+    assert_eq!(actual, expected);
+}
+
 #[rstest::fixture]
-fn simple_config() -> (DaftConfig, Option<TeardownBehaviour>, RayConfig) {
+pub fn simple_config() -> (DaftConfig, Option<TeardownBehaviour>, RayConfig) {
     let test_name: StrRef = "test".into();
     let ssh_private_key: PathRef = Arc::from(PathBuf::from("testkey.pem"));
     let number_of_workers = 4;
@@ -125,17 +148,4 @@ fn simple_config() -> (DaftConfig, Option<TeardownBehaviour>, RayConfig) {
     };
 
     (daft_config, None, ray_config)
-}
-
-#[rstest::rstest]
-#[case(simple_config())]
-fn test_conversion(
-    #[case] (daft_config, teardown_behaviour, expected): (
-        DaftConfig,
-        Option<TeardownBehaviour>,
-        RayConfig,
-    ),
-) {
-    let actual = convert(&daft_config, teardown_behaviour).unwrap();
-    assert_eq!(actual, expected);
 }

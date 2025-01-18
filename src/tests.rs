@@ -82,6 +82,54 @@ fn test_conversion(
     assert_eq!(actual, expected);
 }
 
+#[rstest::rstest]
+#[case(None, None, None, vec![
+    "curl -LsSf https://astral.sh/uv/install.sh | sh".into(),
+    "uv python install".into(),
+    "uv venv".into(),
+    "echo 'source $HOME/.venv/bin/activate' >> ~/.bashrc".into(),
+    "source ~/.bashrc".into(),
+    "uv pip install boto3 pip py-spy deltalake ray[default]".into(),
+    "uv pip install getdaft".into(),
+])]
+#[case(Some("3.9".into()), None, None, vec![
+    "curl -LsSf https://astral.sh/uv/install.sh | sh".into(),
+    "uv python install 3.9".into(),
+    "uv python pin 3.9".into(),
+    "uv venv".into(),
+    "echo 'source $HOME/.venv/bin/activate' >> ~/.bashrc".into(),
+    "source ~/.bashrc".into(),
+    "uv pip install boto3 pip py-spy deltalake ray[default]".into(),
+    "uv pip install getdaft".into(),
+])]
+#[case(None, Some("2.34".into()), None, vec![
+    "curl -LsSf https://astral.sh/uv/install.sh | sh".into(),
+    "uv python install".into(),
+    "uv venv".into(),
+    "echo 'source $HOME/.venv/bin/activate' >> ~/.bashrc".into(),
+    "source ~/.bashrc".into(),
+    r#"uv pip install boto3 pip py-spy deltalake "ray[default]==2.34""#.into(),
+    "uv pip install getdaft".into(),
+])]
+#[case(None, None, Some("https://example.com/path/to/wheel.whl".into()), vec![
+    "curl -LsSf https://astral.sh/uv/install.sh | sh".into(),
+    "uv python install".into(),
+    "uv venv".into(),
+    "echo 'source $HOME/.venv/bin/activate' >> ~/.bashrc".into(),
+    "source ~/.bashrc".into(),
+    "uv pip install boto3 pip py-spy deltalake ray[default]".into(),
+    "uv pip install https://example.com/path/to/wheel.whl".into(),
+])]
+fn test_generate_setup_commands(
+    #[case] python_version: Option<StrRef>,
+    #[case] ray_version: Option<StrRef>,
+    #[case] daft_wheel: Option<StrRef>,
+    #[case] expected: Vec<StrRef>,
+) {
+    let actual = generate_setup_commands(python_version, ray_version, daft_wheel);
+    assert_eq!(actual, expected);
+}
+
 #[rstest::fixture]
 pub fn simple_config() -> (DaftConfig, Option<TeardownBehaviour>, RayConfig) {
     let test_name: StrRef = "test".into();
@@ -90,7 +138,10 @@ pub fn simple_config() -> (DaftConfig, Option<TeardownBehaviour>, RayConfig) {
     let daft_config = DaftConfig {
         setup: DaftSetup {
             name: test_name.clone(),
-            version: "0.0.0".parse().unwrap(),
+            version: "1.2.3".parse().unwrap(),
+            python_version: Some("3.12".into()),
+            ray_version: Some("2.34".into()),
+            daft_wheel: None,
             region: test_name.clone(),
             number_of_workers,
             ssh_user: test_name.clone(),
@@ -144,7 +195,16 @@ pub fn simple_config() -> (DaftConfig, Option<TeardownBehaviour>, RayConfig) {
         ]
         .into_iter()
         .collect(),
-        setup_commands: default_setup_commands(),
+        setup_commands: vec![
+            "curl -LsSf https://astral.sh/uv/install.sh | sh".into(),
+            "uv python install 3.12".into(),
+            "uv python pin 3.12".into(),
+            "uv venv".into(),
+            "echo 'source $HOME/.venv/bin/activate' >> ~/.bashrc".into(),
+            "source ~/.bashrc".into(),
+            r#"uv pip install boto3 pip py-spy deltalake "ray[default]==2.34""#.into(),
+            "uv pip install getdaft".into(),
+        ],
     };
 
     (daft_config, None, ray_config)

@@ -199,8 +199,13 @@ where
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 struct DaftSetup {
     name: StrRef,
-    #[serde(deserialize_with = "parse_version_req")]
+    #[serde(deserialize_with = "parse_daft_launcher_version")]
     version: VersionReq,
+    #[serde(default, deserialize_with = "parse_optional_soft_version_req")]
+    python_version: Option<StrRef>,
+    #[serde(default, deserialize_with = "parse_optional_soft_version_req")]
+    ray_version: Option<StrRef>,
+    daft_wheel: Option<StrRef>,
     region: StrRef,
     #[serde(default = "default_number_of_workers")]
     number_of_workers: usize,
@@ -263,7 +268,22 @@ fn default_image_id() -> StrRef {
     "ami-04dd23e62ed049936".into()
 }
 
-fn parse_version_req<'de, D>(deserializer: D) -> Result<VersionReq, D::Error>
+fn parse_optional_soft_version_req<'de, D>(deserializer: D) -> Result<Option<StrRef>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw: StrRef = Deserialize::deserialize(deserializer)?;
+
+    // Just ensure that the string can be parsed into a `VersionReq`, but return the
+    // raw string anyways.
+    let _ = raw
+        .parse::<VersionReq>()
+        .map_err(serde::de::Error::custom)?;
+
+    Ok(Some(raw))
+}
+
+fn parse_daft_launcher_version<'de, D>(deserializer: D) -> Result<VersionReq, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -341,16 +361,41 @@ struct RayResources {
     cpu: usize,
 }
 
-fn default_setup_commands() -> Vec<StrRef> {
-    vec![
-        "curl -LsSf https://astral.sh/uv/install.sh | sh".into(),
-        "uv python install 3.12".into(),
-        "uv python pin 3.12".into(),
+fn generate_setup_commands(
+    python_version: Option<StrRef>,
+    ray_version: Option<StrRef>,
+    daft_wheel: Option<StrRef>,
+) -> Vec<StrRef> {
+    let mut commands = vec!["curl -LsSf https://astral.sh/uv/install.sh | sh".into()];
+
+    match python_version {
+        Some(python_version) => {
+            commands.extend([
+                format!("uv python install {python_version}").into(),
+                format!("uv python pin {python_version}").into(),
+            ]);
+        }
+        None => commands.push("uv python install".into()),
+    }
+
+    commands.extend([
         "uv venv".into(),
         "echo 'source $HOME/.venv/bin/activate' >> ~/.bashrc".into(),
         "source ~/.bashrc".into(),
-        "uv pip install boto3 pip ray[default] getdaft py-spy deltalake".into(),
-    ]
+    ]);
+
+    let ray_install = match ray_version {
+        Some(ray_version) => format!(r#""ray[default]=={ray_version}""#),
+        None => "ray[default]".to_string(),
+    };
+    commands.push(format!("uv pip install boto3 pip py-spy deltalake {ray_install}").into());
+
+    match daft_wheel {
+        Some(daft_wheel) => commands.push(format!("uv pip install {daft_wheel}").into()),
+        None => commands.push("uv pip install getdaft".into()),
+    }
+
+    commands
 }
 
 fn convert(
@@ -417,7 +462,11 @@ fn convert(
         .into_iter()
         .collect(),
         setup_commands: {
-            let mut commands = default_setup_commands();
+            let mut commands = generate_setup_commands(
+                daft_config.setup.python_version.clone(),
+                daft_config.setup.ray_version.clone(),
+                daft_config.setup.daft_wheel.clone(),
+            );
             if !daft_config.setup.dependencies.is_empty() {
                 let deps = daft_config
                     .setup

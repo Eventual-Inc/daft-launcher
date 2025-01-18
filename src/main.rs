@@ -176,6 +176,10 @@ struct Connect {
     #[arg(long, default_value = "8265")]
     port: u16,
 
+    /// Don't open the dashboard automatically.
+    #[arg(long)]
+    no_dashboard: bool,
+
     #[clap(flatten)]
     config_path: ConfigPath,
 }
@@ -1050,31 +1054,36 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
                 }
             }
         }
-        SubCommand::Connect(Connect { port, config_path }) => {
-            let daft_config = read_daft_config(&config_path.config).await?;
-            match &daft_config.setup.provider_config {
-                ProviderConfig::Aws(aws_config) => {
-                    assert_is_logged_in_with_aws().await?;
+        SubCommand::Connect(Connect {
+            port,
+            no_dashboard,
+            config_path,
+        }) => {
+            let (daft_config, ray_config) = read_and_convert(&config_path.config, None).await?;
+            assert_is_logged_in_with_aws().await?;
 
-                    let ray_config = convert_to_ray_config(&daft_config, None)?;
-                    let (_temp_dir, ray_path) = create_temp_ray_file()?;
-                    write_ray_config(ray_config, &ray_path).await?;
+            let (_temp_dir, ray_path) = create_temp_ray_file()?;
+            write_ray_config(ray_config, &ray_path).await?;
+            let open_join_handle = if !no_dashboard {
+                Some(spawn(|| {
+                    sleep(Duration::from_millis(500));
+                    open::that("http://localhost:8265")?;
+                    Ok::<_, anyhow::Error>(())
+                }))
+            } else {
+                None
+            };
 
-                    let open_join_handle = spawn(|| {
-                        sleep(Duration::from_millis(500));
-                        open::that("http://localhost:8265")?;
-                        Ok::<_, anyhow::Error>(())
-                    });
-                    let _ = establish_ssh_portforward(ray_path, aws_config, Some(port))
-                        .await?
-                        .wait_with_output()
-                        .await?;
-                    open_join_handle
-                        .join()
-                        .map_err(|_| anyhow::anyhow!("Failed to join browser-opening thread"))??;
-                }
-                ProviderConfig::K8s(..) => not_available_for_k8s!("connect"),
-            }
+            let _ = ssh::ssh_portforward(ray_path, &daft_config, Some(port))
+                .await?
+                .wait_with_output()
+                .await?;
+
+            if let Some(open_join_handle) = open_join_handle {
+                open_join_handle
+                    .join()
+                    .map_err(|_| anyhow::anyhow!("Failed to join browser-opening thread"))??;
+            };
         }
         SubCommand::Ssh(ConfigPath { config }) => {
             let daft_config = read_daft_config(&config).await?;

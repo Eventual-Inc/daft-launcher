@@ -1,0 +1,19 @@
+# This is a template configuration file for daft-launcher with Kubernetes provider
+[setup]
+name = "my-daft-cluster"
+version = "<VERSION>"
+provider = "k8s"
+
+[setup.k8s]
+namespace = "default"  # Optional, defaults to "default"
+
+# Run configuration (optional)
+[run]
+pre-setup-commands = []
+post-setup-commands = []
+
+# Job definitions
+[[job]]
+name = "example-job"
+command = "python my_script.py"
+working-dir = "~/my_project"

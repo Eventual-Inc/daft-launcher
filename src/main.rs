@@ -1,3 +1,24 @@
+macro_rules! asset {
+    (
+        $($path_segment:literal),*
+        $(,)?
+    ) => {
+        include_str!(
+            concat! {
+                env!("CARGO_MANIFEST_DIR"),
+                "/assets",
+                $(
+                    "/",
+                    $path_segment,
+                )*
+            }
+        )
+    };
+}
+
+#[cfg(test)]
+mod tests;
+
 use std::{
     collections::HashMap,
     io::{Error, ErrorKind},
@@ -17,7 +38,6 @@ use clap::{Parser, Subcommand};
 use comfy_table::{
     modifiers, presets, Attribute, Cell, CellAlignment, Color, ContentArrangement, Table,
 };
-use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use tempdir::TempDir;
 use tokio::{
@@ -26,6 +46,7 @@ use tokio::{
     process::{Child, Command},
     time::timeout,
 };
+use versions::Versioning;
 
 type StrRef = Arc<str>;
 type PathRef = Arc<Path>;
@@ -100,7 +121,8 @@ struct Init {
     #[arg(default_value = ".daft.toml")]
     path: PathBuf,
 
-    /// The provider to use - either 'aws' (default) to auto-generate a cluster or 'k8s' for existing Kubernetes clusters
+    /// The provider to use - either 'aws' (default) to auto-generate a cluster
+    /// or 'k8s' for existing Kubernetes clusters
     #[arg(long, default_value = "aws")]
     provider: String,
 }
@@ -173,7 +195,7 @@ struct DaftConfig {
 struct DaftSetup {
     name: StrRef,
     #[serde(deserialize_with = "parse_version_req")]
-    version: VersionReq,
+    version: Versioning,
     provider: DaftProvider,
     #[serde(flatten)]
     provider_config: ProviderConfig,
@@ -289,22 +311,23 @@ fn default_image_id() -> StrRef {
     "ami-04dd23e62ed049936".into()
 }
 
-fn parse_version_req<'de, D>(deserializer: D) -> Result<VersionReq, D::Error>
+fn parse_version_req<'de, D>(deserializer: D) -> Result<Versioning, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
-    let raw: StrRef = Deserialize::deserialize(deserializer)?;
-    let version_req = raw
-        .parse::<VersionReq>()
-        .map_err(serde::de::Error::custom)?;
-    let current_version = env!("CARGO_PKG_VERSION")
-        .parse::<Version>()
-        .expect("CARGO_PKG_VERSION must exist");
-    if version_req.matches(&current_version) {
-        Ok(version_req)
-    } else {
-        Err(serde::de::Error::custom(format!("You're running daft-launcher version {current_version}, but your configuration file requires version {version_req}")))
-    }
+    todo!()
+    // let raw: StrRef = Deserialize::deserialize(deserializer)?;
+    // let version_req = raw
+    //     .parse::<VersionReq>()
+    //     .map_err(serde::de::Error::custom)?;
+    // let current_version = env!("CARGO_PKG_VERSION")
+    //     .parse::<Version>()
+    //     .expect("CARGO_PKG_VERSION must exist");
+    // if version_req.matches(&current_version) {
+    //     Ok(version_req)
+    // } else {
+    //     Err(serde::de::Error::custom(format!("You're running daft-launcher version {current_version}, but your configuration file requires version {version_req}")))
+    // }
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
@@ -411,25 +434,36 @@ async fn read_and_convert(
                 error
             }
         })?;
- 
+
     let daft_config = toml::from_str::<DaftConfig>(&contents)?;
-    
+
     let ray_config = match &daft_config.setup.provider_config {
         ProviderConfig::K8s(_) => None,
         ProviderConfig::Aws(aws_config) => {
-            let key_name = aws_config.ssh_private_key
+            let key_name = aws_config
+                .ssh_private_key
                 .clone()
                 .file_stem()
-                .ok_or_else(|| anyhow::anyhow!(r#"Private key doesn't have a name of the format "name.ext""#))?
+                .ok_or_else(|| {
+                    anyhow::anyhow!(r#"Private key doesn't have a name of the format "name.ext""#)
+                })?
                 .to_str()
-                .ok_or_else(|| anyhow::anyhow!("The file {:?} does not have a valid UTF-8 name", aws_config.ssh_private_key))?
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "The file {:?} does not have a valid UTF-8 name",
+                        aws_config.ssh_private_key
+                    )
+                })?
                 .into();
 
             let node_config = RayNodeConfig {
                 key_name,
                 instance_type: aws_config.instance_type.clone(),
                 image_id: aws_config.image_id.clone(),
-                iam_instance_profile: aws_config.iam_instance_profile_name.clone().map(|name| IamInstanceProfile { name }),
+                iam_instance_profile: aws_config
+                    .iam_instance_profile_name
+                    .clone()
+                    .map(|name| IamInstanceProfile { name }),
             };
 
             Some(RayConfig {
@@ -438,7 +472,8 @@ async fn read_and_convert(
                 provider: RayProvider {
                     r#type: "aws".into(),
                     region: aws_config.region.clone(),
-                    cache_stopped_nodes: teardown_behaviour.map(TeardownBehaviour::to_cache_stopped_nodes),
+                    cache_stopped_nodes: teardown_behaviour
+                        .map(TeardownBehaviour::to_cache_stopped_nodes),
                 },
                 auth: RayAuth {
                     ssh_user: aws_config.ssh_user.clone(),
@@ -842,19 +877,28 @@ async fn establish_kubernetes_port_forward(namespace: Option<&str>) -> anyhow::R
         .output()
         .await?;
     if !output.status.success() {
-        return Err(anyhow::anyhow!("Failed to get Ray head node services with kubectl in namespace {}", namespace));
+        return Err(anyhow::anyhow!(
+            "Failed to get Ray head node services with kubectl in namespace {}",
+            namespace
+        ));
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     if stdout.trim().is_empty() {
-        return Err(anyhow::anyhow!("Ray head node service not found in namespace {}", namespace));
+        return Err(anyhow::anyhow!(
+            "Ray head node service not found in namespace {}",
+            namespace
+        ));
     }
-    
+
     let head_node_service_name = stdout
         .lines()
         .next()
         .ok_or_else(|| anyhow::anyhow!("Failed to get the head node service name"))?;
-    println!("Found Ray head node service: {} in namespace {}", head_node_service_name, namespace);
+    println!(
+        "Found Ray head node service: {} in namespace {}",
+        head_node_service_name, namespace
+    );
 
     // Start port-forward with stderr piped so we can monitor the process
     let mut port_forward = Command::new("kubectl")
@@ -864,7 +908,7 @@ async fn establish_kubernetes_port_forward(namespace: Option<&str>) -> anyhow::R
         .arg(format!("svc/{}", head_node_service_name))
         .arg("8265:8265")
         .stderr(Stdio::piped())
-        .stdout(Stdio::piped())  // Capture stdout too
+        .stdout(Stdio::piped()) // Capture stdout too
         .kill_on_drop(true)
         .spawn()?;
 
@@ -895,7 +939,8 @@ async fn submit_k8s(
 ) -> anyhow::Result<()> {
     let command_segments = command_segments.as_ref();
 
-    // Start port forwarding - it will be automatically killed when _port_forward is dropped
+    // Start port forwarding - it will be automatically killed when _port_forward is
+    // dropped
     let _port_forward = establish_kubernetes_port_forward(namespace).await?;
 
     // Give the port-forward a moment to fully establish
@@ -928,9 +973,9 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
                 bail!("The path {path:?} already exists; the path given must point to a new location on your filesystem");
             }
             let contents = if provider == "k8s" {
-                include_str!("template_k8s.toml")
+                asset!("template_k8s.toml")
             } else {
-                include_str!("template.toml")
+                asset!("template.toml")
             }
             .replace("<VERSION>", env!("CARGO_PKG_VERSION"));
             fs::write(path, contents).await?;
@@ -1073,7 +1118,7 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
                 }
                 ProviderConfig::K8s(k8s_config) => {
                     let (temp_sql_dir, sql_path) = create_temp_file("sql.py")?;
-                    fs::write(sql_path, include_str!("sql.py")).await?;
+                    fs::write(sql_path, asset!("sql.py")).await?;
                     submit_k8s(
                         temp_sql_dir.path(),
                         vec!["python", "sql.py", sql.as_ref()],
@@ -1084,7 +1129,8 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
             }
         }
         SubCommand::Stop(ConfigPath { config }) => {
-            let (daft_config, ray_config) = read_and_convert(&config, Some(TeardownBehaviour::Stop)).await?;
+            let (daft_config, ray_config) =
+                read_and_convert(&config, Some(TeardownBehaviour::Stop)).await?;
             match daft_config.setup.provider {
                 DaftProvider::Aws => {
                     if ray_config.is_none() {
@@ -1103,7 +1149,8 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
             }
         }
         SubCommand::Kill(ConfigPath { config }) => {
-            let (daft_config, ray_config) = read_and_convert(&config, Some(TeardownBehaviour::Kill)).await?;
+            let (daft_config, ray_config) =
+                read_and_convert(&config, Some(TeardownBehaviour::Kill)).await?;
             match daft_config.setup.provider {
                 DaftProvider::Aws => {
                     if ray_config.is_none() {
@@ -1131,36 +1178,12 @@ async fn main() -> anyhow::Result<()> {
     run(DaftLauncher::parse()).await
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_init_and_export() {
-        run(DaftLauncher {
-            sub_command: SubCommand::Init(Init {
-                path: ".daft.toml".into(),
-                provider: "aws".into(),
-            }),
-            verbosity: 0,
-        })
-        .await
-        .unwrap();
-        run(DaftLauncher {
-            sub_command: SubCommand::Check(ConfigPath {
-                config: ".daft.toml".into(),
-            }),
-            verbosity: 0,
-        })
-        .await
-        .unwrap();
-    }
-}
-
 // Helper function to get AWS config
 fn get_aws_config(config: &DaftConfig) -> anyhow::Result<&AwsConfig> {
     match &config.setup.provider_config {
         ProviderConfig::Aws(aws_config) => Ok(aws_config),
-        ProviderConfig::K8s(_) => anyhow::bail!("Expected AWS configuration but found Kubernetes configuration"),
+        ProviderConfig::K8s(_) => {
+            anyhow::bail!("Expected AWS configuration but found Kubernetes configuration")
+        }
     }
 }

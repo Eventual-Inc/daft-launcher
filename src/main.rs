@@ -816,28 +816,17 @@ async fn establish_kubernetes_port_forward(namespace: Option<&str>) -> anyhow::R
     }
 }
 
-async fn submit_k8s(
-    working_dir: &Path,
+async fn submit(
+    working_dir: impl AsRef<Path>,
     command_segments: impl AsRef<[&str]>,
-    namespace: Option<&str>,
 ) -> anyhow::Result<()> {
-    let command_segments = command_segments.as_ref();
-
-    // Start port forwarding - it will be automatically killed when _port_forward is
-    // dropped
-    let _port_forward = establish_kubernetes_port_forward(namespace).await?;
-
-    // Give the port-forward a moment to fully establish
-    tokio::time::sleep(Duration::from_secs(1)).await;
-
-    // Submit the job
     let exit_status = Command::new("ray")
         .env("PYTHONUNBUFFERED", "1")
         .args(["job", "submit", "--address", "http://localhost:8265"])
         .arg("--working-dir")
-        .arg(working_dir)
+        .arg(working_dir.as_ref())
         .arg("--")
-        .args(command_segments)
+        .args(command_segments.as_ref())
         .spawn()?
         .wait()
         .await?;
@@ -847,6 +836,23 @@ async fn submit_k8s(
     } else {
         Err(anyhow::anyhow!("Failed to submit job to the ray cluster"))
     }
+}
+
+async fn submit_k8s(
+    working_dir: impl AsRef<Path>,
+    command_segments: impl AsRef<[&str]>,
+    namespace: Option<&str>,
+) -> anyhow::Result<()> {
+    // Start port forwarding - it will be automatically killed when _port_forward is
+    // dropped
+    let _port_forward = establish_kubernetes_port_forward(namespace).await?;
+
+    // Give the port-forward a moment to fully establish
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    submit_k8s(working_dir, command_segments, namespace).await?;
+
+    Ok(())
 }
 
 async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
@@ -933,17 +939,16 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
 
             match &daft_config.setup.provider_config {
                 ProviderConfig::Aws(..) => {
-                    todo!()
-                    // assert_is_logged_in_with_aws().await?;
-                    // let ray_config = convert_to_ray_config(&daft_config, None)?;
-                    // let (_temp_dir, ray_path) = create_temp_ray_file()?;
-                    // write_ray_config(ray_config, &ray_path).await?;
-                    // submit_k8s(
-                    //     daft_job.working_dir.as_ref(),
-                    //     daft_job.command.as_ref().split(' ').collect::<Vec<_>>(),
-                    //     None,
-                    // )
-                    // .await?;
+                    assert_is_logged_in_with_aws().await?;
+
+                    let ray_config = convert_to_ray_config(&daft_config, None)?;
+                    let (_temp_dir, ray_path) = create_temp_ray_file()?;
+                    write_ray_config(ray_config, &ray_path).await?;
+                    submit(
+                        daft_job.working_dir.as_ref(),
+                        daft_job.command.as_ref().split(' ').collect::<Vec<_>>(),
+                    )
+                    .await?;
                 }
                 ProviderConfig::K8s(k8s_config) => {
                     submit_k8s(
@@ -1010,7 +1015,17 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
         SubCommand::Sql(Sql { sql, config_path }) => {
             let daft_config = read_daft_config(&config_path.config).await?;
             match &daft_config.setup.provider_config {
-                ProviderConfig::Aws(..) => todo!(),
+                ProviderConfig::Aws(aws_config) => {
+                    assert_is_logged_in_with_aws().await?;
+
+                    let ray_config = convert_to_ray_config(&daft_config, None)?;
+                    let (_temp_dir, ray_path) = create_temp_ray_file()?;
+                    write_ray_config(ray_config, &ray_path).await?;
+                    let _child = ssh::ssh_portforward(ray_path, &aws_config, None).await?;
+                    let (temp_sql_dir, sql_path) = create_temp_file("sql.py")?;
+                    fs::write(sql_path, asset!("sql.py")).await?;
+                    submit(temp_sql_dir.path(), vec!["python", "sql.py", sql.as_ref()]).await?;
+                }
                 ProviderConfig::K8s(k8s_config) => {
                     let (temp_sql_dir, sql_path) = create_temp_file("sql.py")?;
                     fs::write(sql_path, asset!("sql.py")).await?;

@@ -46,11 +46,6 @@ async fn generate_ssh_command(
     portforward: Option<u16>,
     verbose: bool,
 ) -> anyhow::Result<(Ipv4Addr, Command)> {
-    // match &daft_config.setup.provider_config {
-    //     ProviderConfig::Aws(aws_config) => {
-    //     }
-    //     ProviderConfig::K8s(..) => todo!(),
-    // }
     let user = aws_config.ssh_user.as_ref();
     let addr = get_head_node_ip(ray_path).await?;
 

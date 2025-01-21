@@ -850,7 +850,7 @@ async fn submit_k8s(
     // Give the port-forward a moment to fully establish
     tokio::time::sleep(Duration::from_secs(1)).await;
 
-    submit_k8s(working_dir, command_segments, namespace).await?;
+    submit(working_dir, command_segments).await?;
 
     Ok(())
 }

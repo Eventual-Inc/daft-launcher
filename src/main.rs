@@ -26,6 +26,7 @@ macro_rules! not_available_for_k8s {
     };
 }
 
+mod ssh;
 #[cfg(test)]
 mod tests;
 
@@ -53,9 +54,7 @@ use serde::{Deserialize, Serialize};
 use tempdir::TempDir;
 use tokio::{
     fs,
-    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     process::{Child, Command},
-    time::timeout,
 };
 use versions::{Requirement, Versioning};
 
@@ -510,7 +509,7 @@ fn convert_to_ray_config(
                     (
                         "ray.head.default".into(),
                         RayNodeType {
-                            max_workers: aws_config.number_of_workers,
+                            max_workers: 0,
                             node_config: node_config.clone(),
                             resources: Some(RayResources { cpu: 0 }),
                         },
@@ -527,8 +526,8 @@ fn convert_to_ray_config(
                 .into_iter()
                 .collect(),
                 setup_commands: generate_setup_commands(
-                    "".parse().unwrap(),
-                    "".parse().unwrap(),
+                    daft_config.setup.python_version.clone(),
+                    daft_config.setup.ray_version.clone(),
                     &aws_config.dependencies,
                 ),
             })
@@ -748,103 +747,6 @@ async fn assert_is_logged_in_with_aws() -> anyhow::Result<()> {
     }
 }
 
-async fn get_head_node_ip(ray_path: impl AsRef<Path>) -> anyhow::Result<Ipv4Addr> {
-    let mut ray_command = Command::new("ray")
-        .arg("get-head-ip")
-        .arg(ray_path.as_ref())
-        .stdout(Stdio::piped())
-        .spawn()?;
-
-    let mut tail_command = Command::new("tail")
-        .args(["-n", "1"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()?;
-
-    let mut writer = tail_command.stdin.take().expect("stdin must exist");
-
-    tokio::spawn(async move {
-        let mut reader = BufReader::new(ray_command.stdout.take().expect("stdout must exist"));
-        let mut buffer = Vec::new();
-        reader.read_to_end(&mut buffer).await?;
-        writer.write_all(&buffer).await?;
-        Ok::<_, anyhow::Error>(())
-    });
-    let output = tail_command.wait_with_output().await?;
-    if !output.status.success() {
-        anyhow::bail!("Failed to fetch ip address of head node");
-    };
-    let addr = String::from_utf8_lossy(&output.stdout)
-        .trim()
-        .parse::<Ipv4Addr>()?;
-    Ok(addr)
-}
-
-async fn ssh(ray_path: impl AsRef<Path>, aws_config: &AwsConfig) -> anyhow::Result<()> {
-    let addr = get_head_node_ip(ray_path).await?;
-    let exit_status = Command::new("ssh")
-        .arg("-i")
-        .arg(aws_config.ssh_private_key.as_ref())
-        .arg(format!("{}@{}", aws_config.ssh_user, addr))
-        .kill_on_drop(true)
-        .spawn()?
-        .wait()
-        .await?;
-
-    if exit_status.success() {
-        Ok(())
-    } else {
-        Err(anyhow::anyhow!("Failed to ssh into the ray cluster"))
-    }
-}
-
-async fn establish_ssh_portforward(
-    ray_path: impl AsRef<Path>,
-    aws_config: &AwsConfig,
-    port: Option<u16>,
-) -> anyhow::Result<Child> {
-    let addr = get_head_node_ip(ray_path).await?;
-    let port = port.unwrap_or(8265);
-    let mut child = Command::new("ssh")
-        .arg("-N")
-        .arg("-i")
-        .arg(aws_config.ssh_private_key.as_ref())
-        .arg("-L")
-        .arg(format!("{port}:localhost:8265"))
-        .arg(format!("{}@{}", aws_config.ssh_user, addr))
-        .arg("-v")
-        .stderr(Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()?;
-
-    // We wait for the ssh port-forwarding process to write a specific string to the
-    // output.
-    //
-    // This is a little hacky (and maybe even incorrect across platforms) since we
-    // are just parsing the output and observing if a specific string has been
-    // printed. It may be incorrect across platforms because the SSH standard
-    // does *not* specify a standard "success-message" to printout if the ssh
-    // port-forward was successful.
-    timeout(Duration::from_secs(5), {
-        let stderr = child.stderr.take().expect("stderr must exist");
-        async move {
-            let mut lines = BufReader::new(stderr).lines();
-            loop {
-                let Some(line) = lines.next_line().await? else {
-                    anyhow::bail!("Failed to establish ssh port-forward to {addr}");
-                };
-                if line.starts_with(format!("Authenticated to {addr}").as_str()) {
-                    break Ok(());
-                }
-            }
-        }
-    })
-    .await
-    .map_err(|_| anyhow::anyhow!("Establishing an ssh port-forward to {addr} timed out"))??;
-
-    Ok(child)
-}
-
 async fn establish_kubernetes_port_forward(namespace: Option<&str>) -> anyhow::Result<Child> {
     let namespace = namespace.unwrap_or("default");
     let output = Command::new("kubectl")
@@ -914,7 +816,7 @@ async fn establish_kubernetes_port_forward(namespace: Option<&str>) -> anyhow::R
     }
 }
 
-async fn submit_job(
+async fn submit_k8s(
     working_dir: &Path,
     command_segments: impl AsRef<[&str]>,
     namespace: Option<&str>,
@@ -961,7 +863,7 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
                 InitProvider::Aws => asset!("template_k8s.toml"),
                 InitProvider::K8s => asset!("template.toml"),
             }
-            .replace("<requires>", env!("CARGO_PKG_VERSION"))
+            .replace("<requires>", concat!("=", env!("CARGO_PKG_VERSION")))
             .replace(
                 "<python-version>",
                 get_python_version_from_env().await?.to_string().as_str(),
@@ -1031,21 +933,20 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
 
             match &daft_config.setup.provider_config {
                 ProviderConfig::Aws(..) => {
-                    assert_is_logged_in_with_aws().await?;
-
-                    let ray_config = convert_to_ray_config(&daft_config, None)?;
-                    let (_temp_dir, ray_path) = create_temp_ray_file()?;
-                    write_ray_config(ray_config, &ray_path).await?;
-
-                    submit_job(
-                        daft_job.working_dir.as_ref(),
-                        daft_job.command.as_ref().split(' ').collect::<Vec<_>>(),
-                        None,
-                    )
-                    .await?;
+                    todo!()
+                    // assert_is_logged_in_with_aws().await?;
+                    // let ray_config = convert_to_ray_config(&daft_config, None)?;
+                    // let (_temp_dir, ray_path) = create_temp_ray_file()?;
+                    // write_ray_config(ray_config, &ray_path).await?;
+                    // submit_k8s(
+                    //     daft_job.working_dir.as_ref(),
+                    //     daft_job.command.as_ref().split(' ').collect::<Vec<_>>(),
+                    //     None,
+                    // )
+                    // .await?;
                 }
                 ProviderConfig::K8s(k8s_config) => {
-                    submit_job(
+                    submit_k8s(
                         daft_job.working_dir.as_ref(),
                         daft_job.command.as_ref().split(' ').collect::<Vec<_>>(),
                         k8s_config.namespace.as_deref(),
@@ -1059,31 +960,38 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
             no_dashboard,
             config_path,
         }) => {
-            let (daft_config, ray_config) = read_and_convert(&config_path.config, None).await?;
-            assert_is_logged_in_with_aws().await?;
+            let daft_config = read_daft_config(&config_path.config).await?;
+            match &daft_config.setup.provider_config {
+                ProviderConfig::Aws(aws_config) => {
+                    assert_is_logged_in_with_aws().await?;
 
-            let (_temp_dir, ray_path) = create_temp_ray_file()?;
-            write_ray_config(ray_config, &ray_path).await?;
-            let open_join_handle = if !no_dashboard {
-                Some(spawn(|| {
-                    sleep(Duration::from_millis(500));
-                    open::that("http://localhost:8265")?;
-                    Ok::<_, anyhow::Error>(())
-                }))
-            } else {
-                None
-            };
+                    let ray_config = convert_to_ray_config(&daft_config, None)?;
+                    let (_temp_dir, ray_path) = create_temp_ray_file()?;
+                    write_ray_config(ray_config, &ray_path).await?;
 
-            let _ = ssh::ssh_portforward(ray_path, &daft_config, Some(port))
-                .await?
-                .wait_with_output()
-                .await?;
+                    let open_join_handle = if !no_dashboard {
+                        Some(spawn(|| {
+                            sleep(Duration::from_millis(500));
+                            open::that("http://localhost:8265")?;
+                            Ok::<_, anyhow::Error>(())
+                        }))
+                    } else {
+                        None
+                    };
 
-            if let Some(open_join_handle) = open_join_handle {
-                open_join_handle
-                    .join()
-                    .map_err(|_| anyhow::anyhow!("Failed to join browser-opening thread"))??;
-            };
+                    let _ = ssh::ssh_portforward(ray_path, aws_config, Some(port))
+                        .await?
+                        .wait_with_output()
+                        .await?;
+
+                    if let Some(open_join_handle) = open_join_handle {
+                        open_join_handle.join().map_err(|_| {
+                            anyhow::anyhow!("Failed to join browser-opening thread")
+                        })??;
+                    };
+                }
+                ProviderConfig::K8s(..) => not_available_for_k8s!("connect"),
+            }
         }
         SubCommand::Ssh(ConfigPath { config }) => {
             let daft_config = read_daft_config(&config).await?;
@@ -1094,7 +1002,7 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
                     let ray_config = convert_to_ray_config(&daft_config, None)?;
                     let (_temp_dir, ray_path) = create_temp_ray_file()?;
                     write_ray_config(ray_config, &ray_path).await?;
-                    ssh(ray_path, aws_config).await?;
+                    ssh::ssh(ray_path, aws_config).await?;
                 }
                 ProviderConfig::K8s(..) => not_available_for_k8s!("ssh"),
             }
@@ -1106,7 +1014,7 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
                 ProviderConfig::K8s(k8s_config) => {
                     let (temp_sql_dir, sql_path) = create_temp_file("sql.py")?;
                     fs::write(sql_path, asset!("sql.py")).await?;
-                    submit_job(
+                    submit_k8s(
                         temp_sql_dir.path(),
                         vec!["python", "sql.py", sql.as_ref()],
                         k8s_config.namespace.as_deref(),

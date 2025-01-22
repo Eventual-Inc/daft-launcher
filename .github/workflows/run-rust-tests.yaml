@@ -1,10 +1,10 @@
-name: build-and-test
+name: run-rust-tests
 
 on:
   pull_request:
 
 jobs:
-  run-command:
+  run-rust-tests:
     runs-on: ubuntu-latest
     steps:
     - name: Log workflow inputs
@@ -37,11 +37,13 @@ jobs:
         uv v
         source .venv/bin/activate
         uv pip install ray[default] maturin
-    - name: Build project
-      run: |
-        source .venv/bin/activate
-        maturin develop --uv
+    - name: Restore cache
+      uses: actions/cache@v4
+      with:
+        path: target/release
+        key: ${{ runner.os }}-cargo-deps-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: ${{ runner.os }}-cargo-deps-
     - name: Run tests
       run: |
         source .venv/bin/activate
-        cargo test
+        cargo test --release

@@ -130,8 +130,8 @@ struct Init {
     path: PathBuf,
 
     /// The provider to use - either 'provisioned' (default) to auto-generate a cluster or 'byoc' for existing Kubernetes clusters
-    #[arg(long, default_value = "provisioned")]
-    provider: String,
+    #[arg(long, default_value_t = DaftProvider::Provisioned)]
+    provider: DaftProvider,
 }
 
 #[derive(Debug, Parser, Clone, PartialEq, Eq)]
@@ -358,6 +358,15 @@ impl FromStr for DaftProvider {
             "provisioned" => Ok(DaftProvider::Provisioned),
             "byoc" => Ok(DaftProvider::Byoc),
             _ => anyhow::bail!("Invalid provider '{}'. Must be either 'provisioned' or 'byoc'", s),
+        }
+    }
+}
+
+impl ToString for DaftProvider {
+    fn to_string(&self) -> String {
+        match self {
+            DaftProvider::Provisioned => "provisioned".to_string(),
+            DaftProvider::Byoc => "byoc".to_string(),
         }
     }
 }
@@ -984,10 +993,9 @@ impl ConfigCommand {
                 if path.exists() {
                     bail!("The path {path:?} already exists; the path given must point to a new location on your filesystem");
                 }
-                let contents = if provider == "byoc" {
-                    include_str!("template_byoc.toml")
-                } else {
-                    include_str!("template_provisioned.toml")
+                let contents = match provider {
+                    DaftProvider::Byoc => include_str!("template_byoc.toml"),
+                    DaftProvider::Provisioned => include_str!("template_provisioned.toml"),
                 }
                 .replace("<VERSION>", env!("CARGO_PKG_VERSION"));
                 fs::write(path, contents).await?;

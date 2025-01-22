@@ -5,7 +5,7 @@ on:
 
 jobs:
   run-command:
-    runs-on: ubuntu
+    runs-on: ubuntu-latest
     steps:
     - name: Log workflow inputs
       run: echo "${{ toJson(github.event.inputs) }}"

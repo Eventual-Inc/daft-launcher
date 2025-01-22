@@ -25,33 +25,37 @@ Daft Launcher aims to solve this problem by providing a simple CLI tool to remov
 ## Capabilities
 
 What Daft Launcher is capable of:
-1. Spinning up clusters (AWS only)
-2. Listing all available clusters as well as their statuses (AWS only)
-3. Submitting jobs to a cluster (AWS and Kubernetes)
-4. Connecting to the cluster (AWS only, Kubernetes coming soon)
-5. Spinning down clusters (AWS only)
-6. Creating configuration files (AWS and Kubernetes)
-7. Running raw SQL statements (AWS only, Kubernetes coming soon)
+1. Spinning up clusters (Provisioned mode only)
+2. Listing all available clusters as well as their statuses (Provisioned mode only)
+3. Submitting jobs to a cluster (Both Provisioned and BYOC modes)
+4. Connecting to the cluster (Provisioned mode only)
+5. Spinning down clusters (Provisioned mode only)
+6. Creating configuration files (Both modes)
+7. Running raw SQL statements (BYOC mode only)
 
-## Currently supported cloud providers
+## Operation Modes
 
 Daft Launcher supports two modes of operation:
-- **AWS**: For automatically provisioning and managing Ray clusters in AWS
-- **Kubernetes**: For connecting to existing Ray clusters in Kubernetes
+- **Provisioned**: Automatically provisions and manages Ray clusters in AWS
+- **BYOC (Bring Your Own Cluster)**: Connects to existing Ray clusters in Kubernetes
 
-### Command Support Matrix
+### Command Groups and Support Matrix
 
-| Command  | AWS | Kubernetes |
-|----------|-----|------------|
-| init     | ✅   | ✅         |
-| up       | ✅   | ❌         |
-| submit   | ✅   | ✅         |
-| stop     | ✅   | ❌         |
-| kill     | ✅   | ❌         |
-| list     | ✅   | ❌         |
-| connect  | ✅   | ❌         |
-| ssh      | ✅   | ❌         |
-| sql      | ✅   | ❌         |
+| Command Group | Command | Provisioned | BYOC |
+|--------------|---------|-------------|------|
+| cluster      | up      | ✅          | ❌   |
+|              | down    | ✅          | ❌   |
+|              | kill    | ✅          | ❌   |
+|              | list    | ✅          | ❌   |
+|              | connect | ✅          | ❌   |
+|              | ssh     | ✅          | ❌   |
+| job          | submit  | ✅          | ✅   |
+|              | sql     | ✅          | ❌   |
+|              | status  | ✅          | ❌   |
+|              | logs    | ✅          | ❌   |
+| config       | init    | ✅          | ✅   |
+|              | check   | ✅          | ❌   |
+|              | export  | ✅          | ❌   |
 
 ## Usage
 
@@ -60,17 +64,17 @@ Daft Launcher supports two modes of operation:
 You'll need some python package manager installed.
 We recommend using [`uv`](https://astral.sh/blog/uv) for all things python.
 
-#### For AWS Provider
+#### For Provisioned Mode (AWS)
 1. A valid AWS account with the necessary IAM role to spin up EC2 instances.
    This IAM role can either be created by you (assuming you have the appropriate permissions)
    or will need to be created by your administrator.
 2. The [AWS CLI](https://aws.amazon.com/cli/) installed and configured on your machine.
 3. Login using the AWS CLI.
 
-#### For Kubernetes Provider
+#### For BYOC Mode (Kubernetes)
 1. A Kubernetes cluster with Ray already deployed
    - Can be local (minikube/kind), cloud-managed (EKS/GKE/AKS), or on-premise.
-   - See our [Kubernetes setup guides](./docs/kubernetes/README.md) for detailed instructions
+   - See our [BYOC setup guides](./docs/byoc/README.md) for detailed instructions
 2. Ray cluster running in your Kubernetes cluster
    - Must be installed and configured using Helm
    - See provider-specific guides for installation steps
@@ -78,9 +82,9 @@ We recommend using [`uv`](https://astral.sh/blog/uv) for all things python.
 4. `kubectl` installed and configured with the correct context
 5. Appropriate permissions to access the namespace where Ray is deployed
 
-### SSH Key Setup for AWS
+### SSH Key Setup for Provisioned Mode
 
-To enable SSH access and port forwarding for AWS clusters, you need to:
+To enable SSH access and port forwarding for provisioned clusters, you need to:
 
 1. Create an SSH key pair (if you don't already have one):
    ```bash
@@ -107,8 +111,8 @@ To enable SSH access and port forwarding for AWS clusters, you need to:
 
 4. Update your daft configuration to use this key:
    ```toml
-   [setup.aws]
-   # ... other aws config ...
+   [setup.provisioned]
+   # ... other config ...
    ssh-private-key = "~/.ssh/daft-key"  # Path to your private key
    ssh-user = "ubuntu"                   # User depends on the AMI (ubuntu for Ubuntu AMIs)
    ```
@@ -145,69 +149,55 @@ All interactions with Daft Launcher are primarily communicated via a configurati
 By default, Daft Launcher will look inside your `$CWD` for a file named `.daft.toml`.
 You can override this behaviour by specifying a custom configuration file.
 
-#### AWS Provider (Default)
+#### Provisioned Mode (AWS)
 
 ```bash
-# create a new AWS configuration file
-daft init
-# or explicitly specify AWS provider
-daft init --provider aws
+# Initialize a new provisioned mode configuration
+daft config init --provider provisioned
+# or use the default provider (provisioned)
+daft config init
 
-# spin up a cluster (AWS only)
-daft up
-# or optionally, pass in a custom config file
-daft up -c my-custom-config.toml
+# Cluster management
+daft provisioned up
+daft provisioned list
+daft provisioned connect
+daft provisioned ssh
+daft provisioned down
+daft provisioned kill
 
-# list all active clusters (AWS only)
-daft list
+# Job management (works in both modes)
+daft job submit example-job
+daft job status example-job
+daft job logs example-job
 
-# submit a job defined in your config
-daft submit --working-dir <...> example-job
-
-# execute SQL query
-daft sql "SELECT * FROM my_table"
-
-# connect to the Ray dashboard
-daft connect
-
-# SSH into the head node
-daft ssh
-
-# stop the cluster
-daft stop
-
-# terminate the cluster
-daft kill
+# Configuration management
+daft config check
+daft config export
 ```
 
-#### Kubernetes Provider
+#### BYOC Mode (Kubernetes)
 
 ```bash
-# create a new Kubernetes configuration file
-daft init --provider k8s
-
-# submit a job defined in your config
-daft submit example-job
-
-# execute SQL query (K8s only)
-daft sql "SELECT * FROM my_table"
+# Initialize a new BYOC mode configuration
+daft config init --provider byoc
 ```
 
 ### Configuration Files
 
 You can specify a custom configuration file path with the `-c` flag:
 ```bash
-daft -c my-config.toml submit example-job
+daft -c my-config.toml job submit example-job
 ```
 
-Example AWS configuration:
+Example Provisioned mode configuration:
 ```toml
 [setup]
 name = "my-daft-cluster"
 version = "0.1.0"
-provider = "aws"
+provider = "provisioned"
+dependencies = []  # Optional additional Python packages to install
 
-[setup.aws]
+[setup.provisioned]
 region = "us-west-2"
 number-of-workers = 4
 ssh-user = "ubuntu"
@@ -215,7 +205,6 @@ ssh-private-key = "~/.ssh/daft-key"
 instance-type = "i3.2xlarge"
 image-id = "ami-04dd23e62ed049936"
 iam-instance-profile-name = "YourInstanceProfileName"  # Optional
-dependencies = []  # Optional additional Python packages
 
 [run]
 pre-setup-commands = []
@@ -227,19 +216,16 @@ command = "python my_script.py"
 working-dir = "~/my_project"
 ```
 
-Example Kubernetes configuration:
+Example BYOC mode configuration:
 ```toml
 [setup]
 name = "my-daft-cluster"
 version = "0.1.0"
-provider = "k8s"
+provider = "byoc"
+dependencies = []  # Optional additional Python packages to install
 
-[setup.k8s]
+[setup.byoc]
 namespace = "default"  # Optional, defaults to "default"
-
-[run]
-pre-setup-commands = []
-post-setup-commands = []
 
 [[job]]
 name = "example-job"

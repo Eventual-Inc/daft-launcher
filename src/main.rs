@@ -43,55 +43,84 @@ struct DaftLauncher {
 
 #[derive(Debug, Subcommand, Clone, PartialEq, Eq)]
 enum SubCommand {
-    /// Initialize a daft-launcher configuration file.
-    ///
-    /// If no path is provided, this will create a default ".daft.toml" in the
-    /// current working directory.
-    Init(Init),
+    /// Manage Daft-provisioned clusters (AWS)
+    Provisioned(ProvisionedCommands),
+    /// Manage existing clusters (Kubernetes)
+    Byoc(ByocCommands),
+    /// Manage jobs across all cluster types
+    Job(JobCommands),
+    /// Manage configurations
+    Config(ConfigCommands),
+}
 
-    /// Check to make sure the daft-launcher configuration file is correct.
-    Check(ConfigPath),
+#[derive(Debug, Parser, Clone, PartialEq, Eq)]
+struct ProvisionedCommands {
+    #[command(subcommand)]
+    command: ProvisionedCommand,
+}
 
-    /// Export the daft-launcher configuration file to a Ray configuration file.
-    Export(ConfigPath),
-
-    /// Spin up a new cluster.
+#[derive(Debug, Subcommand, Clone, PartialEq, Eq)]
+enum ProvisionedCommand {
+    /// Create a new cluster
     Up(ConfigPath),
-
-    /// List all Ray clusters in your AWS account.
-    ///
-    /// This will *only* list clusters that have been spun up by Ray.
-    List(List),
-
-    /// Submit a job to the Ray cluster.
-    ///
-    /// The configurations of the job should be placed inside of your
-    /// daft-launcher configuration file.
-    Submit(Submit),
-
-    /// Establish an ssh port-forward connection from your local machine to the
-    /// Ray cluster.
-    Connect(Connect),
-
-    /// SSH into the head of the remote Ray cluster.
-    Ssh(ConfigPath),
-
-    /// Submit a SQL query string to the Ray cluster.
-    ///
-    /// This is executed using Daft's SQL API support.
-    Sql(Sql),
-
-    /// Spin down a given cluster and put the nodes to "sleep".
-    ///
-    /// This will *not* delete the nodes, only stop them. The nodes can be
-    /// restarted at a future time.
-    Stop(ConfigPath),
-
-    /// Spin down a given cluster and fully terminate the nodes.
-    ///
-    /// This *will* delete the nodes; they will not be accessible from here on
-    /// out.
+    /// Stop a running cluster
+    Down(ConfigPath),
+    /// Terminate a cluster
     Kill(ConfigPath),
+    /// List all clusters
+    List(List),
+    /// Connect to cluster dashboard
+    Connect(Connect),
+    /// SSH into cluster head node
+    Ssh(ConfigPath),
+}
+
+#[derive(Debug, Parser, Clone, PartialEq, Eq)]
+struct ByocCommands {
+    #[command(subcommand)]
+    command: ByocCommand,
+}
+
+#[derive(Debug, Subcommand, Clone, PartialEq, Eq)]
+enum ByocCommand {
+    /// Verify connection to existing cluster
+    Verify(ConfigPath),
+    /// Show cluster information
+    Info(ConfigPath),
+}
+
+#[derive(Debug, Parser, Clone, PartialEq, Eq)]
+struct JobCommands {
+    #[command(subcommand)]
+    command: JobCommand,
+}
+
+#[derive(Debug, Subcommand, Clone, PartialEq, Eq)]
+enum JobCommand {
+    /// Submit a job to the cluster
+    Submit(Submit),
+    /// Execute SQL queries
+    Sql(Sql),
+    /// Check job status
+    Status(ConfigPath),
+    /// View job logs
+    Logs(ConfigPath),
+}
+
+#[derive(Debug, Parser, Clone, PartialEq, Eq)]
+struct ConfigCommands {
+    #[command(subcommand)]
+    command: ConfigCommand,
+}
+
+#[derive(Debug, Subcommand, Clone, PartialEq, Eq)]
+enum ConfigCommand {
+    /// Initialize a new configuration
+    Init(Init),
+    /// Validate configuration
+    Check(ConfigPath),
+    /// Export configuration to Ray format
+    Export(ConfigPath),
 }
 
 #[derive(Debug, Parser, Clone, PartialEq, Eq)]
@@ -100,8 +129,8 @@ struct Init {
     #[arg(default_value = ".daft.toml")]
     path: PathBuf,
 
-    /// The provider to use - either 'aws' (default) to auto-generate a cluster or 'k8s' for existing Kubernetes clusters
-    #[arg(long, default_value = "aws")]
+    /// The provider to use - either 'provisioned' (default) to auto-generate a cluster or 'byoc' for existing Kubernetes clusters
+    #[arg(long, default_value = "provisioned")]
     provider: String,
 }
 
@@ -162,8 +191,6 @@ struct ConfigPath {
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 struct DaftConfig {
     setup: DaftSetup,
-    #[serde(default)]
-    run: DaftRun,
     #[serde(rename = "job", deserialize_with = "parse_jobs")]
     jobs: HashMap<StrRef, DaftJob>,
 }
@@ -175,6 +202,8 @@ struct DaftSetup {
     #[serde(deserialize_with = "parse_version_req")]
     version: VersionReq,
     provider: DaftProvider,
+    #[serde(default)]
+    dependencies: Vec<StrRef>,
     #[serde(flatten)]
     provider_config: ProviderConfig,
 }
@@ -182,10 +211,17 @@ struct DaftSetup {
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 enum ProviderConfig {
-    #[serde(rename = "aws")]
-    Aws(AwsConfig),
-    #[serde(rename = "k8s")]
-    K8s(K8sConfig),
+    #[serde(rename = "provisioned")]
+    Provisioned(AwsConfigWithRun),
+    #[serde(rename = "byoc")]
+    Byoc(K8sConfig),
+}
+
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+struct AwsConfigWithRun {
+    #[serde(flatten)]
+    config: AwsConfig,
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
@@ -202,8 +238,6 @@ struct AwsConfig {
     #[serde(default = "default_image_id")]
     image_id: StrRef,
     iam_instance_profile_name: Option<StrRef>,
-    #[serde(default)]
-    dependencies: Vec<StrRef>,
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
@@ -310,8 +344,10 @@ where
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 enum DaftProvider {
-    Aws,
-    K8s,
+    #[serde(rename = "provisioned")]
+    Provisioned,
+    #[serde(rename = "byoc")]
+    Byoc,
 }
 
 impl FromStr for DaftProvider {
@@ -319,20 +355,11 @@ impl FromStr for DaftProvider {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "aws" => Ok(DaftProvider::Aws),
-            "k8s" => Ok(DaftProvider::K8s),
-            _ => anyhow::bail!("Invalid provider '{}'. Must be either 'aws' or 'k8s'", s),
+            "provisioned" => Ok(DaftProvider::Provisioned),
+            "byoc" => Ok(DaftProvider::Byoc),
+            _ => anyhow::bail!("Invalid provider '{}'. Must be either 'provisioned' or 'byoc'", s),
         }
     }
-}
-
-#[derive(Default, Debug, Deserialize, Clone, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-struct DaftRun {
-    #[serde(default)]
-    pre_setup_commands: Vec<StrRef>,
-    #[serde(default)]
-    post_setup_commands: Vec<StrRef>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -415,40 +442,40 @@ async fn read_and_convert(
     let daft_config = toml::from_str::<DaftConfig>(&contents)?;
     
     let ray_config = match &daft_config.setup.provider_config {
-        ProviderConfig::K8s(_) => None,
-        ProviderConfig::Aws(aws_config) => {
-            let key_name = aws_config.ssh_private_key
+        ProviderConfig::Byoc(_) => None,
+        ProviderConfig::Provisioned(aws_config) => {
+            let key_name = aws_config.config.ssh_private_key
                 .clone()
                 .file_stem()
                 .ok_or_else(|| anyhow::anyhow!(r#"Private key doesn't have a name of the format "name.ext""#))?
                 .to_str()
-                .ok_or_else(|| anyhow::anyhow!("The file {:?} does not have a valid UTF-8 name", aws_config.ssh_private_key))?
+                .ok_or_else(|| anyhow::anyhow!("The file {:?} does not have a valid UTF-8 name", aws_config.config.ssh_private_key))?
                 .into();
 
             let node_config = RayNodeConfig {
                 key_name,
-                instance_type: aws_config.instance_type.clone(),
-                image_id: aws_config.image_id.clone(),
-                iam_instance_profile: aws_config.iam_instance_profile_name.clone().map(|name| IamInstanceProfile { name }),
+                instance_type: aws_config.config.instance_type.clone(),
+                image_id: aws_config.config.image_id.clone(),
+                iam_instance_profile: aws_config.config.iam_instance_profile_name.clone().map(|name| IamInstanceProfile { name }),
             };
 
             Some(RayConfig {
                 cluster_name: daft_config.setup.name.clone(),
-                max_workers: aws_config.number_of_workers,
+                max_workers: aws_config.config.number_of_workers,
                 provider: RayProvider {
                     r#type: "aws".into(),
-                    region: aws_config.region.clone(),
+                    region: aws_config.config.region.clone(),
                     cache_stopped_nodes: teardown_behaviour.map(TeardownBehaviour::to_cache_stopped_nodes),
                 },
                 auth: RayAuth {
-                    ssh_user: aws_config.ssh_user.clone(),
-                    ssh_private_key: aws_config.ssh_private_key.clone(),
+                    ssh_user: aws_config.config.ssh_user.clone(),
+                    ssh_private_key: aws_config.config.ssh_private_key.clone(),
                 },
                 available_node_types: vec![
                     (
                         "ray.head.default".into(),
                         RayNodeType {
-                            max_workers: aws_config.number_of_workers,
+                            max_workers: aws_config.config.number_of_workers,
                             node_config: node_config.clone(),
                             resources: Some(RayResources { cpu: 0 }),
                         },
@@ -456,7 +483,7 @@ async fn read_and_convert(
                     (
                         "ray.worker.default".into(),
                         RayNodeType {
-                            max_workers: aws_config.number_of_workers,
+                            max_workers: aws_config.config.number_of_workers,
                             node_config,
                             resources: None,
                         },
@@ -474,9 +501,8 @@ async fn read_and_convert(
                         "source ~/.bashrc".into(),
                         "uv pip install boto3 pip ray[default] getdaft py-spy deltalake".into(),
                     ];
-                    if !aws_config.dependencies.is_empty() {
-                        let deps = aws_config
-                            .dependencies
+                    if !daft_config.setup.dependencies.is_empty() {
+                        let deps = daft_config.setup.dependencies
                             .iter()
                             .map(|dep| format!(r#""{dep}""#))
                             .collect::<Vec<_>>()
@@ -712,8 +738,8 @@ async fn get_region(region: Option<StrRef>, config: impl AsRef<Path>) -> anyhow:
     } else if config.exists() {
         let (daft_config, _) = read_and_convert(&config, None).await?;
         match &daft_config.setup.provider_config {
-            ProviderConfig::Aws(aws_config) => aws_config.region.clone(),
-            ProviderConfig::K8s(_) => "us-west-2".into(),
+            ProviderConfig::Provisioned(aws_config) => aws_config.config.region.clone(),
+            ProviderConfig::Byoc(_) => "us-west-2".into(),
         }
     } else {
         "us-west-2".into()
@@ -922,208 +948,19 @@ async fn submit_k8s(
 
 async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
     match daft_launcher.sub_command {
-        SubCommand::Init(Init { path, provider }) => {
-            #[cfg(not(test))]
-            if path.exists() {
-                bail!("The path {path:?} already exists; the path given must point to a new location on your filesystem");
-            }
-            let contents = if provider == "k8s" {
-                include_str!("template_k8s.toml")
-            } else {
-                include_str!("template.toml")
-            }
-            .replace("<VERSION>", env!("CARGO_PKG_VERSION"));
-            fs::write(path, contents).await?;
+        SubCommand::Config(config_cmd) => {
+            config_cmd.command.run(daft_launcher.verbosity).await
         }
-        SubCommand::Check(ConfigPath { config }) => {
-            let _ = read_and_convert(&config, None).await?;
+        SubCommand::Job(job_cmd) => {
+            job_cmd.command.run(daft_launcher.verbosity).await
         }
-        SubCommand::Export(ConfigPath { config }) => {
-            let (_, ray_config) = read_and_convert(&config, None).await?;
-            if ray_config.is_none() {
-                anyhow::bail!("Failed to find Ray config in config file");
-            }
-            let ray_config = ray_config.unwrap();
-            let ray_config_str = serde_yaml::to_string(&ray_config)?;
-
-            println!("{ray_config_str}");
+        SubCommand::Provisioned(provisioned_cmd) => {
+            provisioned_cmd.command.run(daft_launcher.verbosity).await
         }
-        SubCommand::Up(ConfigPath { config }) => {
-            let (daft_config, ray_config) = read_and_convert(&config, None).await?;
-            match daft_config.setup.provider {
-                DaftProvider::Aws => {
-                    if ray_config.is_none() {
-                        anyhow::bail!("Failed to find Ray config in config file");
-                    }
-                    let ray_config = ray_config.unwrap();
-                    assert_is_logged_in_with_aws().await?;
-
-                    let (_temp_dir, ray_path) = create_temp_ray_file()?;
-                    write_ray_config(ray_config, &ray_path).await?;
-                    run_ray_up_or_down_command(SpinDirection::Up, ray_path).await?;
-                }
-                DaftProvider::K8s => {
-                    anyhow::bail!("'up' command is only available for AWS configurations");
-                }
-            }
-        }
-        SubCommand::List(List {
-            config_path,
-            region,
-            head,
-            running,
-        }) => {
-            let (daft_config, _) = read_and_convert(&config_path.config, None).await?;
-            match daft_config.setup.provider {
-                DaftProvider::Aws => {
-                    assert_is_logged_in_with_aws().await?;
-                    let aws_config = get_aws_config(&daft_config)?;
-                    let region = region.unwrap_or_else(|| aws_config.region.clone());
-                    let instances = get_ray_clusters_from_aws(region).await?;
-                    print_instances(&instances, head, running);
-                }
-                DaftProvider::K8s => {
-                    anyhow::bail!("'list' command is only available for AWS configurations");
-                }
-            }
-        }
-        SubCommand::Submit(Submit {
-            config_path,
-            job_name,
-        }) => {
-            let (daft_config, ray_config) = read_and_convert(&config_path.config, None).await?;
-            let daft_job = daft_config
-                .jobs
-                .get(&job_name)
-                .ok_or_else(|| anyhow::anyhow!("A job with the name {job_name} was not found"))?;
-
-            match &daft_config.setup.provider_config {
-                ProviderConfig::Aws(_aws_config) => {
-                    if ray_config.is_none() {
-                        anyhow::bail!("Failed to find Ray config in config file");
-                    }
-                    let ray_config = ray_config.unwrap();
-                    let (_temp_dir, ray_path) = create_temp_ray_file()?;
-                    write_ray_config(ray_config, &ray_path).await?;
-                    submit_k8s(
-                        daft_job.working_dir.as_ref(),
-                        daft_job.command.as_ref().split(' ').collect::<Vec<_>>(),
-                        None,
-                    )
-                    .await?;
-                }
-                ProviderConfig::K8s(k8s_config) => {
-                    submit_k8s(
-                        daft_job.working_dir.as_ref(),
-                        daft_job.command.as_ref().split(' ').collect::<Vec<_>>(),
-                        k8s_config.namespace.as_deref(),
-                    )
-                    .await?;
-                }
-            }
-        }
-        SubCommand::Connect(Connect { port, config_path }) => {
-            let (daft_config, ray_config) = read_and_convert(&config_path.config, None).await?;
-            match daft_config.setup.provider {
-                DaftProvider::Aws => {
-                    if ray_config.is_none() {
-                        anyhow::bail!("Failed to find Ray config in config file");
-                    }
-                    let ray_config = ray_config.unwrap();
-                    assert_is_logged_in_with_aws().await?;
-
-                    let (_temp_dir, ray_path) = create_temp_ray_file()?;
-                    write_ray_config(ray_config, &ray_path).await?;
-                    let aws_config = get_aws_config(&daft_config)?;
-                    let _ = establish_ssh_portforward(ray_path, aws_config, Some(port))
-                        .await?
-                        .wait_with_output()
-                        .await?;
-                }
-                DaftProvider::K8s => {
-                    anyhow::bail!("'connect' command is only available for AWS configurations");
-                }
-            }
-        }
-        SubCommand::Ssh(ConfigPath { config }) => {
-            let (daft_config, ray_config) = read_and_convert(&config, None).await?;
-            match daft_config.setup.provider {
-                DaftProvider::Aws => {
-                    if ray_config.is_none() {
-                        anyhow::bail!("Failed to find Ray config in config file");
-                    }
-                    let ray_config = ray_config.unwrap();
-                    assert_is_logged_in_with_aws().await?;
-
-                    let (_temp_dir, ray_path) = create_temp_ray_file()?;
-                    write_ray_config(ray_config, &ray_path).await?;
-                    let aws_config = get_aws_config(&daft_config)?;
-                    ssh(ray_path, aws_config).await?;
-                }
-                DaftProvider::K8s => {
-                    anyhow::bail!("'ssh' command is only available for AWS configurations");
-                }
-            }
-        }
-        SubCommand::Sql(Sql { sql, config_path }) => {
-            let (daft_config, _) = read_and_convert(&config_path.config, None).await?;
-            match &daft_config.setup.provider_config {
-                ProviderConfig::Aws(_) => {
-                    anyhow::bail!("'sql' command is only available for Kubernetes configurations");
-                }
-                ProviderConfig::K8s(k8s_config) => {
-                    let (temp_sql_dir, sql_path) = create_temp_file("sql.py")?;
-                    fs::write(sql_path, include_str!("sql.py")).await?;
-                    submit_k8s(
-                        temp_sql_dir.path(),
-                        vec!["python", "sql.py", sql.as_ref()],
-                        k8s_config.namespace.as_deref(),
-                    )
-                    .await?;
-                }
-            }
-        }
-        SubCommand::Stop(ConfigPath { config }) => {
-            let (daft_config, ray_config) = read_and_convert(&config, Some(TeardownBehaviour::Stop)).await?;
-            match daft_config.setup.provider {
-                DaftProvider::Aws => {
-                    if ray_config.is_none() {
-                        anyhow::bail!("Failed to find Ray config in config file");
-                    }
-                    let ray_config = ray_config.unwrap();
-                    assert_is_logged_in_with_aws().await?;
-
-                    let (_temp_dir, ray_path) = create_temp_ray_file()?;
-                    write_ray_config(ray_config, &ray_path).await?;
-                    run_ray_up_or_down_command(SpinDirection::Down, ray_path).await?;
-                }
-                DaftProvider::K8s => {
-                    anyhow::bail!("'stop' command is only available for AWS configurations");
-                }
-            }
-        }
-        SubCommand::Kill(ConfigPath { config }) => {
-            let (daft_config, ray_config) = read_and_convert(&config, Some(TeardownBehaviour::Kill)).await?;
-            match daft_config.setup.provider {
-                DaftProvider::Aws => {
-                    if ray_config.is_none() {
-                        anyhow::bail!("Failed to find Ray config in config file");
-                    }
-                    let ray_config = ray_config.unwrap();
-                    assert_is_logged_in_with_aws().await?;
-
-                    let (_temp_dir, ray_path) = create_temp_ray_file()?;
-                    write_ray_config(ray_config, &ray_path).await?;
-                    run_ray_up_or_down_command(SpinDirection::Down, ray_path).await?;
-                }
-                DaftProvider::K8s => {
-                    anyhow::bail!("'kill' command is only available for AWS configurations");
-                }
-            }
+        SubCommand::Byoc(byoc_cmd) => {
+            byoc_cmd.command.run(daft_launcher.verbosity).await
         }
     }
-
-    Ok(())
 }
 
 #[tokio::main]
@@ -1131,36 +968,261 @@ async fn main() -> anyhow::Result<()> {
     run(DaftLauncher::parse()).await
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_init_and_export() {
-        run(DaftLauncher {
-            sub_command: SubCommand::Init(Init {
-                path: ".daft.toml".into(),
-                provider: "aws".into(),
-            }),
-            verbosity: 0,
-        })
-        .await
-        .unwrap();
-        run(DaftLauncher {
-            sub_command: SubCommand::Check(ConfigPath {
-                config: ".daft.toml".into(),
-            }),
-            verbosity: 0,
-        })
-        .await
-        .unwrap();
-    }
-}
-
 // Helper function to get AWS config
 fn get_aws_config(config: &DaftConfig) -> anyhow::Result<&AwsConfig> {
     match &config.setup.provider_config {
-        ProviderConfig::Aws(aws_config) => Ok(aws_config),
-        ProviderConfig::K8s(_) => anyhow::bail!("Expected AWS configuration but found Kubernetes configuration"),
+        ProviderConfig::Provisioned(aws_config) => Ok(&aws_config.config),
+        ProviderConfig::Byoc(_) => anyhow::bail!("Expected provisioned configuration but found Kubernetes configuration"),
+    }
+}
+
+impl ConfigCommand {
+    async fn run(&self, _verbosity: u8) -> anyhow::Result<()> {
+        match self {
+            ConfigCommand::Init(Init { path, provider }) => {
+                #[cfg(not(test))]
+                if path.exists() {
+                    bail!("The path {path:?} already exists; the path given must point to a new location on your filesystem");
+                }
+                let contents = if provider == "byoc" {
+                    include_str!("template_byoc.toml")
+                } else {
+                    include_str!("template_provisioned.toml")
+                }
+                .replace("<VERSION>", env!("CARGO_PKG_VERSION"));
+                fs::write(path, contents).await?;
+            }
+            ConfigCommand::Check(ConfigPath { config }) => {
+                let _ = read_and_convert(&config, None).await?;
+            }
+            ConfigCommand::Export(ConfigPath { config }) => {
+                let (_, ray_config) = read_and_convert(&config, None).await?;
+                if ray_config.is_none() {
+                    anyhow::bail!("Failed to find Ray config in config file");
+                }
+                let ray_config = ray_config.unwrap();
+                let ray_config_str = serde_yaml::to_string(&ray_config)?;
+                println!("{ray_config_str}");
+            }
+        }
+        Ok(())
+    }
+}
+
+impl JobCommand {
+    async fn run(&self, _verbosity: u8) -> anyhow::Result<()> {
+        match self {
+            JobCommand::Submit(Submit { config_path, job_name }) => {
+                let (daft_config, ray_config) = read_and_convert(&config_path.config, None).await?;
+                let daft_job = daft_config
+                    .jobs
+                    .get(job_name)
+                    .ok_or_else(|| anyhow::anyhow!("A job with the name {job_name} was not found"))?;
+
+                match &daft_config.setup.provider_config {
+                    ProviderConfig::Provisioned(_) => {
+                        if ray_config.is_none() {
+                            anyhow::bail!("Failed to find Ray config in config file");
+                        }
+                        let ray_config = ray_config.unwrap();
+                        let (_temp_dir, ray_path) = create_temp_ray_file()?;
+                        write_ray_config(ray_config, &ray_path).await?;
+                        
+                        let aws_config = get_aws_config(&daft_config)?;
+                        // Start port forwarding - it will be automatically killed when _port_forward is dropped
+                        let _port_forward = establish_ssh_portforward(ray_path, aws_config, Some(8265)).await?;
+
+                        // Give the port-forward a moment to fully establish
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+
+                        // Submit the job
+                        let exit_status = Command::new("ray")
+                            .env("PYTHONUNBUFFERED", "1")
+                            .args(["job", "submit", "--address", "http://localhost:8265"])
+                            .arg("--working-dir")
+                            .arg(daft_job.working_dir.as_ref())
+                            .arg("--")
+                            .args(daft_job.command.as_ref().split(' ').collect::<Vec<_>>())
+                            .spawn()?
+                            .wait()
+                            .await?;
+
+                        if !exit_status.success() {
+                            anyhow::bail!("Failed to submit job to the ray cluster");
+                        }
+                    }
+                    ProviderConfig::Byoc(k8s_config) => {
+                        submit_k8s(
+                            daft_job.working_dir.as_ref(),
+                            daft_job.command.as_ref().split(' ').collect::<Vec<_>>(),
+                            k8s_config.namespace.as_deref(),
+                        )
+                        .await?;
+                    }
+                }
+            }
+            JobCommand::Sql(Sql { sql, config_path }) => {
+                let (daft_config, _) = read_and_convert(&config_path.config, None).await?;
+                match &daft_config.setup.provider_config {
+                    ProviderConfig::Provisioned(_) => {
+                        anyhow::bail!("'sql' command is only available for BYOC configurations");
+                    }
+                    ProviderConfig::Byoc(k8s_config) => {
+                        let (temp_sql_dir, sql_path) = create_temp_file("sql.py")?;
+                        fs::write(sql_path, include_str!("sql.py")).await?;
+                        submit_k8s(
+                            temp_sql_dir.path(),
+                            vec!["python", "sql.py", sql.as_ref()],
+                            k8s_config.namespace.as_deref(),
+                        )
+                        .await?;
+                    }
+                }
+            }
+            JobCommand::Status(_) => {
+                anyhow::bail!("Job status command not yet implemented");
+            }
+            JobCommand::Logs(_) => {
+                anyhow::bail!("Job logs command not yet implemented");
+            }
+        }
+        Ok(())
+    }
+}
+
+impl ProvisionedCommand {
+    async fn run(&self, _verbosity: u8) -> anyhow::Result<()> {
+        match self {
+            ProvisionedCommand::Up(ConfigPath { config }) => {
+                let (daft_config, ray_config) = read_and_convert(&config, None).await?;
+                match daft_config.setup.provider {
+                    DaftProvider::Provisioned => {
+                        if ray_config.is_none() {
+                            anyhow::bail!("Failed to find Ray config in config file");
+                        }
+                        let ray_config = ray_config.unwrap();
+                        assert_is_logged_in_with_aws().await?;
+
+                        let (_temp_dir, ray_path) = create_temp_ray_file()?;
+                        write_ray_config(ray_config, &ray_path).await?;
+                        run_ray_up_or_down_command(SpinDirection::Up, ray_path).await?;
+                    }
+                    DaftProvider::Byoc => {
+                        anyhow::bail!("'up' command is only available for provisioned configurations");
+                    }
+                }
+            }
+            ProvisionedCommand::Down(ConfigPath { config }) => {
+                let (daft_config, ray_config) = read_and_convert(&config, Some(TeardownBehaviour::Stop)).await?;
+                match daft_config.setup.provider {
+                    DaftProvider::Provisioned => {
+                        if ray_config.is_none() {
+                            anyhow::bail!("Failed to find Ray config in config file");
+                        }
+                        let ray_config = ray_config.unwrap();
+                        assert_is_logged_in_with_aws().await?;
+
+                        let (_temp_dir, ray_path) = create_temp_ray_file()?;
+                        write_ray_config(ray_config, &ray_path).await?;
+                        run_ray_up_or_down_command(SpinDirection::Down, ray_path).await?;
+                    }
+                    DaftProvider::Byoc => {
+                        anyhow::bail!("'down' command is only available for provisioned configurations");
+                    }
+                }
+            }
+            ProvisionedCommand::Kill(ConfigPath { config }) => {
+                let (daft_config, ray_config) = read_and_convert(&config, Some(TeardownBehaviour::Kill)).await?;
+                match daft_config.setup.provider {
+                    DaftProvider::Provisioned => {
+                        if ray_config.is_none() {
+                            anyhow::bail!("Failed to find Ray config in config file");
+                        }
+                        let ray_config = ray_config.unwrap();
+                        assert_is_logged_in_with_aws().await?;
+
+                        let (_temp_dir, ray_path) = create_temp_ray_file()?;
+                        write_ray_config(ray_config, &ray_path).await?;
+                        run_ray_up_or_down_command(SpinDirection::Down, ray_path).await?;
+                    }
+                    DaftProvider::Byoc => {
+                        anyhow::bail!("'kill' command is only available for provisioned configurations");
+                    }
+                }
+            }
+            ProvisionedCommand::List(List { config_path, region, head, running }) => {
+                let (daft_config, _) = read_and_convert(&config_path.config, None).await?;
+                match daft_config.setup.provider {
+                    DaftProvider::Provisioned => {
+                        assert_is_logged_in_with_aws().await?;
+                        let aws_config = get_aws_config(&daft_config)?;
+                        let region = region.as_ref().unwrap_or_else(|| &aws_config.region);
+                        let instances = get_ray_clusters_from_aws(region.clone()).await?;
+                        print_instances(&instances, *head, *running);
+                    }
+                    DaftProvider::Byoc => {
+                        anyhow::bail!("'list' command is only available for provisioned configurations");
+                    }
+                }
+            }
+            ProvisionedCommand::Connect(Connect { port, config_path }) => {
+                let (daft_config, ray_config) = read_and_convert(&config_path.config, None).await?;
+                match daft_config.setup.provider {
+                    DaftProvider::Provisioned => {
+                        if ray_config.is_none() {
+                            anyhow::bail!("Failed to find Ray config in config file");
+                        }
+                        let ray_config = ray_config.unwrap();
+                        assert_is_logged_in_with_aws().await?;
+
+                        let (_temp_dir, ray_path) = create_temp_ray_file()?;
+                        write_ray_config(ray_config, &ray_path).await?;
+                        let aws_config = get_aws_config(&daft_config)?;
+                        let _ = establish_ssh_portforward(ray_path, aws_config, Some(*port))
+                            .await?
+                            .wait_with_output()
+                            .await?;
+                    }
+                    DaftProvider::Byoc => {
+                        anyhow::bail!("'connect' command is only available for provisioned configurations");
+                    }
+                }
+            }
+            ProvisionedCommand::Ssh(ConfigPath { config }) => {
+                let (daft_config, ray_config) = read_and_convert(&config, None).await?;
+                match daft_config.setup.provider {
+                    DaftProvider::Provisioned => {
+                        if ray_config.is_none() {
+                            anyhow::bail!("Failed to find Ray config in config file");
+                        }
+                        let ray_config = ray_config.unwrap();
+                        assert_is_logged_in_with_aws().await?;
+
+                        let (_temp_dir, ray_path) = create_temp_ray_file()?;
+                        write_ray_config(ray_config, &ray_path).await?;
+                        let aws_config = get_aws_config(&daft_config)?;
+                        ssh(ray_path, aws_config).await?;
+                    }
+                    DaftProvider::Byoc => {
+                        anyhow::bail!("'ssh' command is only available for provisioned configurations");
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+impl ByocCommand {
+    async fn run(&self, _verbosity: u8) -> anyhow::Result<()> {
+        match self {
+            ByocCommand::Verify(ConfigPath { config: _ }) => {
+                anyhow::bail!("Verify command not yet implemented");
+            }
+            ByocCommand::Info(ConfigPath { config: _ }) => {
+                anyhow::bail!("Info command not yet implemented");
+            }
+        }
+        Ok(())
     }
 }

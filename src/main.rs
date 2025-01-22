@@ -890,8 +890,8 @@ async fn run(daft_launcher: DaftLauncher) -> anyhow::Result<()> {
                 bail!("The path {path:?} already exists; the path given must point to a new location on your filesystem");
             }
             let contents = match provider {
-                InitProvider::Aws => asset!("template_k8s.toml"),
-                InitProvider::K8s => asset!("template.toml"),
+                InitProvider::Aws => asset!("template.toml"),
+                InitProvider::K8s => asset!("template_k8s.toml"),
             }
             .replace("<requires>", concat!("=", env!("CARGO_PKG_VERSION")))
             .replace(

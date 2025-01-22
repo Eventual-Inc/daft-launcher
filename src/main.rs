@@ -130,6 +130,7 @@ enum SubCommand {
 struct Init {
     /// The provider to use - either 'aws' (default) to auto-generate a cluster
     /// or 'k8s' for existing Kubernetes clusters
+    #[arg(default_value = "aws")]
     init_provider: InitProvider,
 
     /// The path at which to create the config file.

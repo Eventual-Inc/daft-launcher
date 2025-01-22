@@ -25,12 +25,15 @@ async fn get_path() -> (TempDir, PathBuf) {
 /// `template.toml` file before writing it. Thus, the outputted configuration
 /// file does not *exactly* match the original `template.toml` file.
 #[tokio::test]
-async fn test_init() {
+#[rstest::rstest]
+#[case(InitProvider::Aws)]
+#[case(InitProvider::K8s)]
+async fn test_init_aws(#[case] init_provider: InitProvider) {
     let (_temp_dir, path) = get_path().await;
 
     run(DaftLauncher {
         sub_command: SubCommand::Init(Init {
-            init_provider: InitProvider::Aws,
+            init_provider,
             path: path.clone(),
         }),
         verbosity: 0,
@@ -45,12 +48,15 @@ async fn test_init() {
 /// Tests to make sure that `daft check` properly asserts the schema of the
 /// newly created daft-launcher configuration file.
 #[tokio::test]
-async fn test_check() {
+#[rstest::rstest]
+#[case(InitProvider::Aws)]
+#[case(InitProvider::K8s)]
+async fn test_check(#[case] init_provider: InitProvider) {
     let (_temp_dir, path) = get_path().await;
 
     run(DaftLauncher {
         sub_command: SubCommand::Init(Init {
-            init_provider: InitProvider::K8s,
+            init_provider,
             path: path.clone(),
         }),
         verbosity: 0,

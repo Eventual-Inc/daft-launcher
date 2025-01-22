@@ -2,8 +2,8 @@
 [setup]
 name = "my-daft-cluster"
 requires = "<requires>"
-python_version = "<python-version>"
-ray_version = "<ray-version>"
+python-version = "<python-version>"
+ray-version = "<ray-version>"
 
 [setup.k8s]
 namespace = "default" # Optional, defaults to "default"

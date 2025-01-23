@@ -9,6 +9,9 @@ use std::{
     time::Duration,
 };
 
+#[cfg(test)]
+mod tests;
+
 #[cfg(not(test))]
 use anyhow::bail;
 use aws_config::{BehaviorVersion, Region};
@@ -191,7 +194,7 @@ struct ConfigPath {
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 struct DaftConfig {
     setup: DaftSetup,
-    #[serde(rename = "job", deserialize_with = "parse_jobs")]
+    #[serde(default, rename = "job", deserialize_with = "parse_jobs")]
     jobs: HashMap<StrRef, DaftJob>,
 }
 
@@ -243,7 +246,8 @@ struct AwsConfig {
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 struct K8sConfig {
-    namespace: Option<StrRef>,
+    #[serde(default = "default_k8s_namespace")]
+    namespace: StrRef,
 }
 
 fn parse_jobs<'de, D>(deserializer: D) -> Result<HashMap<StrRef, DaftJob>, D::Error>
@@ -323,6 +327,10 @@ fn default_image_id() -> StrRef {
     "ami-04dd23e62ed049936".into()
 }
 
+fn default_k8s_namespace() -> StrRef {
+    "default".into()
+}
+
 fn parse_version_req<'de, D>(deserializer: D) -> Result<VersionReq, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -344,9 +352,7 @@ where
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 enum DaftProvider {
-    #[serde(rename = "provisioned")]
     Provisioned,
-    #[serde(rename = "byoc")]
     Byoc,
 }
 
@@ -862,8 +868,39 @@ impl Drop for PortForward {
     }
 }
 
-async fn establish_kubernetes_port_forward(namespace: Option<&str>) -> anyhow::Result<PortForward> {
-    let namespace = namespace.unwrap_or("default");
+async fn submit_k8s(
+    working_dir: &Path,
+    command_segments: impl AsRef<[&str]>,
+    namespace: &str,
+) -> anyhow::Result<()> {
+    let command_segments = command_segments.as_ref();
+
+    // Start port forwarding - it will be automatically killed when _port_forward is dropped
+    let _port_forward = establish_kubernetes_port_forward(namespace).await?;
+
+    // Give the port-forward a moment to fully establish
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    // Submit the job
+    let exit_status = Command::new("ray")
+        .env("PYTHONUNBUFFERED", "1")
+        .args(["job", "submit", "--address", "http://localhost:8265"])
+        .arg("--working-dir")
+        .arg(working_dir)
+        .arg("--")
+        .args(command_segments)
+        .spawn()?
+        .wait()
+        .await?;
+
+    if exit_status.success() {
+        Ok(())
+    } else {
+        Err(anyhow::anyhow!("Failed to submit job to the ray cluster"))
+    }
+}
+
+async fn establish_kubernetes_port_forward(namespace: &str) -> anyhow::Result<PortForward> {
     let output = Command::new("kubectl")
         .arg("get")
         .arg("svc")
@@ -920,38 +957,6 @@ async fn establish_kubernetes_port_forward(namespace: Option<&str>) -> anyhow::R
                 process: port_forward,
             })
         }
-    }
-}
-
-async fn submit_k8s(
-    working_dir: &Path,
-    command_segments: impl AsRef<[&str]>,
-    namespace: Option<&str>,
-) -> anyhow::Result<()> {
-    let command_segments = command_segments.as_ref();
-
-    // Start port forwarding - it will be automatically killed when _port_forward is dropped
-    let _port_forward = establish_kubernetes_port_forward(namespace).await?;
-
-    // Give the port-forward a moment to fully establish
-    tokio::time::sleep(Duration::from_secs(1)).await;
-
-    // Submit the job
-    let exit_status = Command::new("ray")
-        .env("PYTHONUNBUFFERED", "1")
-        .args(["job", "submit", "--address", "http://localhost:8265"])
-        .arg("--working-dir")
-        .arg(working_dir)
-        .arg("--")
-        .args(command_segments)
-        .spawn()?
-        .wait()
-        .await?;
-
-    if exit_status.success() {
-        Ok(())
-    } else {
-        Err(anyhow::anyhow!("Failed to submit job to the ray cluster"))
     }
 }
 
@@ -1063,7 +1068,7 @@ impl JobCommand {
                         submit_k8s(
                             daft_job.working_dir.as_ref(),
                             daft_job.command.as_ref().split(' ').collect::<Vec<_>>(),
-                            k8s_config.namespace.as_deref(),
+                            k8s_config.namespace.as_ref(),
                         )
                         .await?;
                     }
@@ -1081,7 +1086,7 @@ impl JobCommand {
                         submit_k8s(
                             temp_sql_dir.path(),
                             vec!["python", "sql.py", sql.as_ref()],
-                            k8s_config.namespace.as_deref(),
+                            k8s_config.namespace.as_ref(),
                         )
                         .await?;
                     }

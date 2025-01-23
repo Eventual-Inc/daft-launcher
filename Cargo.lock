@@ -608,7 +608,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "daft"
+name = "daft-launcher"
 version = "0.4.1-alpha0"
 dependencies = [
  "anyhow",

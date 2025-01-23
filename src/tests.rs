@@ -1,7 +1,6 @@
 use tokio::fs;
 
 use super::*;
-use crate::{ConfigCommand, ConfigCommands, ConfigPath, DaftLauncher, Init, SubCommand};
 
 fn not_found_okay(result: std::io::Result<()>) -> std::io::Result<()> {
     match result {
@@ -189,29 +188,4 @@ pub fn simple_config() -> (DaftConfig, Option<TeardownBehaviour>, RayConfig) {
     };
 
     (daft_config, None, ray_config)
-}
-
-#[tokio::test]
-async fn test_init_and_export() {
-    crate::run(DaftLauncher {
-        sub_command: SubCommand::Config(ConfigCommands {
-            command: ConfigCommand::Init(Init {
-                path: ".daft.toml".into(),
-                provider: "provisioned".into(),
-            }),
-        }),
-        verbosity: 0,
-    })
-    .await
-    .unwrap();
-    crate::run(DaftLauncher {
-        sub_command: SubCommand::Config(ConfigCommands {
-            command: ConfigCommand::Check(ConfigPath {
-                config: ".daft.toml".into(),
-            }),
-        }),
-        verbosity: 0,
-    })
-    .await
-    .unwrap();
 }

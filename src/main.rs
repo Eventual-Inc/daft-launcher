@@ -484,7 +484,7 @@ fn convert(
             (
                 "ray.head.default".into(),
                 RayNodeType {
-                    max_workers: aws_config.number_of_workers,
+                    max_workers: 0,
                     node_config: node_config.clone(),
                     resources: Some(RayResources { cpu: 0 }),
                 },
@@ -508,7 +508,7 @@ fn convert(
                 "uv venv".into(),
                 "echo 'source $HOME/.venv/bin/activate' >> ~/.bashrc".into(),
                 "source ~/.bashrc".into(),
-                "uv pip install boto3 pip ray[default] getdaft py-spy deltalake".into(),
+                "uv pip install boto3 pip py-spy deltalake getdaft ray[default]".into(),
             ];
             if !aws_config.dependencies.is_empty() {
                 let deps = aws_config

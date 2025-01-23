@@ -33,3 +33,6 @@ features = ["derive", "rc"]
 [dependencies.versions]
 version = "6.3"
 features = ["serde"]
+
+[dev-dependencies]
+rstest = "0.24.0"

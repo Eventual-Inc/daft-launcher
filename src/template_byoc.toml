@@ -1,0 +1,15 @@
+# This is a template configuration file for daft-launcher with BYOC provider
+[setup]
+name = "my-daft-cluster"
+version = "<VERSION>"
+provider = "byoc"
+# TODO: support dependencies
+
+[setup.byoc]
+namespace = "default"  # Optional, defaults to "default"
+
+# Job definitions
+[[job]]
+name = "example-job"
+command = "python my_script.py"
+working-dir = "~/my_project"

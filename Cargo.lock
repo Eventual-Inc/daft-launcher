@@ -620,6 +620,7 @@ dependencies = [
  "open",
  "regex",
  "rstest",
+ "semver",
  "serde",
  "serde_yaml",
  "tempdir",

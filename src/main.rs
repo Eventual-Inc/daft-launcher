@@ -592,7 +592,7 @@ struct AwsInstance {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NodeType {
+enum NodeType {
     Head,
     Worker,
 }

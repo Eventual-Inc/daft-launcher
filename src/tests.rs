@@ -1,3 +1,5 @@
+use std::io::ErrorKind;
+use tempdir::TempDir;
 use tokio::fs;
 
 use super::*;
@@ -26,18 +28,18 @@ async fn get_path() -> (TempDir, PathBuf) {
 /// file does not *exactly* match the original `template.toml` file.
 #[tokio::test]
 #[rstest::rstest]
-#[case(InitProvider::Aws)]
-#[case(InitProvider::K8s)]
-async fn test_init_aws(#[case] init_provider: InitProvider) {
+#[case(DaftProvider::Provisioned)]
+#[case(DaftProvider::Byoc)]
+async fn test_init(#[case] provider: DaftProvider) {
     let (_temp_dir, path) = get_path().await;
 
-    run(DaftLauncher {
-        sub_command: SubCommand::Init(Init {
-            init_provider,
+    DaftLauncher {
+        sub_command: SubCommand::Config(ConfigCommand::Init(Init {
             path: path.clone(),
-        }),
-        verbosity: 0,
-    })
+            provider,
+        })),
+    }
+    .run()
     .await
     .unwrap();
 
@@ -49,26 +51,64 @@ async fn test_init_aws(#[case] init_provider: InitProvider) {
 /// newly created daft-launcher configuration file.
 #[tokio::test]
 #[rstest::rstest]
-#[case(InitProvider::Aws)]
-#[case(InitProvider::K8s)]
-async fn test_check(#[case] init_provider: InitProvider) {
+#[case(DaftProvider::Provisioned)]
+#[case(DaftProvider::Byoc)]
+async fn test_check(#[case] provider: DaftProvider) {
     let (_temp_dir, path) = get_path().await;
 
-    run(DaftLauncher {
-        sub_command: SubCommand::Init(Init {
-            init_provider,
+    DaftLauncher {
+        sub_command: SubCommand::Config(ConfigCommand::Init(Init {
             path: path.clone(),
-        }),
-        verbosity: 0,
-    })
+            provider,
+        })),
+    }
+    .run()
     .await
     .unwrap();
-    run(DaftLauncher {
-        sub_command: SubCommand::Check(ConfigPath { config: path }),
-        verbosity: 0,
-    })
+
+    DaftLauncher {
+        sub_command: SubCommand::Config(ConfigCommand::Check(ConfigPath { config: path })),
+    }
+    .run()
     .await
     .unwrap();
+}
+
+#[rstest::rstest]
+#[case("3.9".parse().unwrap(), "2.34".parse().unwrap(), vec![], vec![], vec![
+    "curl -LsSf https://astral.sh/uv/install.sh | sh".into(),
+    "uv python install 3.9".into(),
+    "uv python pin 3.9".into(),
+    "uv venv".into(),
+    "echo 'source $HOME/.venv/bin/activate' >> ~/.bashrc".into(),
+    "source ~/.bashrc".into(),
+    r#"uv pip install boto3 pip py-spy deltalake getdaft "ray[default]==2.34""#.into(),
+])]
+#[case("3.9".parse().unwrap(), "2.34".parse().unwrap(), vec!["requests==0.0.0".into()], vec![r#"echo "Hello, world!""#.into()], vec![
+    "curl -LsSf https://astral.sh/uv/install.sh | sh".into(),
+    "uv python install 3.9".into(),
+    "uv python pin 3.9".into(),
+    "uv venv".into(),
+    "echo 'source $HOME/.venv/bin/activate' >> ~/.bashrc".into(),
+    "source ~/.bashrc".into(),
+    r#"uv pip install boto3 pip py-spy deltalake getdaft "ray[default]==2.34""#.into(),
+    r#"uv pip install "requests==0.0.0""#.into(),
+    r#"echo "Hello, world!""#.into(),
+])]
+fn test_generate_setup_commands(
+    #[case] python_version: Versioning,
+    #[case] ray_version: Versioning,
+    #[case] dependencies: Vec<StrRef>,
+    #[case] run: Vec<StrRef>,
+    #[case] expected: Vec<StrRef>,
+) {
+    let actual = generate_setup_commands(
+        python_version,
+        ray_version,
+        dependencies.as_slice(),
+        run.as_slice(),
+    );
+    assert_eq!(actual, expected);
 }
 
 /// This tests the core conversion functionality, from a `DaftConfig` to a
@@ -90,37 +130,7 @@ fn test_conversion(
         RayConfig,
     ),
 ) {
-    let actual = convert_to_ray_config(&daft_config, teardown_behaviour).unwrap();
-    assert_eq!(actual, expected);
-}
-
-#[rstest::rstest]
-#[case("3.9".parse().unwrap(), "2.34".parse().unwrap(), vec![], vec![
-    "curl -LsSf https://astral.sh/uv/install.sh | sh".into(),
-    "uv python install 3.9".into(),
-    "uv python pin 3.9".into(),
-    "uv venv".into(),
-    "echo 'source $HOME/.venv/bin/activate' >> ~/.bashrc".into(),
-    "source ~/.bashrc".into(),
-    r#"uv pip install boto3 pip py-spy deltalake getdaft "ray[default]==2.34""#.into(),
-])]
-#[case("3.9".parse().unwrap(), "2.34".parse().unwrap(), vec!["requests==0.0.0".into()], vec![
-    "curl -LsSf https://astral.sh/uv/install.sh | sh".into(),
-    "uv python install 3.9".into(),
-    "uv python pin 3.9".into(),
-    "uv venv".into(),
-    "echo 'source $HOME/.venv/bin/activate' >> ~/.bashrc".into(),
-    "source ~/.bashrc".into(),
-    r#"uv pip install boto3 pip py-spy deltalake getdaft "ray[default]==2.34""#.into(),
-    r#"uv pip install "requests==0.0.0""#.into(),
-])]
-fn test_generate_setup_commands(
-    #[case] python_version: Versioning,
-    #[case] ray_version: Versioning,
-    #[case] dependencies: Vec<StrRef>,
-    #[case] expected: Vec<StrRef>,
-) {
-    let actual = generate_setup_commands(python_version, ray_version, dependencies.as_slice());
+    let actual = convert(&daft_config, teardown_behaviour).unwrap();
     assert_eq!(actual, expected);
 }
 
@@ -135,7 +145,7 @@ pub fn simple_config() -> (DaftConfig, Option<TeardownBehaviour>, RayConfig) {
             requires: "=1.2.3".parse().unwrap(),
             python_version: "3.12".parse().unwrap(),
             ray_version: "2.34".parse().unwrap(),
-            provider_config: ProviderConfig::Aws(AwsConfig {
+            provider_config: ProviderConfig::Provisioned(AwsConfig {
                 region: test_name.clone(),
                 number_of_workers,
                 ssh_user: test_name.clone(),
@@ -144,7 +154,7 @@ pub fn simple_config() -> (DaftConfig, Option<TeardownBehaviour>, RayConfig) {
                 image_id: test_name.clone(),
                 iam_instance_profile_name: Some(test_name.clone()),
                 dependencies: vec![],
-                run: vec![],
+                run: vec![r#"echo "Hello, world!""#.into()],
             }),
         },
         jobs: HashMap::default(),
@@ -198,6 +208,7 @@ pub fn simple_config() -> (DaftConfig, Option<TeardownBehaviour>, RayConfig) {
             "echo 'source $HOME/.venv/bin/activate' >> ~/.bashrc".into(),
             "source ~/.bashrc".into(),
             r#"uv pip install boto3 pip py-spy deltalake getdaft "ray[default]==2.34""#.into(),
+            r#"echo "Hello, world!""#.into(),
         ],
     };
 

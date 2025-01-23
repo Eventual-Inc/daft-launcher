@@ -1,11 +1,12 @@
 # This is a template configuration file for daft-launcher with Kubernetes provider
+
 [setup]
 name = "my-daft-cluster"
 requires = "<requires>"
 python-version = "<python-version>"
 ray-version = "<ray-version>"
 
-[setup.k8s]
+[setup.byoc]
 namespace = "default" # Optional, defaults to "default"
 
 # Job definitions

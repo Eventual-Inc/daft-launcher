@@ -74,12 +74,14 @@ async fn generate_ssh_command(
 }
 
 pub async fn ssh(ray_path: impl AsRef<Path>, aws_config: &AwsConfig) -> anyhow::Result<()> {
-    let (_, mut command) = generate_ssh_command(ray_path, aws_config, None, false).await?;
+    let (addr, mut command) = generate_ssh_command(ray_path, aws_config, None, false).await?;
     let exit_status = command.spawn()?.wait().await?;
     if exit_status.success() {
         Ok(())
     } else {
-        Err(anyhow::anyhow!("Failed to ssh into the ray cluster"))
+        Err(anyhow::anyhow!(
+            "Failed to ssh into the ray cluster at address {addr}"
+        ))
     }
 }
 

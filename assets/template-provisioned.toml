@@ -7,7 +7,7 @@ python-version = "<python-version>"
 ray-version = "<ray-version>"
 
 # AWS-specific configuration
-[setup.aws]
+[setup.provisioned]
 region = "us-west-2"
 number-of-workers = 4
 ssh-user = "ubuntu"
@@ -16,7 +16,7 @@ instance-type = "i3.2xlarge"
 image-id = "ami-04dd23e62ed049936"
 iam-instance-profile-name = "YourInstanceProfileName" # Optional
 dependencies = []                                     # Optional additional Python packages to install
-run = []
+run = []                                              # Optional commands to run during cluster-node initialization
 
 # Job definitions
 [[job]]

@@ -745,18 +745,15 @@ async fn establish_kubernetes_port_forward(namespace: Option<&str>) -> anyhow::R
         .output()
         .await?;
     if !output.status.success() {
-        return Err(anyhow::anyhow!(
+        anyhow::bail!(
             "Failed to get Ray head node services with kubectl in namespace {}",
             namespace
-        ));
+        );
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     if stdout.trim().is_empty() {
-        return Err(anyhow::anyhow!(
-            "Ray head node service not found in namespace {}",
-            namespace
-        ));
+        anyhow::bail!("Ray head node service not found in namespace {}", namespace);
     }
 
     let head_node_service_name = stdout

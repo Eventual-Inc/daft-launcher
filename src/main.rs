@@ -201,8 +201,6 @@ struct DaftSetup {
     name: StrRef,
     #[serde(deserialize_with = "parse_requirement")]
     version: Requirement,
-    #[serde(default)]
-    dependencies: Vec<StrRef>,
     #[serde(flatten)]
     provider_config: ProviderConfig,
 }
@@ -210,9 +208,7 @@ struct DaftSetup {
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 enum ProviderConfig {
-    #[serde(rename = "provisioned")]
     Provisioned(AwsConfig),
-    #[serde(rename = "byoc")]
     Byoc(K8sConfig),
 }
 
@@ -229,7 +225,10 @@ struct AwsConfig {
     instance_type: StrRef,
     #[serde(default = "default_image_id")]
     image_id: StrRef,
+    #[serde(skip_serializing_if = "Option::is_none")]
     iam_instance_profile_name: Option<StrRef>,
+    #[serde(default)]
+    dependencies: Vec<StrRef>,
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
@@ -504,9 +503,8 @@ fn convert(
                 "source ~/.bashrc".into(),
                 "uv pip install boto3 pip ray[default] getdaft py-spy deltalake".into(),
             ];
-            if !daft_config.setup.dependencies.is_empty() {
-                let deps = daft_config
-                    .setup
+            if !aws_config.dependencies.is_empty() {
+                let deps = aws_config
                     .dependencies
                     .iter()
                     .map(|dep| format!(r#""{dep}""#))

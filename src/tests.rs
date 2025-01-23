@@ -26,11 +26,17 @@ async fn get_path() -> (TempDir, PathBuf) {
 /// `template.toml` file before writing it. Thus, the outputted configuration
 /// file does not *exactly* match the original `template.toml` file.
 #[tokio::test]
-async fn test_init() {
+#[rstest::rstest]
+#[case(DaftProvider::Byoc)]
+#[case(DaftProvider::Provisioned)]
+async fn test_init(#[case] provider: DaftProvider) {
     let (_temp_dir, path) = get_path().await;
 
     run(DaftLauncher {
-        sub_command: SubCommand::Init(Init { path: path.clone() }),
+        sub_command: SubCommand::Init(Init {
+            path: path.clone(),
+            provider,
+        }),
         verbosity: 0,
     })
     .await

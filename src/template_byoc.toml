@@ -1,9 +1,8 @@
-# This is a template configuration file for daft-launcher with BYOC provider
+# This is a template configuration file for daft-launcher with a BYOC provider
+
 [setup]
 name = "my-daft-cluster"
 version = "<VERSION>"
-provider = "byoc"
-# TODO: support dependencies
 
 [setup.byoc]
 namespace = "default"  # Optional, defaults to "default"

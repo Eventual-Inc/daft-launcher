@@ -6,7 +6,7 @@ use tokio::{
     time::timeout,
 };
 
-use crate::DaftConfig;
+use crate::AwsConfig;
 
 async fn get_head_node_ip(ray_path: impl AsRef<Path>) -> anyhow::Result<Ipv4Addr> {
     let mut ray_command = Command::new("ray")
@@ -42,18 +42,18 @@ async fn get_head_node_ip(ray_path: impl AsRef<Path>) -> anyhow::Result<Ipv4Addr
 
 async fn generate_ssh_command(
     ray_path: impl AsRef<Path>,
-    daft_config: &DaftConfig,
+    aws_config: &AwsConfig,
     portforward: Option<u16>,
     verbose: bool,
 ) -> anyhow::Result<(Ipv4Addr, Command)> {
-    let user = daft_config.setup.ssh_user.as_ref();
+    let user = aws_config.ssh_user.as_ref();
     let addr = get_head_node_ip(ray_path).await?;
 
     let mut command = Command::new("ssh");
 
     command
         .arg("-i")
-        .arg(daft_config.setup.ssh_private_key.as_ref())
+        .arg(aws_config.ssh_private_key.as_ref())
         .arg("-o")
         .arg("StrictHostKeyChecking=no");
 
@@ -73,24 +73,26 @@ async fn generate_ssh_command(
     Ok((addr, command))
 }
 
-pub async fn ssh(ray_path: impl AsRef<Path>, daft_config: &DaftConfig) -> anyhow::Result<()> {
-    let (_, mut command) = generate_ssh_command(ray_path, daft_config, None, false).await?;
+pub async fn ssh(ray_path: impl AsRef<Path>, aws_config: &AwsConfig) -> anyhow::Result<()> {
+    let (addr, mut command) = generate_ssh_command(ray_path, aws_config, None, false).await?;
     let exit_status = command.spawn()?.wait().await?;
     if exit_status.success() {
         Ok(())
     } else {
-        Err(anyhow::anyhow!("Failed to ssh into the ray cluster"))
+        Err(anyhow::anyhow!(
+            "Failed to ssh into the ray cluster at address {addr}"
+        ))
     }
 }
 
 pub async fn ssh_portforward(
     ray_path: impl AsRef<Path>,
-    daft_config: &DaftConfig,
+    aws_config: &AwsConfig,
     portforward: Option<u16>,
 ) -> anyhow::Result<Child> {
     let (addr, mut command) = generate_ssh_command(
         ray_path,
-        daft_config,
+        aws_config,
         Some(portforward.unwrap_or(8265)),
         true,
     )

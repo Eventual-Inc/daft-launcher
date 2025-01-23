@@ -21,6 +21,9 @@ use std::{
     time::Duration,
 };
 
+#[cfg(test)]
+mod tests;
+
 #[cfg(not(test))]
 use anyhow::bail;
 use aws_config::{BehaviorVersion, Region};
@@ -191,7 +194,7 @@ struct ConfigPath {
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 struct DaftConfig {
     setup: DaftSetup,
-    #[serde(rename = "job", deserialize_with = "parse_jobs")]
+    #[serde(default, rename = "job", deserialize_with = "parse_jobs")]
     jobs: HashMap<StrRef, DaftJob>,
 }
 
@@ -234,7 +237,8 @@ struct AwsConfig {
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 struct K8sConfig {
-    namespace: Option<StrRef>,
+    #[serde(default = "default_k8s_namespace")]
+    namespace: StrRef,
 }
 
 fn parse_jobs<'de, D>(deserializer: D) -> Result<HashMap<StrRef, DaftJob>, D::Error>
@@ -312,6 +316,10 @@ fn default_instance_type() -> StrRef {
 
 fn default_image_id() -> StrRef {
     "ami-04dd23e62ed049936".into()
+}
+
+fn default_k8s_namespace() -> StrRef {
+    "default".into()
 }
 
 fn parse_requirement<'de, D>(deserializer: D) -> Result<Requirement, D::Error>
@@ -423,7 +431,6 @@ async fn read_daft_config(daft_config_path: impl AsRef<Path>) -> anyhow::Result<
             }
         })?;
     let daft_config = toml::from_str::<DaftConfig>(&contents)?;
-
     Ok(daft_config)
 }
 
@@ -730,8 +737,7 @@ async fn assert_is_logged_in_with_aws() -> anyhow::Result<()> {
     }
 }
 
-async fn establish_kubernetes_port_forward(namespace: Option<&str>) -> anyhow::Result<Child> {
-    let namespace = namespace.unwrap_or("default");
+async fn establish_kubernetes_port_forward(namespace: &str) -> anyhow::Result<Child> {
     let output = Command::new("kubectl")
         .arg("get")
         .arg("svc")
@@ -800,7 +806,6 @@ async fn submit(
     working_dir: impl AsRef<Path>,
     command_segments: impl AsRef<[&str]>,
 ) -> anyhow::Result<()> {
-    // Submit the job
     let exit_status = Command::new("ray")
         .env("PYTHONUNBUFFERED", "1")
         .args(["job", "submit", "--address", "http://localhost:8265"])
@@ -822,7 +827,7 @@ async fn submit(
 async fn submit_k8s(
     working_dir: impl AsRef<Path>,
     command_segments: impl AsRef<[&str]>,
-    namespace: Option<&str>,
+    namespace: &str,
 ) -> anyhow::Result<()> {
     // Start port forwarding - it will be automatically killed when _port_forward is dropped
     let _port_forward = establish_kubernetes_port_forward(namespace).await?;
@@ -907,12 +912,8 @@ impl JobCommand {
                         submit(working_dir, command_segments).await?;
                     }
                     ProviderConfig::Byoc(k8s_config) => {
-                        submit_k8s(
-                            working_dir,
-                            command_segments,
-                            k8s_config.namespace.as_deref(),
-                        )
-                        .await?;
+                        submit_k8s(working_dir, command_segments, k8s_config.namespace.as_ref())
+                            .await?;
                     }
                 }
             }
@@ -936,12 +937,8 @@ impl JobCommand {
                         submit(working_dir, command_segments).await?;
                     }
                     ProviderConfig::Byoc(k8s_config) => {
-                        submit_k8s(
-                            working_dir,
-                            command_segments,
-                            k8s_config.namespace.as_deref(),
-                        )
-                        .await?;
+                        submit_k8s(working_dir, command_segments, k8s_config.namespace.as_ref())
+                            .await?;
                     }
                 }
             }

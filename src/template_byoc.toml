@@ -5,7 +5,7 @@ name = "my-daft-cluster"
 version = "<VERSION>"
 
 [setup.byoc]
-namespace = "default"  # Optional, defaults to "default"
+namespace = "default" # Optional, defaults to "default"
 
 # Job definitions
 [[job]]

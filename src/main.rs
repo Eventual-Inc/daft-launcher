@@ -25,7 +25,7 @@ use std::{
 use anyhow::bail;
 use aws_config::{BehaviorVersion, Region};
 use aws_sdk_ec2::{types::InstanceStateName, Client};
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use comfy_table::{
     modifiers, presets, Attribute, Cell, CellAlignment, Color, ContentArrangement, Table,
 };
@@ -333,36 +333,19 @@ where
     }
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+#[derive(Debug, ValueEnum, Clone, PartialEq, Eq)]
 enum DaftProvider {
-    #[serde(rename = "provisioned")]
     Provisioned,
-    #[serde(rename = "byoc")]
     Byoc,
-}
-
-impl FromStr for DaftProvider {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "provisioned" => Ok(DaftProvider::Provisioned),
-            "byoc" => Ok(DaftProvider::Byoc),
-            _ => anyhow::bail!(
-                "Invalid provider '{}'. Must be either 'provisioned' or 'byoc'",
-                s
-            ),
-        }
-    }
 }
 
 impl ToString for DaftProvider {
     fn to_string(&self) -> String {
         match self {
-            DaftProvider::Provisioned => "provisioned".to_string(),
-            DaftProvider::Byoc => "byoc".to_string(),
+            DaftProvider::Provisioned => "provisioned",
+            DaftProvider::Byoc => "byoc",
         }
+        .to_string()
     }
 }
 

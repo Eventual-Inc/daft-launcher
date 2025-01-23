@@ -35,4 +35,4 @@ version = "6.3"
 features = ["serde"]
 
 [dev-dependencies]
-rstest = "0.24.0"
+rstest = "0.24"

@@ -858,7 +858,7 @@ impl ConfigCommand {
                     DaftProvider::Byoc => include_str!("template_byoc.toml"),
                     DaftProvider::Provisioned => include_str!("template_provisioned.toml"),
                 }
-                .replace("<VERSION>", env!("CARGO_PKG_VERSION"));
+                .replace("<VERSION>", concat!("=", env!("CARGO_PKG_VERSION")));
                 fs::write(path, contents).await?;
             }
             ConfigCommand::Check(ConfigPath { config }) => {

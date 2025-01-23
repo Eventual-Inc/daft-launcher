@@ -3,7 +3,6 @@
 [setup]
 name = "my-daft-cluster"
 version = "<VERSION>"
-dependencies = []  # Optional additional Python packages to install
 
 # Provisioned (AWS) configuration
 [setup.provisioned]
@@ -14,6 +13,7 @@ ssh-private-key = "~/.ssh/id_rsa"
 instance-type = "i3.2xlarge"
 image-id = "ami-04dd23e62ed049936"
 iam-instance-profile-name = "YourInstanceProfileName"  # Optional
+dependencies = []  # Optional additional Python packages to install
 
 # Job definitions
 [[job]]

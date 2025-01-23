@@ -742,6 +742,7 @@ async fn establish_kubernetes_port_forward(namespace: Option<&str>) -> anyhow::R
         .arg("--no-headers")
         .arg("-o")
         .arg("custom-columns=:metadata.name")
+        .kill_on_drop(true)
         .output()
         .await?;
     if !output.status.success() {

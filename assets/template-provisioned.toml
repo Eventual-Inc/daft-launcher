@@ -1,10 +1,12 @@
-# This is a template configuration file for daft-launcher with a provisioned provider
+# This is a template configuration file for daft-launcher with AWS provider
 
 [setup]
 name = "my-daft-cluster"
-version = "<VERSION>"
+requires = "<requires>"
+python-version = "<python-version>"
+ray-version = "<ray-version>"
 
-# Provisioned (AWS) configuration
+# AWS-specific configuration
 [setup.provisioned]
 region = "us-west-2"
 number-of-workers = 4
@@ -14,6 +16,7 @@ instance-type = "i3.2xlarge"
 image-id = "ami-04dd23e62ed049936"
 iam-instance-profile-name = "YourInstanceProfileName" # Optional
 dependencies = []                                     # Optional additional Python packages to install
+run = []                                              # Optional commands to run during cluster-node initialization
 
 # Job definitions
 [[job]]

@@ -1,8 +1,10 @@
-# This is a template configuration file for daft-launcher with a BYOC provider
+# This is a template configuration file for daft-launcher with Kubernetes provider
 
 [setup]
 name = "my-daft-cluster"
-version = "<VERSION>"
+requires = "<requires>"
+python-version = "<python-version>"
+ray-version = "<ray-version>"
 
 [setup.byoc]
 namespace = "default" # Optional, defaults to "default"

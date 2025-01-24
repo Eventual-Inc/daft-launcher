@@ -1,3 +1,21 @@
+macro_rules! asset {
+    (
+        $($path_segment:literal),*
+        $(,)?
+    ) => {
+        include_str!(
+            concat! {
+                env!("CARGO_MANIFEST_DIR"),
+                "/assets",
+                $(
+                    "/",
+                    $path_segment,
+                )*
+            }
+        )
+    };
+}
+
 macro_rules! not_available_for_byoc {
     ($command:literal) => {
         anyhow::bail!(concat!(
@@ -9,6 +27,8 @@ macro_rules! not_available_for_byoc {
 }
 
 mod ssh;
+#[cfg(test)]
+mod tests;
 
 use std::{
     collections::HashMap,
@@ -21,9 +41,6 @@ use std::{
     time::Duration,
 };
 
-#[cfg(test)]
-mod tests;
-
 #[cfg(not(test))]
 use anyhow::bail;
 use aws_config::{BehaviorVersion, Region};
@@ -32,6 +49,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use comfy_table::{
     modifiers, presets, Attribute, Cell, CellAlignment, Color, ContentArrangement, Table,
 };
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tempdir::TempDir;
 use tokio::{
@@ -132,13 +150,17 @@ struct Init {
     #[arg(default_value = ".daft.toml")]
     path: PathBuf,
 
-    /// The provider to use - either 'provisioned' (default) to auto-generate a cluster or 'byoc' for existing Kubernetes clusters
+    /// The provider to use - either 'aws' (default) to auto-generate a cluster
+    /// or 'k8s' for existing Kubernetes clusters
     #[arg(long, default_value_t = DaftProvider::Provisioned)]
     provider: DaftProvider,
 }
 
 #[derive(Debug, Parser, Clone, PartialEq, Eq)]
 struct List {
+    /// A regex to filter for the Ray clusters which match the given name.
+    regex: Option<StrRef>,
+
     /// The region which to list all the available clusters for.
     #[arg(long)]
     region: Option<StrRef>,
@@ -169,6 +191,10 @@ struct Connect {
     /// The local port to connect to the remote Ray cluster.
     #[arg(long, default_value = "8265")]
     port: u16,
+
+    /// Prevent the dashboard from opening automatically.
+    #[arg(long)]
+    no_dashboard: bool,
 
     #[clap(flatten)]
     config_path: ConfigPath,
@@ -203,7 +229,11 @@ struct DaftConfig {
 struct DaftSetup {
     name: StrRef,
     #[serde(deserialize_with = "parse_requirement")]
-    version: Requirement,
+    requires: Requirement,
+    #[serde(deserialize_with = "parse_python_version")]
+    python_version: Versioning,
+    #[serde(deserialize_with = "parse_ray_version")]
+    ray_version: Versioning,
     #[serde(flatten)]
     provider_config: ProviderConfig,
 }
@@ -232,6 +262,8 @@ struct AwsConfig {
     iam_instance_profile_name: Option<StrRef>,
     #[serde(default)]
     dependencies: Vec<StrRef>,
+    #[serde(default)]
+    run: Vec<StrRef>,
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
@@ -340,6 +372,34 @@ where
     }
 }
 
+fn parse_python_version<'de, D>(deserializer: D) -> Result<Versioning, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw: StrRef = Deserialize::deserialize(deserializer)?;
+    let requested_py_version = raw
+        .parse::<Versioning>()
+        .map_err(serde::de::Error::custom)?;
+    let minimum_py_requirement = ">=3.9"
+        .parse::<Requirement>()
+        .expect("Parsing a static, constant version should always succeed");
+
+    if minimum_py_requirement.matches(&requested_py_version) {
+        Ok(requested_py_version)
+    } else {
+        Err(serde::de::Error::custom(format!("The minimum supported python version is {minimum_py_requirement}, but your configuration file requested python version {requested_py_version}")))
+    }
+}
+
+fn parse_ray_version<'de, D>(deserializer: D) -> Result<Versioning, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw: StrRef = Deserialize::deserialize(deserializer)?;
+    let version = raw.parse().map_err(serde::de::Error::custom)?;
+    Ok(version)
+}
+
 #[derive(Debug, ValueEnum, Clone, PartialEq, Eq)]
 enum DaftProvider {
     Provisioned,
@@ -355,7 +415,6 @@ impl ToString for DaftProvider {
         .to_string()
     }
 }
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct DaftJob {
     command: StrRef,
@@ -500,28 +559,12 @@ fn convert(
         ]
         .into_iter()
         .collect(),
-        setup_commands: {
-            let mut commands = vec![
-                "curl -LsSf https://astral.sh/uv/install.sh | sh".into(),
-                "uv python install 3.12".into(),
-                "uv python pin 3.12".into(),
-                "uv venv".into(),
-                "echo 'source $HOME/.venv/bin/activate' >> ~/.bashrc".into(),
-                "source ~/.bashrc".into(),
-                "uv pip install boto3 pip py-spy deltalake getdaft ray[default]".into(),
-            ];
-            if !aws_config.dependencies.is_empty() {
-                let deps = aws_config
-                    .dependencies
-                    .iter()
-                    .map(|dep| format!(r#""{dep}""#))
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                let deps = format!("uv pip install {deps}").into();
-                commands.push(deps);
-            }
-            commands
-        },
+        setup_commands: generate_setup_commands(
+            daft_config.setup.python_version.clone(),
+            daft_config.setup.ray_version.clone(),
+            &aws_config.dependencies,
+            &aws_config.run,
+        ),
     })
 }
 
@@ -604,6 +647,15 @@ enum NodeType {
     Worker,
 }
 
+impl NodeType {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Head => "head",
+            Self::Worker => "worker",
+        }
+    }
+}
+
 impl FromStr for NodeType {
     type Err = anyhow::Error;
 
@@ -625,7 +677,7 @@ async fn get_ray_clusters_from_aws(region: StrRef) -> anyhow::Result<Vec<AwsInst
     let client = Client::new(&sdk_config);
     let instances = client.describe_instances().send().await?;
     let reservations = instances.reservations.unwrap_or_default();
-    let instance_states = reservations
+    let instances = reservations
         .iter()
         .filter_map(|reservation| reservation.instances.as_ref())
         .flatten()
@@ -670,10 +722,15 @@ async fn get_ray_clusters_from_aws(region: StrRef) -> anyhow::Result<Vec<AwsInst
             })
         })
         .collect();
-    Ok(instance_states)
+    Ok(instances)
 }
 
-fn print_instances(instances: &[AwsInstance], head: bool, running: bool) {
+fn format_table(
+    instances: &[AwsInstance],
+    regex: Option<&str>,
+    head: bool,
+    running: bool,
+) -> anyhow::Result<Table> {
     let mut table = Table::default();
     table
         .load_preset(presets::UTF8_FULL)
@@ -685,11 +742,16 @@ fn print_instances(instances: &[AwsInstance], head: bool, running: bool) {
                 .set_alignment(CellAlignment::Center)
                 .add_attribute(Attribute::Bold)
         }));
+    let regex = regex.as_deref().map(Regex::new).transpose()?;
     for instance in instances.iter().filter(|instance| {
         if head && instance.node_type != NodeType::Head {
             return false;
         } else if running && instance.state != Some(InstanceStateName::Running) {
             return false;
+        } else if let Some(regex) = regex.as_ref() {
+            if !regex.is_match(&instance.regular_name) {
+                return false;
+            };
         };
         true
     }) {
@@ -716,12 +778,13 @@ fn print_instances(instances: &[AwsInstance], head: bool, running: bool) {
             .map_or("n/a".into(), ToString::to_string);
         table.add_row(vec![
             Cell::new(instance.regular_name.to_string()).fg(Color::Cyan),
-            Cell::new(&*instance.instance_id),
+            Cell::new(instance.instance_id.as_ref()),
+            Cell::new(instance.node_type.as_str()),
             status,
             Cell::new(ipv4),
         ]);
     }
-    println!("{table}");
+    Ok(table)
 }
 
 async fn assert_is_logged_in_with_aws() -> anyhow::Result<()> {
@@ -846,6 +909,71 @@ async fn main() -> anyhow::Result<()> {
     DaftLauncher::parse().run().await
 }
 
+fn generate_setup_commands(
+    python_version: Versioning,
+    ray_version: Versioning,
+    dependencies: &[StrRef],
+    run: &[StrRef],
+) -> Vec<StrRef> {
+    let mut commands = vec![
+        "curl -LsSf https://astral.sh/uv/install.sh | sh".into(),
+        format!("uv python install {python_version}").into(),
+        format!("uv python pin {python_version}").into(),
+        "uv venv".into(),
+        "echo 'source $HOME/.venv/bin/activate' >> ~/.bashrc".into(),
+        "source ~/.bashrc".into(),
+        format!(
+            r#"uv pip install boto3 pip py-spy deltalake getdaft "ray[default]=={ray_version}""#
+        )
+        .into(),
+    ];
+
+    if !dependencies.is_empty() {
+        let deps = dependencies
+            .iter()
+            .map(|dep| format!(r#""{dep}""#))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let deps = format!("uv pip install {deps}").into();
+        commands.push(deps);
+    }
+
+    commands.extend(run.iter().cloned());
+
+    commands
+}
+
+async fn get_version_from_env(bin: &str, prefix: &str) -> anyhow::Result<Versioning> {
+    let output = Command::new(bin)
+        .arg("--version")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?
+        .wait_with_output()
+        .await?;
+
+    if output.status.success() {
+        let version = String::from_utf8(output.stdout)?
+            .strip_prefix(prefix)
+            .ok_or_else(|| anyhow::anyhow!("Could not parse {bin} version"))?
+            .trim()
+            .parse()?;
+        Ok(version)
+    } else {
+        Err(anyhow::anyhow!("Failed to find {bin} executable"))
+    }
+}
+
+async fn get_python_version_from_env() -> anyhow::Result<Versioning> {
+    let python_version = get_version_from_env("python", "Python ").await?;
+    Ok(python_version)
+}
+
+async fn get_ray_version_from_env() -> anyhow::Result<Versioning> {
+    let python_version = get_version_from_env("ray", "ray, version ").await?;
+    Ok(python_version)
+}
+
 impl DaftLauncher {
     async fn run(&self) -> anyhow::Result<()> {
         match &self.sub_command {
@@ -866,10 +994,18 @@ impl ConfigCommand {
                     bail!("The path {path:?} already exists; the path given must point to a new location on your filesystem");
                 }
                 let contents = match provider {
-                    DaftProvider::Byoc => include_str!("template_byoc.toml"),
-                    DaftProvider::Provisioned => include_str!("template_provisioned.toml"),
+                    DaftProvider::Byoc => asset!("template-byoc.toml"),
+                    DaftProvider::Provisioned => asset!("template-provisioned.toml"),
                 }
-                .replace("<VERSION>", concat!("=", env!("CARGO_PKG_VERSION")));
+                .replace("<requires>", concat!("=", env!("CARGO_PKG_VERSION")))
+                .replace(
+                    "<python-version>",
+                    get_python_version_from_env().await?.to_string().as_str(),
+                )
+                .replace(
+                    "<ray-version>",
+                    get_ray_version_from_env().await?.to_string().as_str(),
+                );
                 fs::write(path, contents).await?;
             }
             ConfigCommand::Check(ConfigPath { config }) => {
@@ -921,7 +1057,7 @@ impl JobCommand {
             JobCommand::Sql(Sql { sql, config_path }) => {
                 let daft_config = read_daft_config(&config_path.config).await?;
                 let (temp_sql_dir, sql_path) = create_temp_file("sql.py")?;
-                fs::write(sql_path, include_str!("sql.py")).await?;
+                fs::write(sql_path, asset!("sql.py")).await?;
 
                 let working_dir = temp_sql_dir.path();
                 let command_segments = vec!["python", "sql.py", sql.as_ref()];
@@ -995,11 +1131,13 @@ impl ProvisionedCommand {
                     ProviderConfig::Byoc(..) => not_available_for_byoc!("kill"),
                 }
             }
-            ProvisionedCommand::List(List {
-                config_path,
-                region,
+            &ProvisionedCommand::List(List {
+                ref config_path,
+                ref regex,
+                ref region,
                 head,
                 running,
+                ..
             }) => {
                 let daft_config = read_daft_config(&config_path.config).await?;
                 match &daft_config.setup.provider_config {
@@ -1008,16 +1146,19 @@ impl ProvisionedCommand {
 
                         let region = region.as_ref().unwrap_or_else(|| &aws_config.region);
                         let instances = get_ray_clusters_from_aws(region.clone()).await?;
-                        print_instances(&instances, *head, *running);
+                        let table = format_table(&instances, regex.as_deref(), head, running)?;
+                        println!("{table}");
                     }
                     ProviderConfig::Byoc(..) => not_available_for_byoc!("list"),
                 }
             }
             &ProvisionedCommand::Connect(Connect {
                 port,
+                no_dashboard,
                 ref config_path,
             }) => {
                 let daft_config = read_daft_config(&config_path.config).await?;
+                let open_dashboard = !no_dashboard;
                 match &daft_config.setup.provider_config {
                     ProviderConfig::Provisioned(aws_config) => {
                         assert_is_logged_in_with_aws().await?;
@@ -1025,10 +1166,14 @@ impl ProvisionedCommand {
                         let ray_config = convert(&daft_config, None)?;
                         let (_temp_dir, ray_path) = create_temp_ray_file()?;
                         write_ray_config(&ray_config, &ray_path).await?;
-                        let _ = ssh::ssh_portforward(ray_path, aws_config, Some(port))
-                            .await?
-                            .wait_with_output()
-                            .await?;
+
+                        let child = ssh::ssh_portforward(ray_path, aws_config, Some(port)).await?;
+
+                        if open_dashboard {
+                            open::that("http://localhost:8265")?;
+                        };
+
+                        child.wait_with_output().await?;
                     }
                     ProviderConfig::Byoc(..) => not_available_for_byoc!("connect"),
                 }

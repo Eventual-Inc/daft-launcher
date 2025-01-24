@@ -13,9 +13,6 @@ serde_yaml = "0.9"
 tempdir = "0.3"
 toml = "0.8"
 comfy-table = "7.1"
-regex = "1.11"
-open = "5.3"
-semver = "1.0"
 
 [dependencies.anyhow]
 version = "1.0"

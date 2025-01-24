@@ -21,7 +21,7 @@ macro_rules! not_available_for_byoc {
         anyhow::bail!(concat!(
             "The command `",
             $command,
-            "` is only available for provisioned configurations"
+            "` is not available for byoc configurations"
         ))
     };
 }
@@ -892,7 +892,8 @@ async fn submit_k8s(
     command_segments: impl AsRef<[&str]>,
     namespace: &str,
 ) -> anyhow::Result<()> {
-    // Start port forwarding - it will be automatically killed when _port_forward is dropped
+    // Start port forwarding - it will be automatically killed when _port_forward is
+    // dropped
     let _port_forward = establish_kubernetes_port_forward(namespace).await?;
 
     // Give the port-forward a moment to fully establish

@@ -8,7 +8,7 @@ This directory contains guides for setting up Ray and Daft on various Kubernetes
 
 ## Prerequisites
 
-Before using `daft-launcher` in BYOC mode with Kubernetes, you must:
+Before using `daft-cli` in BYOC mode with Kubernetes, you must:
 1. Have a running Kubernetes cluster (local, cloud-managed, or on-premise)
 2. Install and configure Ray on your Kubernetes cluster
 3. Install Daft on your cluster

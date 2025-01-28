@@ -1,5 +1,5 @@
 [project]
-name = "daft-launcher"
+name = "daft-cli"
 dependencies = ["ray[default]", "maturin>=1.0,<2.0"]
 requires-python = ">=3.9"
 dynamic = ["version"]

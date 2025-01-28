@@ -10,9 +10,9 @@
 [![Latest](https://img.shields.io/github/v/tag/Eventual-Inc/daft-launcher?label=latest&logo=GitHub)](https://github.com/Eventual-Inc/daft-launcher/tags)
 [![License](https://img.shields.io/badge/daft_launcher-docs-red.svg)](https://eventual-inc.github.io/daft-launcher)
 
-# Daft Launcher CLI Tool
+# Daft CLI Tool
 
-`daft-launcher` is a simple launcher for spinning up and managing Ray clusters for [`daft`](https://github.com/Eventual-Inc/Daft).
+`daft-cli` is a simple launcher for spinning up and managing Ray clusters for [`daft`](https://github.com/Eventual-Inc/Daft).
 
 ## Goal
 
@@ -20,11 +20,11 @@ Getting started with Daft in a local environment is easy.
 However, getting started with Daft in a cloud environment is substantially more difficult.
 So much more difficult, in fact, that users end up spending more time setting up their environment than actually playing with our query engine.
 
-Daft Launcher aims to solve this problem by providing a simple CLI tool to remove all of this unnecessary heavy-lifting.
+Daft CLI aims to solve this problem by providing a simple CLI tool to remove all of this unnecessary heavy-lifting.
 
 ## Capabilities
 
-What Daft Launcher is capable of:
+What Daft CLI is capable of:
 1. Spinning up clusters (Provisioned mode only)
 2. Listing all available clusters as well as their statuses (Provisioned mode only)
 3. Submitting jobs to a cluster (Both Provisioned and BYOC modes)
@@ -35,7 +35,7 @@ What Daft Launcher is capable of:
 
 ## Operation Modes
 
-Daft Launcher supports two modes of operation:
+Daft CLI supports two modes of operation:
 - **Provisioned**: Automatically provisions and manages Ray clusters in AWS
 - **BYOC (Bring Your Own Cluster)**: Connects to existing Ray clusters in Kubernetes
 
@@ -145,8 +145,8 @@ uv pip install daft-launcher
 
 ### Example Usage
 
-All interactions with Daft Launcher are primarily communicated via a configuration file.
-By default, Daft Launcher will look inside your `$CWD` for a file named `.daft.toml`.
+All interactions with Daft CLI are primarily communicated via a configuration file.
+By default, Daft CLI will look inside your `$CWD` for a file named `.daft.toml`.
 You can override this behaviour by specifying a custom configuration file.
 
 #### Provisioned Mode (AWS)

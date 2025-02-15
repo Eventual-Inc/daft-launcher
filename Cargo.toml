@@ -1,6 +1,6 @@
 [package]
 name = "daft"
-version = "0.6.0-alpha0"
+version = "0.0.1"
 edition = "2021"
 description = "A simple CLI for spinning up and managing Ray clusters for Daft"
 license = "LICENSE"

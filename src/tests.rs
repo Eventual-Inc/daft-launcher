@@ -20,7 +20,7 @@ async fn get_path() -> (TempDir, PathBuf) {
     (temp_dir, PathBuf::from(path.as_ref()))
 }
 
-/// This tests the creation of a daft-launcher configuration file.
+/// This tests the creation of a daft-cli configuration file.
 ///
 /// # Note
 /// This does *not* check the contents of the newly created configuration file.
@@ -34,7 +34,7 @@ async fn get_path() -> (TempDir, PathBuf) {
 async fn test_init(#[case] provider: DaftProvider) {
     let (_temp_dir, path) = get_path().await;
 
-    DaftLauncher {
+    DaftCli {
         sub_command: SubCommand::Config(ConfigCommand::Init(Init {
             path: path.clone(),
             provider,
@@ -49,7 +49,7 @@ async fn test_init(#[case] provider: DaftProvider) {
 }
 
 /// Tests to make sure that `daft check` properly asserts the schema of the
-/// newly created daft-launcher configuration file.
+/// newly created daft-cli configuration file.
 #[tokio::test]
 #[rstest::rstest]
 #[case(DaftProvider::Provisioned)]
@@ -57,7 +57,7 @@ async fn test_init(#[case] provider: DaftProvider) {
 async fn test_check(#[case] provider: DaftProvider) {
     let (_temp_dir, path) = get_path().await;
 
-    DaftLauncher {
+    DaftCli {
         sub_command: SubCommand::Config(ConfigCommand::Init(Init {
             path: path.clone(),
             provider,
@@ -67,7 +67,7 @@ async fn test_check(#[case] provider: DaftProvider) {
     .await
     .unwrap();
 
-    DaftLauncher {
+    DaftCli {
         sub_command: SubCommand::Config(ConfigCommand::Check(ConfigPath { config: path })),
     }
     .run()

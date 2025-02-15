@@ -1,18 +1,18 @@
 <div align="center">
-  <img src="https://emojis.wiki/thumbs/emojis/rocket.webp" alt="Daft Launcher">
+  <img src="https://emojis.wiki/thumbs/emojis/rocket.webp" alt="Daft CLI">
 </div>
 
 <br>
 
-[![PyPI Package](https://github.com/Eventual-Inc/daft-launcher/actions/workflows/publish-to-pypi.yaml/badge.svg)](https://github.com/Eventual-Inc/daft-launcher/actions/workflows/publish-to-pypi.yaml)
-[![Deploy mdBook](https://github.com/Eventual-Inc/daft-launcher/actions/workflows/deploy-mdbook.yaml/badge.svg)](https://github.com/Eventual-Inc/daft-launcher/actions/workflows/deploy-mdbook.yaml)
+[![PyPI Package](https://github.com/Eventual-Inc/daft-cli/actions/workflows/publish-to-pypi.yaml/badge.svg)](https://github.com/Eventual-Inc/daft-cli/actions/workflows/publish-to-pypi.yaml)
+[![Deploy mdBook](https://github.com/Eventual-Inc/daft-cli/actions/workflows/deploy-mdbook.yaml/badge.svg)](https://github.com/Eventual-Inc/daft-cli/actions/workflows/deploy-mdbook.yaml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
-[![Latest](https://img.shields.io/github/v/tag/Eventual-Inc/daft-launcher?label=latest&logo=GitHub)](https://github.com/Eventual-Inc/daft-launcher/tags)
-[![License](https://img.shields.io/badge/daft_launcher-docs-red.svg)](https://eventual-inc.github.io/daft-launcher)
+[![Latest](https://img.shields.io/github/v/tag/Eventual-Inc/daft-cli?label=latest&logo=GitHub)](https://github.com/Eventual-Inc/daft-cli/tags)
+[![License](https://img.shields.io/badge/daft_cli-docs-red.svg)](https://eventual-inc.github.io/daft-cli)
 
 # Daft CLI Tool
 
-`daft-cli` is a simple launcher for spinning up and managing Ray clusters for [`daft`](https://github.com/Eventual-Inc/Daft).
+`daft-cli` is a simple cli for spinning up and managing Ray clusters for [`daft`](https://github.com/Eventual-Inc/Daft).
 
 ## Goal
 
@@ -139,8 +139,7 @@ uv init
 uv venv
 source .venv/bin/activate
 
-# install launcher
-uv pip install daft-launcher
+uv pip install daft-cli
 ```
 
 ### Example Usage
@@ -204,7 +203,6 @@ ssh-user = "ubuntu"
 ssh-private-key = "~/.ssh/daft-key"
 instance-type = "i3.2xlarge"
 image-id = "ami-04dd23e62ed049936"
-iam-instance-profile-name = "YourInstanceProfileName"  # Optional
 
 [run]
 pre-setup-commands = []

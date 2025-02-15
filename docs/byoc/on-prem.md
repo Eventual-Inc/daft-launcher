@@ -28,6 +28,6 @@ Before proceeding with Ray and Daft installation, ensure you have:
 Once your on-premises Kubernetes cluster is ready, follow the [Cloud Provider Setup Guide](./cloud.md#installing-ray-common-steps-for-all-providers) for:
 - Installing Ray using Helm
 - Installing Daft on the Ray cluster
-- Configuring and using daft-launcher
+- Configuring and using daft-cli
 
 The installation steps are identical regardless of where your Kubernetes cluster is running.

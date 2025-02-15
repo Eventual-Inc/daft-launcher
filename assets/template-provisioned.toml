@@ -1,4 +1,4 @@
-# This is a template configuration file for daft-launcher with AWS provider
+# This is a template configuration file for daft-cli with AWS provider
 
 [setup]
 name = "my-daft-cluster"
@@ -14,7 +14,7 @@ ssh-user = "ubuntu"
 ssh-private-key = "~/.ssh/id_rsa"
 instance-type = "i3.2xlarge"
 image-id = "ami-04dd23e62ed049936"
-iam-instance-profile-name = "YourInstanceProfileName" # Optional
+# iam-instance-profile-name = "YourInstanceProfileName" # Optional
 dependencies = []                                     # Optional additional Python packages to install
 run = []                                              # Optional commands to run during cluster-node initialization
 

@@ -609,7 +609,7 @@ dependencies = [
 
 [[package]]
 name = "daft"
-version = "0.6.0-alpha0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "aws-config",

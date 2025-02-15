@@ -63,7 +63,7 @@ type PathRef = Arc<Path>;
 
 #[derive(Debug, Parser, Clone, PartialEq, Eq)]
 #[command(name = env!("CARGO_PKG_NAME"), version = env!("CARGO_PKG_VERSION"), about = env!("CARGO_PKG_DESCRIPTION"))]
-struct DaftLauncher {
+struct DaftCli {
     #[command(subcommand)]
     sub_command: SubCommand,
 }
@@ -368,7 +368,7 @@ where
     if requirement.matches(&current_version) {
         Ok(requirement)
     } else {
-        Err(serde::de::Error::custom(format!("You're running daft-launcher version {current_version}, but your configuration file requires version {requirement}")))
+        Err(serde::de::Error::custom(format!("You're running daft-cli version {current_version}, but your configuration file requires version {requirement}")))
     }
 }
 
@@ -605,7 +605,7 @@ impl TeardownBehaviour {
 }
 
 fn create_temp_file(name: &str) -> anyhow::Result<(TempDir, PathRef)> {
-    let temp_dir = TempDir::new("daft-launcher")?;
+    let temp_dir = TempDir::new("daft-cli")?;
     let mut temp_path = temp_dir.path().to_owned();
     temp_path.push(name);
     let temp_path = Arc::from(temp_path);
@@ -906,7 +906,7 @@ async fn submit_k8s(
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    DaftLauncher::parse().run().await
+    DaftCli::parse().run().await
 }
 
 fn generate_setup_commands(
@@ -974,7 +974,7 @@ async fn get_ray_version_from_env() -> anyhow::Result<Versioning> {
     Ok(python_version)
 }
 
-impl DaftLauncher {
+impl DaftCli {
     async fn run(&self) -> anyhow::Result<()> {
         match &self.sub_command {
             SubCommand::Config(config_cmd) => config_cmd.run().await,

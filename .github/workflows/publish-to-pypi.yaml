@@ -4,6 +4,10 @@ on:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch: # this line makes it manually triggerable
+    
+env:
+  PYTHON_VERSION: 3.11
 
 jobs:
   build-and-publish:
@@ -11,23 +15,11 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-      - name: Install uv
-        run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          uv python install
-      - name: Install build dependencies
-        run: |
-          uv v
-          source .venv/bin/activate
-          uv pip install twine
-      - name: Build the package
-        run: |
-          source .venv/bin/activate
-          uv build
-      - name: Publish to PyPI
+      - name: Build and publish
+        uses: messense/maturin-action@v1
         env:
-          TWINE_USERNAME: "__token__"
-          TWINE_PASSWORD: "${{ secrets.PYPI_API_TOKEN }}"
-        run: |
-          source .venv/bin/activate
-          twine upload dist/* --skip-existing
+          MATURIN_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        with:
+          maturin-version: latest
+          command: publish
+          args: --username __token__ --skip-existing
